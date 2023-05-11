@@ -78,8 +78,8 @@ class Process:
 
 class Engine(Process):
     config_schema = {
-        'schema': 'hash[any]',
-        'instance': 'hash[any]',
+        'schema': 'tree[any]',
+        'instance': 'tree[any]',
         'initial_time': 'float',
         'global_time_precision': 'maybe[float]',
     }
