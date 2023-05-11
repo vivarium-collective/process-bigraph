@@ -39,9 +39,9 @@ def find_process_paths(state):
     return hierarchy_depth(processes)
 
 
-def empty_front(t: float) -> Dict[str, Union[float, dict]]:
+def empty_front(time):
     return {
-        'time': t,
+        'time': time,
         'update': {}
     }
 
@@ -72,13 +72,14 @@ class Process:
         return self.config['timestep']
 
     @abc.abstractmethod
-    def apply(self, state, interval):
+    def update(self, state, interval):
         return {}
 
 
 class Engine(Process):
     config_schema = {
         'schema': 'tree[any]',
+        'bridge': 'wires',
         'instance': 'tree[any]',
         'initial_time': 'float',
         'global_time_precision': 'maybe[float]',
@@ -94,13 +95,14 @@ class Engine(Process):
         self.process_paths = find_process_paths(state)
         self.front: Dict = {
             path: empty_front(self.global_time)
-            for path in self.process_paths}
+            for path in self.process_paths
+        }
         self.global_time_precision = self.config['global_time_precision']
 
     def schema(self):
         return self.config['schema']
 
-    def run_process(self, path, process, )
+    def run_process(self, path, process):
         if path not in self.front:
             self.front[path] = empty_front(self.global_time)
         process_time = self.front[path]['time']
@@ -127,27 +129,22 @@ class Engine(Process):
 
             if future <= end_time:
 
-                # calculate the update for this process
-                if process.update_condition(process_timestep, state):
-                    update = self._process_update(
-                        path,
-                        process,
-                        store,
-                        state,
-                        process_timestep)
+                update = self._process_update(
+                    path,
+                    process,
+                    store,
+                    state,
+                    process_timestep
+                )
 
-                    # update front, to be applied at its projected time
-                    self.front[path]['time'] = future
-                    self.front[path]['update'] = update
+                # update front, to be applied at its projected time
+                self.front[path]['time'] = future
+                self.front[path]['update'] = update
 
-                    # absolute timestep
-                    timestep = future - self.global_time
-                    if timestep < full_step:
-                        full_step = timestep
-                else:
-                    # mark this path "quiet" so its time can be advanced
-                    self.front[path]['update'] = (EmptyDefer(), store)
-                    quiet_paths.append(path)
+                # absolute timestep
+                timestep = future - self.global_time
+                if timestep < full_step:
+                    full_step = timestep
             else:
                 # absolute timestep
                 timestep = future - self.global_time
@@ -160,20 +157,76 @@ class Engine(Process):
             if process_delay < full_step:
                 full_step = process_delay
 
-        return full_step, quiet_paths
+        return full_step
         
-
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
         while self.global_time < end_time or force_complete:
             full_step = math.inf
             for path, process in self.process_paths.items():
-            
+                full_step = self.run_process(process, path)
 
+            # apply updates based on process times in self.front
+            if full_step == math.inf:
+                # no processes ran, jump to next process
+                next_event = end_time
+                for path in self.front.keys():
+                    if self.front[path]['time'] < next_event:
+                        next_event = self.front[path]['time']
+                self.global_time = next_event
 
-    def apply(self, state, interval):
+            elif self.global_time + full_step <= end_time:
+                # at least one process ran within the interval
+                # increase the time, apply updates, and continue
+                self.global_time += full_step
+
+                # advance all quiet processes to current time
+                for quiet in quiet_paths:
+                    self.front[quiet]['time'] = self.global_time
+
+                # apply updates that are behind global time
+                updates = []
+                paths = []
+                for path, advance in self.front.items():
+                    if advance['time'] <= self.global_time \
+                            and advance['update']:
+                        new_update = advance['update']
+                        updates.append(new_update)
+                        advance['update'] = {}
+                        paths.append(path)
+
+                self._send_updates(updates)
+
+                # display and emit
+                if self.progress_bar:
+                    print_progress_bar(self.global_time, end_time)
+                if self.emit_step == 1:
+                    self._emit_store_data()
+                elif emit_time <= self.global_time:
+                    while emit_time <= self.global_time:
+                        self._emit_store_data()
+                        emit_time += self.emit_step
+
+            else:
+                # all processes have run past the interval
+                self.global_time = end_time
+
+            if force_complete and self.global_time == end_time:
+                force_complete = False
+
+    def update(self, state, interval):
         # do everything
-        
+
+        # this needs to go through the bridge
+        self.state = apply_update(
+            self.schema,
+            self.state,
+            state
+        )
+
+        self.run(interval)
+
+        # pull the update out of the state and return it
 
 
 class IncreaseProcess(Process):
@@ -189,12 +242,12 @@ class IncreaseProcess(Process):
 
     def schema(self):
         return {
-            'a': 'float',
+            'level': 'float',
         }
     
-    def apply(self, state, interval):
+    def update(self, state, interval):
         return {
-            'a': state['a'] * self.config['rate']
+            'level': state['level'] * self.config['rate']
         }
 
 
@@ -202,14 +255,34 @@ def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
     state = fill(schema)
-    update = process.apply({'a': 5.5}, 1.0)
+    update = process.update({'level': 5.5}, 1.0)
     new_state = apply_update(schema, state, update)
-    assert new_state['a'] == 1.1
+    assert new_state['level'] == 1.1
 
 
 def test_engine():
-    
+    increase = IncreaseProcess({'rate': 0.3})
+    engine = Engine({
+        'schema': {
+            'increase': 'process[level:float]',
+            'value': 'float',
+        },
+        'bridge': {
+            'exchange': 'value'
+        },
+        'instance': {
+            'increase': increase,
+            'wires': {
+                'level': 'value'
+            },
+            'value': 11.11,
+        },
+    })
+
+    engine.update({'exchange': 3.33}, 10.0)
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':
     test_process()
+    test_engine()
