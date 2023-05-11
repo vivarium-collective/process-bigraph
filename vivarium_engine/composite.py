@@ -75,8 +75,11 @@ class Process:
     def update(self, state, interval):
         return {}
 
+    # TODO: should we include run(interval) here?
+    #   process would have to maintain state
 
-class Engine(Process):
+
+class Composite(Process):
     config_schema = {
         'schema': 'tree[any]',
         'bridge': 'wires',
@@ -260,11 +263,16 @@ def test_process():
     assert new_state['level'] == 1.1
 
 
-def test_engine():
+{"level":"float","down":{"a":"int"}}
+
+def test_composite():
+    # TODO: add support for the various vivarium emitters
+
     increase = IncreaseProcess({'rate': 0.3})
-    engine = Engine({
+    composite = Composite({
         'schema': {
             'increase': 'process[level:float]',
+            # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
             'value': 'float',
         },
         'bridge': {
@@ -279,10 +287,10 @@ def test_engine():
         },
     })
 
-    engine.update({'exchange': 3.33}, 10.0)
+    composite.update({'exchange': 3.33}, 10.0)
     import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':
     test_process()
-    test_engine()
+    test_composite()
