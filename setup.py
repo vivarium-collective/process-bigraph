@@ -18,7 +18,7 @@ with open("README.md", "r") as readme:
         description2)
 
 setup(
-    name="bigraph-viz",
+    name="process-bigraph",
     version=VERSION,
     author="Ryan Spangler, Eran Agmon",
     author_email="ryan.spangler@gmail.com, agmon.eran@gmail.com",
