@@ -3,7 +3,7 @@
 **Process-Bigraph** is... 
 
 <p align="center">
-    <img src="https://github.com/vivarium-collective/bigraph-viz/blob/main/doc/_static/cell_structure_function.png?raw=true" width="600" alt="Bigraph-viz example">
+    <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/process-bigraph.png?raw=true" width="600" alt="Process Bigraph">
 </p>
 
 ## What are Process Bigraphs?
