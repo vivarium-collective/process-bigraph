@@ -2,7 +2,7 @@ import re
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.28'
+VERSION = '0.0.1'
 
 
 with open("README.md", "r") as readme:
@@ -10,22 +10,22 @@ with open("README.md", "r") as readme:
     # Patch the relative links to absolute URLs that will work on PyPI.
     description2 = re.sub(
         r']\(([\w/.-]+\.png)\)',
-        r'](https://github.com/vivarium-collective/bigraph-viz/raw/main/\1)',
+        r'](https://github.com/vivarium-collective/process-bigraph/raw/main/\1)',
         description)
     long_description = re.sub(
         r']\(([\w/.-]+)\)',
-        r'](https://github.com/vivarium-collective/bigraph-viz/blob/main/\1)',
+        r'](https://github.com/vivarium-collective/process-bigraph/blob/main/\1)',
         description2)
 
 setup(
     name="bigraph-viz",
     version=VERSION,
-    author="Eran Agmon",
-    author_email="agmon.eran@gmail.com",
-    description="A graphviz-based plotting tool for compositional bigraph schema",
+    author="Ryan Spangler, Eran Agmon",
+    author_email="ryan.spangler@gmail.com, agmon.eran@gmail.com",
+    description="",
     long_description=long_description,
     long_description_content_type="text/markdown",
-    url="https://github.com/vivarium-collective/bigraph-viz",
+    url="https://github.com/vivarium-collective/process-bigraph",
     packages=find_packages(),
     classifiers=[
         "Development Status :: 3 - Alpha",
@@ -44,7 +44,6 @@ setup(
     python_requires=">=3.6",
     install_requires=[
         # List your package dependencies here
-        "graphviz",
         "bigraph-schema"
     ],
 )
