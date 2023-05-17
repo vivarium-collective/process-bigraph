@@ -3,7 +3,7 @@
 **Process-Bigraph** is... 
 
 <p align="center">
-    <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/process-bigraph.png?raw=true" width="600" alt="Process Bigraph">
+    <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/process-bigraph.png?raw=true" width="800" alt="Process Bigraph">
 </p>
 
 ## What are Process Bigraphs?
