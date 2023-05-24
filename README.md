@@ -1,5 +1,8 @@
 # Process-Bigraph
 
+[![PyPI](https://img.shields.io/pypi/v/process-bigraph.svg)](https://pypi.org/project/process-bigraph/)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/process-bigraph/notebooks/process-bigraphs.html)
+
 **Process-Bigraph** is... 
 
 <p align="center">
@@ -29,4 +32,14 @@ pip install process-bigraph
 
 ## Tutorial
 
-To get started with Process-Bigraph, explore the *tutorial*. Coming soon...
+To get started with Bigraph-viz, explore our resources: 
+* [Process Bigraphs Intro](https://vivarium-collective.github.io/process-bigraph/notebooks/process-bigraphs.html).
+* [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html). For an introduction to the basic elements of process-bigraph schema.
+* [Formatting Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/format.html) for examples
+about how to adjust the final look of your bigraph figure.
+* [Ecoli](https://raw.githubusercontent.com/vivarium-collective/bigraph-viz/main/doc/_static/ecoli.png) for the wiring
+diagraph of a whole-cell E. coli model.
+
+## License
+
+bigraph-schema is open-source software released under the [MIT License](https://github.com/vivarium-collective/process-bigraph/LICENSE).
