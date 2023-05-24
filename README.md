@@ -3,7 +3,11 @@
 [![PyPI](https://img.shields.io/pypi/v/process-bigraph.svg)](https://pypi.org/project/process-bigraph/)
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/process-bigraph/notebooks/process-bigraphs.html)
 
-**Process-Bigraph** is... 
+**Process-Bigraph** is an extension of the [bigraph-schema](https://github.com/vivarium-collective/bigraph-schema) 
+library, offering a computational framework that integrates process modules into bigraphs. This allows for the 
+representation of complex, multiscale systems, that combine the structural capabilities of bigraphs with modular dynamic
+processes. It serves as a tool for creating, simulating, and analyzing intricate and dynamic models, 
+fostering a more comprehensive understanding of complex systems. 
 
 <p align="center">
     <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/process-bigraph.png?raw=true" width="800" alt="Process Bigraph">
