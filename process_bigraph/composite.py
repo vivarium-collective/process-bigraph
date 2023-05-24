@@ -79,6 +79,8 @@ class Process:
     #   process would have to maintain state
 
 
+# maybe keep wires as tuples/paths to distinguish them from schemas?
+
 class Composite(Process):
     config_schema = {
         'schema': 'tree[any]',
