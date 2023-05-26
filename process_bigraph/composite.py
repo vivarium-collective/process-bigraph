@@ -1,5 +1,4 @@
 import abc
-from bigraph_schema import fill, registry_registry, type_registry, apply_update
 
 
 def hierarchy_depth(hierarchy, path=()):
@@ -90,6 +89,7 @@ class Composite(Process):
         'global_time_precision': 'maybe[float]',
     }
 
+    # TODO: if processes are serialized, deserialize them first
     def __init__(self, config=None):
         super().__init__(config)
         self.global_time = self.config['initial_time']
@@ -104,8 +104,10 @@ class Composite(Process):
         }
         self.global_time_precision = self.config['global_time_precision']
 
+
     def schema(self):
         return self.config['schema']
+
 
     def run_process(self, path, process):
         if path not in self.front:
@@ -164,6 +166,7 @@ class Composite(Process):
 
         return full_step
         
+
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
         while self.global_time < end_time or force_complete:
@@ -219,6 +222,7 @@ class Composite(Process):
             if force_complete and self.global_time == end_time:
                 force_complete = False
 
+
     def update(self, state, interval):
         # do everything
 
@@ -270,7 +274,9 @@ def test_process():
 def test_composite():
     # TODO: add support for the various vivarium emitters
 
-    increase = IncreaseProcess({'rate': 0.3})
+    # increase = IncreaseProcess({'rate': 0.3})
+    # TODO: This is the config of the composite,
+    #   we also need a way to serialize the entire composite
     composite = Composite({
         'schema': {
             'increase': 'process[level:float]',
@@ -281,11 +287,12 @@ def test_composite():
             'exchange': 'value'
         },
         'instance': {
-            'increase': increase,
-            'wires': {
-                'level': 'value'
-            },
-            'value': 11.11,
+            'increase': {
+                '_type': 'process[level:float]'
+                'address': 'local:IncreaseProcess',
+                'config': {'rate': '0.3'},
+                'wires': {'level': 'value'}},
+            'value': '11.11',
         },
     })
 
