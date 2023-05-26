@@ -303,32 +303,31 @@ def test_composite():
 def test_serialized_composite():
     # This should specify the same thing as above
     composite_schema = {
-        'composite': {
-            '_type': 'process[?]',
-            'address': 'local:Composite',
-            'config': {
-                'instance': {
-                    'increase': {
-                        '_type': 'process[level:float]',
-                        'address': 'local:IncreaseProcess',
-                        'config': {'rate': '0.3'},
-                        'wires': {'level': 'value'}
-                    },
-                    'value': '11.11',
+        '_type': 'process[?]',
+        'address': 'local:Composite',
+        'config': {
+            'instance': {
+                'increase': {
+                    '_type': 'process[level:float]',
+                    'address': 'local:IncreaseProcess',
+                    'config': {'rate': '0.3'},
+                    'wires': {'level': 'value'}
                 },
-                'schema': {
-                    'increase': 'process[level:float]',
-                    # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
-                    'value': 'float',
-                },
-                'bridge': {
-                    'exchange': 'value'
-                },
-            }
+                'value': '11.11',
+            },
+            'schema': {
+                'increase': 'process[level:float]',
+                # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
+                'value': 'float',
+            },
+            'bridge': {
+                'exchange': 'value'
+            },
         }
     }
 
     composite_instance = deserialize(composite_schema)
+    composite_instance.update()
 
 
 if __name__ == '__main__':
