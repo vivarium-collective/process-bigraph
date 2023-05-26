@@ -15120,7 +15120,7 @@ body[data-format='mobile'] .jp-OutputArea-child .jp-OutputArea-output {
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[5]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[14]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1"># !pip install bigraph-viz</span>
@@ -15161,7 +15161,7 @@ bigraph-viz==0.0.29
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[6]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[53]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="c1">#some imports and set up</span>
@@ -15201,7 +15201,7 @@ bigraph-viz==0.0.29
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[8]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[55]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">placegraph_spec</span> <span class="o">=</span> <span class="p">{</span>
@@ -15240,24 +15240,10 @@ bigraph-viz==0.0.29
     <span class="p">[(</span><span class="s1">&#39;v1&#39;</span><span class="p">,),</span> <span class="p">(</span><span class="s1">&#39;e0&#39;</span><span class="p">,),</span> <span class="p">(</span><span class="s1">&#39;v4&#39;</span><span class="p">,)],</span>
     <span class="p">[(</span><span class="s1">&#39;e1&#39;</span><span class="p">,),</span> <span class="p">(</span><span class="s1">&#39;v5&#39;</span><span class="p">,)],[(</span><span class="s1">&#39;v3&#39;</span><span class="p">,),</span> <span class="p">(</span><span class="s1">&#39;e2&#39;</span><span class="p">,)]]</span>
 <span class="n">linkgraph</span> <span class="o">=</span> <span class="n">plot_bigraph</span><span class="p">(</span>
-    <span class="n">linkgraph_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">collapse_processes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">node_groups</span><span class="o">=</span><span class="n">node_groups</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">&#39;linkgraph&#39;</span><span class="p">)</span>
-</pre></div>
+    <span class="n">linkgraph_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">rankdir</span><span class="o">=</span><span class="s1">&#39;LR&#39;</span><span class="p">,</span> <span class="n">collapse_processes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">node_groups</span><span class="o">=</span><span class="n">node_groups</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">&#39;linkgraph&#39;</span><span class="p">)</span>
 
-     </div>
-</div>
-</div>
-</div>
-
-</div><div id="cell-id=d9fce31c-b9fc-46ab-a9a1-3f552e021d61" class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs  ">
-<div class="jp-Cell-inputWrapper">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[9]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-     <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">process_linkgraph</span> <span class="o">=</span> <span class="n">plot_bigraph</span><span class="p">(</span>
-    <span class="n">linkgraph_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">&#39;process_linkgraph&#39;</span><span class="p">)</span>
+<span class="n">process_graph</span> <span class="o">=</span> <span class="n">plot_bigraph</span><span class="p">(</span>
+    <span class="n">linkgraph_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">&#39;process_graph&#39;</span><span class="p">)</span>
 </pre></div>
 
      </div>
@@ -15270,7 +15256,7 @@ bigraph-viz==0.0.29
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[11]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[56]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="kn">from</span> <span class="nn">IPython.display</span> <span class="kn">import</span> <span class="n">display</span><span class="p">,</span> <span class="n">HTML</span>
@@ -15388,106 +15374,106 @@ bigraph-viz==0.0.29
 <!-- Generated by graphviz version 7.1.0 (20230121.1956)
  -->
 <!-- Title: bigraph Pages: 1 -->
-<svg width="141pt" height="253pt"
- viewBox="0.00 0.00 145.00 260.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 256)">
+<svg width="253pt" height="156pt"
+ viewBox="0.00 0.00 260.00 160.00" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 156)">
 <title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-256 141,-256 141,4 -4,4"/>
+<polygon fill="white" stroke="none" points="-4,4 -4,-156 256,-156 256,4 -4,4"/>
 <!-- (&#39;v0&#39;,) -->
 <g id="node1" class="node">
 <title>(&#39;v0&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="55" cy="-234" rx="18" ry="18"/>
-<text text-anchor="start" x="48.5" y="-230.9" font-family="Times,serif" font-size="12.00">v0</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="18" cy="-80" rx="18" ry="18"/>
+<text text-anchor="start" x="11.5" y="-76.9" font-family="Times,serif" font-size="12.00">v0</text>
 </g>
 <!-- (&#39;e0&#39;,) -->
 <g id="node7" class="node">
 <title>(&#39;e0&#39;,)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="55" cy="-162" rx="0.5" ry="0.5"/>
-<text text-anchor="start" x="42.5" y="-165.9" font-family="Times,serif" font-size="12.00">e0</text>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="90" cy="-80" rx="0.5" ry="0.5"/>
+<text text-anchor="start" x="77.5" y="-69.9" font-family="Times,serif" font-size="12.00">e0</text>
 </g>
 <!-- (&#39;v0&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
 <g id="edge1" class="edge">
 <title>(&#39;v0&#39;,)&#45;&gt;(&#39;e0&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M55,-215.34C55,-195.9 55,-166.91 55,-163.36"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M36.66,-80C56.1,-80 85.09,-80 88.64,-80"/>
 </g>
 <!-- (&#39;v1&#39;,) -->
 <g id="node2" class="node">
 <title>(&#39;v1&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="18" cy="-162" rx="18" ry="18"/>
-<text text-anchor="start" x="11.5" y="-158.9" font-family="Times,serif" font-size="12.00">v1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="90" cy="-117" rx="18" ry="18"/>
+<text text-anchor="start" x="83.5" y="-113.9" font-family="Times,serif" font-size="12.00">v1</text>
 </g>
 <!-- (&#39;v1&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
 <g id="edge2" class="edge">
 <title>(&#39;v1&#39;,)&#45;&gt;(&#39;e0&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M31.88,-149.34C39.34,-146.62 46.81,-150.49 54.28,-160.97"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M90.37,-98.11C90.37,-92.56 90.26,-87 90.06,-81.45"/>
 </g>
 <!-- (&#39;v1&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
 <!-- (&#39;e1&#39;,) -->
 <g id="node8" class="node">
 <title>(&#39;e1&#39;,)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="40" cy="-90" rx="0.5" ry="0.5"/>
-<text text-anchor="start" x="27.5" y="-93.9" font-family="Times,serif" font-size="12.00">e1</text>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="162" cy="-97" rx="0.5" ry="0.5"/>
+<text text-anchor="start" x="149.5" y="-86.9" font-family="Times,serif" font-size="12.00">e1</text>
 </g>
 <!-- (&#39;v1&#39;,)&#45;&gt;(&#39;e1&#39;,) -->
 <g id="edge5" class="edge">
 <title>(&#39;v1&#39;,)&#45;&gt;(&#39;e1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M23.33,-144.05C29.43,-124.63 38.74,-95 39.88,-91.37"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M108.3,-112.06C127.74,-106.5 157.05,-98.13 160.64,-97.1"/>
 </g>
 <!-- (&#39;v2&#39;,) -->
 <g id="node3" class="node">
 <title>(&#39;v2&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="109" cy="-234" rx="18" ry="18"/>
-<text text-anchor="start" x="102.5" y="-230.9" font-family="Times,serif" font-size="12.00">v2</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="18" cy="-134" rx="18" ry="18"/>
+<text text-anchor="start" x="11.5" y="-130.9" font-family="Times,serif" font-size="12.00">v2</text>
 </g>
 <!-- (&#39;v3&#39;,) -->
 <g id="node4" class="node">
 <title>(&#39;v3&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="40" cy="-18" rx="18" ry="18"/>
-<text text-anchor="start" x="33.5" y="-14.9" font-family="Times,serif" font-size="12.00">v3</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="234" cy="-97" rx="18" ry="18"/>
+<text text-anchor="start" x="227.5" y="-93.9" font-family="Times,serif" font-size="12.00">v3</text>
 </g>
 <!-- (&#39;v3&#39;,)&#45;&gt;(&#39;e1&#39;,) -->
 <g id="edge4" class="edge">
 <title>(&#39;v3&#39;,)&#45;&gt;(&#39;e1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M40,-36.96C40,-56.25 40,-84.66 40,-88.55"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M215.04,-97C195.75,-97 167.34,-97 163.45,-97"/>
 </g>
 <!-- (&#39;e2&#39;,) -->
 <g id="node9" class="node">
 <title>(&#39;e2&#39;,)</title>
-<ellipse fill="none" stroke="none" stroke-width="2" cx="77" cy="-18" rx="0.5" ry="0.5"/>
-<text text-anchor="start" x="64.5" y="-21.9" font-family="Times,serif" font-size="12.00">e2</text>
+<ellipse fill="none" stroke="none" stroke-width="2" cx="234" cy="-60" rx="0.5" ry="0.5"/>
+<text text-anchor="start" x="221.5" y="-49.9" font-family="Times,serif" font-size="12.00">e2</text>
 </g>
 <!-- (&#39;v3&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
 <g id="edge6" class="edge">
 <title>(&#39;v3&#39;,)&#45;&gt;(&#39;e2&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M53.88,-5.34C61.34,-2.62 68.81,-6.49 76.28,-16.97"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M234.37,-78.11C234.37,-72.56 234.26,-67 234.06,-61.45"/>
 </g>
 <!-- (&#39;v3&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
 <!-- (&#39;v4&#39;,) -->
 <g id="node5" class="node">
 <title>(&#39;v4&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="92" cy="-162" rx="18" ry="18"/>
-<text text-anchor="start" x="85.5" y="-158.9" font-family="Times,serif" font-size="12.00">v4</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="90" cy="-43" rx="18" ry="18"/>
+<text text-anchor="start" x="83.5" y="-39.9" font-family="Times,serif" font-size="12.00">v4</text>
 </g>
 <!-- (&#39;v4&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
 <g id="edge3" class="edge">
 <title>(&#39;v4&#39;,)&#45;&gt;(&#39;e0&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M73.11,-161.63C67.56,-161.63 62,-161.74 56.45,-161.94"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M102.66,-56.88C105.38,-64.34 101.51,-71.81 91.03,-79.28"/>
 </g>
 <!-- (&#39;v4&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
 <g id="edge7" class="edge">
 <title>(&#39;v4&#39;,)&#45;&gt;(&#39;e2&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M90.13,-143.3C86.24,-106.43 77.56,-24.34 77.03,-19.25"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M108.7,-45.12C145.57,-49.53 227.66,-59.36 232.75,-59.97"/>
 </g>
 <!-- (&#39;v5&#39;,) -->
 <g id="node6" class="node">
 <title>(&#39;v5&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="119" cy="-90" rx="18" ry="18"/>
-<text text-anchor="start" x="112.5" y="-86.9" font-family="Times,serif" font-size="12.00">v5</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="162" cy="-18" rx="18" ry="18"/>
+<text text-anchor="start" x="155.5" y="-14.9" font-family="Times,serif" font-size="12.00">v5</text>
 </g>
 <!-- (&#39;v5&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
 <g id="edge8" class="edge">
 <title>(&#39;v5&#39;,)&#45;&gt;(&#39;e2&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M109.68,-73.46C98.08,-54.13 79.51,-23.18 77.23,-19.39"/>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M178.54,-27.32C197.87,-38.92 228.82,-57.49 232.61,-59.77"/>
 </g>
 <!-- (&#39;e0&#39;,)&#45;&gt;(&#39;v4&#39;,) -->
 <!-- (&#39;e1&#39;,)&#45;&gt;(&#39;v5&#39;,) -->
@@ -15522,7 +15508,7 @@ bigraph-viz==0.0.29
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[12]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[57]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
 <div class=" highlight hl-ipython3"><pre><span></span><span class="n">bigraph</span> <span class="o">=</span> <span class="p">{</span>
@@ -15570,7 +15556,7 @@ bigraph-viz==0.0.29
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[12]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[57]:</div>
 
 
 
@@ -15731,10 +15717,10 @@ bigraph-viz==0.0.29
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[13]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In&nbsp;[40]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
      <div class="CodeMirror cm-s-jupyter">
-<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">bigraph</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">&#39;process_bigraph&#39;</span><span class="p">)</span>
+<div class=" highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">bigraph</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">&#39;process_bigraph&#39;</span><span class="p">)</span>
 </pre></div>
 
      </div>
@@ -15750,7 +15736,7 @@ bigraph-viz==0.0.29
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
     
-    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[13]:</div>
+    <div class="jp-OutputPrompt jp-OutputArea-prompt">Out[40]:</div>
 
 
 
@@ -15760,139 +15746,131 @@ bigraph-viz==0.0.29
 <!-- Generated by graphviz version 7.1.0 (20230121.1956)
  -->
 <!-- Title: bigraph Pages: 1 -->
-<svg width="235pt" height="275pt" viewBox="0.00 0.00 242.00 283.00">
-<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 279)">
+<svg width="235pt" height="253pt" viewBox="0.00 0.00 242.00 260.00">
+<g id="graph0" class="graph" transform="scale(0.972222 0.972222) rotate(0) translate(4 256)">
 <title>bigraph</title>
-<polygon fill="white" stroke="none" points="-4,4 -4,-279 238,-279 238,4 -4,4"></polygon>
+<polygon fill="white" stroke="none" points="-4,4 -4,-256 238,-256 238,4 -4,4"></polygon>
 <!-- (&amp;#39;v0&amp;#39;,) -->
 <g id="node1" class="node">
 <title>(&#39;v0&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="74" cy="-257" rx="18" ry="18"></ellipse>
-<text text-anchor="start" x="67.5" y="-253.9" font-family="Times,serif" font-size="12.00">v0</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="64" cy="-234" rx="18" ry="18"></ellipse>
+<text text-anchor="start" x="57.5" y="-230.9" font-family="Times,serif" font-size="12.00">v0</text>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v1&amp;#39;) -->
 <g id="node2" class="node">
 <title>(&#39;v0&#39;, &#39;v1&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="20" cy="-184" rx="18" ry="18"></ellipse>
-<text text-anchor="start" x="13.5" y="-180.9" font-family="Times,serif" font-size="12.00">v1</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="18" cy="-162" rx="18" ry="18"></ellipse>
+<text text-anchor="start" x="11.5" y="-158.9" font-family="Times,serif" font-size="12.00">v1</text>
 </g>
 <!-- (&amp;#39;v0&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;v0&amp;#39;, &amp;#39;v1&amp;#39;) -->
 <g id="edge2" class="edge">
 <title>(&#39;v0&#39;,)&#45;&gt;(&#39;v0&#39;, &#39;v1&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M63.07,-241.63C53.7,-229.31 40.28,-211.66 30.91,-199.35"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M54.24,-218.15C46.44,-206.28 35.54,-189.7 27.74,-177.82"></path>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v2&amp;#39;) -->
 <g id="node3" class="node">
 <title>(&#39;v0&#39;, &#39;v2&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="128" cy="-184" rx="18" ry="18"></ellipse>
-<text text-anchor="start" x="121.5" y="-180.9" font-family="Times,serif" font-size="12.00">v2</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="114" cy="-162" rx="18" ry="18"></ellipse>
+<text text-anchor="start" x="107.5" y="-158.9" font-family="Times,serif" font-size="12.00">v2</text>
 </g>
 <!-- (&amp;#39;v0&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;v0&amp;#39;, &amp;#39;v2&amp;#39;) -->
 <g id="edge3" class="edge">
 <title>(&#39;v0&#39;,)&#45;&gt;(&#39;v0&#39;, &#39;v2&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M84.93,-241.63C94.3,-229.31 107.72,-211.66 117.09,-199.35"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M74.36,-218.5C82.94,-206.48 95.08,-189.49 103.65,-177.49"></path>
 </g>
 <!-- (&amp;#39;e0&amp;#39;,) -->
 <g id="node7" class="node">
 <title>(&#39;e0&#39;,)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="98,-119 44,-119 44,-83 98,-83 98,-119"></polygon>
-<text text-anchor="start" x="65" y="-97.9" font-family="Times,serif" font-size="12.00">e0</text>
+<polygon fill="none" stroke="black" stroke-width="2" points="88,-108 34,-108 34,-72 88,-72 88,-108"></polygon>
+<text text-anchor="start" x="55" y="-86.9" font-family="Times,serif" font-size="12.00">e0</text>
 </g>
 <!-- (&amp;#39;v0&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;e0&amp;#39;,) -->
 <g id="edge5" class="edge">
 <title>(&#39;v0&#39;,)&#45;&gt;(&#39;e0&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M73.65,-238.03C73.1,-209.87 72.04,-155.36 71.44,-124.58"></path>
-<ellipse fill="black" stroke="black" cx="71.4" cy="-122.35" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="72" y="-181.5" font-family="Times,serif" font-size="10.00">e0.0</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M63.62,-215.02C63.07,-189.2 62.07,-141.64 61.48,-113.52"></path>
+<ellipse fill="black" stroke="black" cx="61.43" cy="-111.34" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;e0&amp;#39;,) -->
 <g id="edge6" class="edge">
 <title>(&#39;v0&#39;, &#39;v1&#39;)&#45;&gt;(&#39;e0&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M26.8,-166.3C30.74,-157.33 36.09,-146.25 42,-137 44.86,-132.52 48.23,-127.98 51.63,-123.71"></path>
-<ellipse fill="black" stroke="black" cx="53.18" cy="-121.82" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="42" y="-140" font-family="Times,serif" font-size="10.00">e0.1</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M27.33,-145.81C33.22,-136.23 40.92,-123.69 47.47,-113.02"></path>
+<ellipse fill="black" stroke="black" cx="48.71" cy="-111.01" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;e1&amp;#39;,) -->
 <g id="node8" class="node">
 <title>(&#39;e1&#39;,)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="54,-36 0,-36 0,0 54,0 54,-36"></polygon>
-<text text-anchor="start" x="21" y="-14.9" font-family="Times,serif" font-size="12.00">e1</text>
+<polygon fill="none" stroke="black" stroke-width="2" points="79,-36 25,-36 25,0 79,0 79,-36"></polygon>
+<text text-anchor="start" x="46" y="-14.9" font-family="Times,serif" font-size="12.00">e1</text>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v1&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;e1&amp;#39;,) -->
 <g id="edge9" class="edge">
 <title>(&#39;v0&#39;, &#39;v1&#39;)&#45;&gt;(&#39;e1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M18.32,-165.27C16.69,-145.26 14.77,-111.75 17,-83 18.08,-69.14 20.44,-53.75 22.61,-41.53"></path>
-<ellipse fill="black" stroke="black" cx="23.01" cy="-39.3" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="17" y="-98.5" font-family="Times,serif" font-size="10.00">e0.1</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M17.38,-143.25C17.21,-125.03 18.23,-96.02 25,-72 27.99,-61.41 33.16,-50.45 38.19,-41.27"></path>
+<ellipse fill="black" stroke="black" cx="39.42" cy="-39.09" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v2&amp;#39;, &amp;#39;v3&amp;#39;) -->
 <g id="node4" class="node">
 <title>(&#39;v0&#39;, &#39;v2&#39;, &#39;v3&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="134" cy="-101" rx="18" ry="18"></ellipse>
-<text text-anchor="start" x="127.5" y="-97.9" font-family="Times,serif" font-size="12.00">v3</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="124" cy="-90" rx="18" ry="18"></ellipse>
+<text text-anchor="start" x="117.5" y="-86.9" font-family="Times,serif" font-size="12.00">v3</text>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v2&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;v0&amp;#39;, &amp;#39;v2&amp;#39;, &amp;#39;v3&amp;#39;) -->
 <g id="edge1" class="edge">
 <title>(&#39;v0&#39;, &#39;v2&#39;)&#45;&gt;(&#39;v0&#39;, &#39;v2&#39;, &#39;v3&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M129.3,-165.42C130.3,-151.93 131.68,-133.38 132.68,-119.82"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M116.52,-143.34C118.05,-132.64 119.99,-119.06 121.51,-108.42"></path>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v2&amp;#39;, &amp;#39;v3&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;e1&amp;#39;,) -->
 <g id="edge8" class="edge">
 <title>(&#39;v0&#39;, &#39;v2&#39;, &#39;v3&#39;)&#45;&gt;(&#39;e1&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M119.57,-89.08C102.92,-76.47 75.18,-55.47 54.39,-39.74"></path>
-<ellipse fill="black" stroke="black" cx="52.59" cy="-38.37" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="86" y="-57" font-family="Times,serif" font-size="10.00">e0.0</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M111.13,-76.49C100.78,-66.42 86,-52.05 73.81,-40.2"></path>
+<ellipse fill="black" stroke="black" cx="72.23" cy="-38.67" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;e2&amp;#39;,) -->
 <g id="node9" class="node">
 <title>(&#39;e2&#39;,)</title>
-<polygon fill="none" stroke="black" stroke-width="2" points="215,-36 161,-36 161,0 215,0 215,-36"></polygon>
-<text text-anchor="start" x="182" y="-14.9" font-family="Times,serif" font-size="12.00">e2</text>
+<polygon fill="none" stroke="black" stroke-width="2" points="197,-36 143,-36 143,0 197,0 197,-36"></polygon>
+<text text-anchor="start" x="164" y="-14.9" font-family="Times,serif" font-size="12.00">e2</text>
 </g>
 <!-- (&amp;#39;v0&amp;#39;, &amp;#39;v2&amp;#39;, &amp;#39;v3&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;e2&amp;#39;,) -->
 <g id="edge10" class="edge">
 <title>(&#39;v0&#39;, &#39;v2&#39;, &#39;v3&#39;)&#45;&gt;(&#39;e2&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M143.9,-85.14C152.2,-72.7 164.15,-54.78 173.52,-40.73"></path>
-<ellipse fill="black" stroke="black" cx="174.7" cy="-38.95" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="164" y="-57" font-family="Times,serif" font-size="10.00">e0.0</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M133.76,-74.15C140.14,-64.43 148.6,-51.56 155.74,-40.7"></path>
+<ellipse fill="black" stroke="black" cx="156.93" cy="-38.89" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;v4&amp;#39;,) -->
 <g id="node5" class="node">
 <title>(&#39;v4&#39;,)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="194" cy="-184" rx="18" ry="18"></ellipse>
-<text text-anchor="start" x="187.5" y="-180.9" font-family="Times,serif" font-size="12.00">v4</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="170" cy="-162" rx="18" ry="18"></ellipse>
+<text text-anchor="start" x="163.5" y="-158.9" font-family="Times,serif" font-size="12.00">v4</text>
 </g>
 <!-- (&amp;#39;v4&amp;#39;, &amp;#39;v5&amp;#39;) -->
 <g id="node6" class="node">
 <title>(&#39;v4&#39;, &#39;v5&#39;)</title>
-<ellipse fill="none" stroke="black" stroke-width="2" cx="188" cy="-101" rx="18" ry="18"></ellipse>
-<text text-anchor="start" x="181.5" y="-97.9" font-family="Times,serif" font-size="12.00">v5</text>
+<ellipse fill="none" stroke="black" stroke-width="2" cx="216" cy="-90" rx="18" ry="18"></ellipse>
+<text text-anchor="start" x="209.5" y="-86.9" font-family="Times,serif" font-size="12.00">v5</text>
 </g>
 <!-- (&amp;#39;v4&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;v4&amp;#39;, &amp;#39;v5&amp;#39;) -->
 <g id="edge4" class="edge">
 <title>(&#39;v4&#39;,)&#45;&gt;(&#39;v4&#39;, &#39;v5&#39;)</title>
-<path fill="none" stroke="black" stroke-width="2" d="M192.7,-165.42C191.7,-151.93 190.32,-133.38 189.32,-119.82"></path>
+<path fill="none" stroke="black" stroke-width="2" d="M179.76,-146.15C187.56,-134.28 198.46,-117.7 206.26,-105.82"></path>
 </g>
 <!-- (&amp;#39;v4&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;e0&amp;#39;,) -->
 <g id="edge7" class="edge">
 <title>(&#39;v4&#39;,)&#45;&gt;(&#39;e0&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M178.67,-172.91C159.68,-160.4 126.84,-138.77 102.41,-122.68"></path>
-<ellipse fill="black" stroke="black" cx="100.34" cy="-121.32" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="139" y="-140" font-family="Times,serif" font-size="10.00">e0.2</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M154.84,-151.27C138.83,-140.98 113.11,-124.47 92.65,-111.32"></path>
+<ellipse fill="black" stroke="black" cx="90.73" cy="-110.09" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;v4&amp;#39;,)&amp;#45;&amp;gt;(&amp;#39;e2&amp;#39;,) -->
 <g id="edge11" class="edge">
 <title>(&#39;v4&#39;,)&#45;&gt;(&#39;e2&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M201.02,-166.52C206.03,-153.8 212.34,-135.63 215,-119 217.53,-103.2 216.36,-98.94 215,-83 213.88,-69.97 214.68,-66.21 210,-54 208.3,-49.58 206.02,-45.11 203.57,-40.91"></path>
-<ellipse fill="black" stroke="black" cx="202.37" cy="-38.95" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="216" y="-98.5" font-family="Times,serif" font-size="10.00">e0.1</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M170,-143.02C170,-117.2 170,-69.64 170,-41.52"></path>
+<ellipse fill="black" stroke="black" cx="170" cy="-39.34" rx="2" ry="2"></ellipse>
 </g>
 <!-- (&amp;#39;v4&amp;#39;, &amp;#39;v5&amp;#39;)&amp;#45;&amp;gt;(&amp;#39;e2&amp;#39;,) -->
 <g id="edge12" class="edge">
 <title>(&#39;v4&#39;, &#39;v5&#39;)&#45;&gt;(&#39;e2&#39;,)</title>
-<path fill="none" stroke="black" stroke-dasharray="5,2" d="M188,-82.02C188,-70.17 188,-54.55 188,-41.83"></path>
-<ellipse fill="black" stroke="black" cx="188" cy="-39.43" rx="2" ry="2"></ellipse>
-<text text-anchor="start" x="188" y="-57" font-family="Times,serif" font-size="10.00">e0.2</text>
+<path fill="none" stroke="black" stroke-dasharray="5,2" d="M206.24,-74.15C199.86,-64.43 191.4,-51.56 184.26,-40.7"></path>
+<ellipse fill="black" stroke="black" cx="183.07" cy="-38.89" rx="2" ry="2"></ellipse>
 </g>
 </g>
 </svg>
