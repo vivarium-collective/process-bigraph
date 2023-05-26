@@ -288,7 +288,7 @@ def test_composite():
         },
         'instance': {
             'increase': {
-                '_type': 'process[level:float]'
+                '_type': 'process[level:float]',
                 'address': 'local:IncreaseProcess',
                 'config': {'rate': '0.3'},
                 'wires': {'level': 'value'}},
@@ -298,6 +298,37 @@ def test_composite():
 
     composite.update({'exchange': 3.33}, 10.0)
     import ipdb; ipdb.set_trace()
+
+
+def test_serialized_composite():
+    # This should specify the same thing as above
+    composite_schema = {
+        'composite': {
+            '_type': 'process[?]',
+            'address': 'local:Composite',
+            'config': {
+                'instance': {
+                    'increase': {
+                        '_type': 'process[level:float]',
+                        'address': 'local:IncreaseProcess',
+                        'config': {'rate': '0.3'},
+                        'wires': {'level': 'value'}
+                    },
+                    'value': '11.11',
+                },
+                'schema': {
+                    'increase': 'process[level:float]',
+                    # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
+                    'value': 'float',
+                },
+                'bridge': {
+                    'exchange': 'value'
+                },
+            }
+        }
+    }
+
+    composite_instance = deserialize(composite_schema)
 
 
 if __name__ == '__main__':
