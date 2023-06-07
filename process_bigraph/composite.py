@@ -1,5 +1,7 @@
 import abc
 
+from bigraph_schema import fill
+
 
 def hierarchy_depth(hierarchy, path=()):
     """
@@ -44,6 +46,7 @@ def empty_front(time):
         'update': {}
     }
 
+
 # deal with steps vs temporal process vs edges
 
 class Process:
@@ -78,6 +81,7 @@ class Process:
     #   process would have to maintain state
 
 
+
 # maybe keep wires as tuples/paths to distinguish them from schemas?
 
 class Composite(Process):
@@ -104,10 +108,8 @@ class Composite(Process):
         }
         self.global_time_precision = self.config['global_time_precision']
 
-
     def schema(self):
         return self.config['schema']
-
 
     def run_process(self, path, process):
         if path not in self.front:
@@ -165,7 +167,6 @@ class Composite(Process):
                 full_step = process_delay
 
         return full_step
-        
 
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
@@ -222,7 +223,6 @@ class Composite(Process):
             if force_complete and self.global_time == end_time:
                 force_complete = False
 
-
     def update(self, state, interval):
         # do everything
 
@@ -253,7 +253,7 @@ class IncreaseProcess(Process):
         return {
             'level': 'float',
         }
-    
+
     def update(self, state, interval):
         return {
             'level': state['level'] * self.config['rate']
@@ -269,7 +269,8 @@ def test_process():
     assert new_state['level'] == 1.1
 
 
-{"level":"float","down":{"a":"int"}}
+{"level": "float", "down": {"a": "int"}}
+
 
 def test_composite():
     # TODO: add support for the various vivarium emitters
@@ -297,7 +298,8 @@ def test_composite():
     })
 
     composite.update({'exchange': 3.33}, 10.0)
-    import ipdb; ipdb.set_trace()
+    import ipdb;
+    ipdb.set_trace()
 
 
 def test_serialized_composite():
