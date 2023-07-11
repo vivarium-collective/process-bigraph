@@ -1,19 +1,19 @@
 import importlib
 
-from bigraph_schema import SchemaTypes
+from bigraph_schema import TypeSystem
 
 
 # TODO: implement these
-def apply_process(current, update, type_parameters, types):
+def apply_process(current, update, bindings=None, types=None):
     pass
 
-def divide_process(value, type_parameters, types):
+def divide_process(value, bindings=None, types=None):
     return value
 
-def serialize_process(value, type_parameters, types):
+def serialize_process(value, bindings=None, types=None):
     return value
 
-def deserialize_process(value, type_parameters, types):
+def deserialize_process(serialized, bindings=None, types=None):
     return value
 
 
@@ -23,7 +23,7 @@ process_types = {
     },
 
     'process': {
-        '_super': 'edge'
+        '_super': 'edge',
         '_apply': 'apply_process',
         '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_process',
@@ -48,21 +48,19 @@ def register_process_types(types):
     return types
 
 
-class ProcessTypes(SchemaTypes):
+class ProcessTypes(TypeSystem):
     def __init__(self):
         super().__init__()
 
         register_process_types(self)
 
 
-    def serialize(self, live):
-        return encoded
+    # def serialize(self, schema, state):
+    #     return ''
 
 
-    def deserialize(self, encoded):
-        # TODO: if this is a process, do lookup
-        #   otherwise call super
-        return live
+    # def deserialize(self, schema, encoded):
+    #     return {}
 
 
     # TODO: maybe this is just deserialization?
@@ -80,3 +78,4 @@ class ProcessTypes(SchemaTypes):
 
 
     
+types = ProcessTypes()

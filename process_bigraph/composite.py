@@ -1,6 +1,6 @@
 import abc
 
-from bigraph_schema import fill
+from type_system import types
 
 
 def hierarchy_depth(hierarchy, path=()):
@@ -61,7 +61,7 @@ class Process:
             {'_type': 'float', '_default': '1.0'}
         )
 
-        self.config = fill(
+        self.config = types.fill(
             self.config_schema,
             config
         )
@@ -97,11 +97,11 @@ class Composite(Process):
     def __init__(self, config=None):
         super().__init__(config)
         self.global_time = self.config['initial_time']
-        self.state = fill(
+        self.state = types.fill(
             self.config['schema'],
             self.config['instance']
         )
-        self.process_paths = find_process_paths(state)
+        self.process_paths = find_process_paths(self.state)
         self.front: Dict = {
             path: empty_front(self.global_time)
             for path in self.process_paths
@@ -227,7 +227,7 @@ class Composite(Process):
         # do everything
 
         # this needs to go through the bridge
-        self.state = apply_update(
+        self.state = types.apply(
             self.schema,
             self.state,
             state
@@ -263,13 +263,10 @@ class IncreaseProcess(Process):
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
-    state = fill(schema)
+    state = types.fill(schema)
     update = process.update({'level': 5.5}, 1.0)
-    new_state = apply_update(schema, state, update)
+    new_state = types.apply(schema, state, update)
     assert new_state['level'] == 1.1
-
-
-{"level": "float", "down": {"a": "int"}}
 
 
 def test_composite():
@@ -281,7 +278,6 @@ def test_composite():
     composite = Composite({
         'schema': {
             'increase': 'process[level:float]',
-            # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
             'value': 'float',
         },
         'bridge': {
@@ -298,8 +294,7 @@ def test_composite():
     })
 
     composite.update({'exchange': 3.33}, 10.0)
-    import ipdb;
-    ipdb.set_trace()
+    import ipdb; ipdb.set_trace()
 
 
 def test_serialized_composite():
