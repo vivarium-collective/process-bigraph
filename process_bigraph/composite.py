@@ -49,6 +49,15 @@ def empty_front(time):
 
 # deal with steps vs temporal process vs edges
 
+
+class SyncUpdate():
+    def __init__(self, update):
+        self.update = update
+
+    def get(self):
+        return self.update
+
+
 class Process:
     config_schema = {}
 
@@ -72,6 +81,12 @@ class Process:
 
     def calculate_timestep(self, state):
         return self.config['timestep']
+
+    def invoke(self, state, interval):
+        update = self.update(state, interval)
+        sync = SyncUpdate(update)
+
+        return sync
 
     @abc.abstractmethod
     def update(self, state, interval):
@@ -108,8 +123,49 @@ class Composite(Process):
         }
         self.global_time_precision = self.config['global_time_precision']
 
+
     def schema(self):
         return self.config['schema']
+
+
+    def process_update(
+            self,
+            path,
+            process,
+            states,
+            interval,
+    ):
+        """Start generating a process's update.
+
+        This function is similar to :py:meth:`_invoke_process` except in
+        addition to triggering the computation of the process's update
+        (by calling ``_invoke_process``), it also generates a
+        :py:class:`Defer` object to transform the update into absolute
+        terms.
+
+        Args:
+            path: Path to process.
+            process: The process.
+            store: The store at ``path``.
+            states: Simulation state to pass to process's
+                ``next_update`` method.
+            interval: Timestep for which to compute the update.
+
+        Returns:
+            Tuple of the deferred update (in absolute terms) and
+            ``store``.
+        """
+        update = process.invoke(states, interval)
+
+        absolute = Defer(
+            update,
+            types.project_topology, (
+                self.config['schema'],
+                self.state,
+                path,
+                states))
+
+        return absolute
 
     def run_process(self, path, process):
         if path not in self.front:
@@ -124,7 +180,11 @@ class Composite(Process):
                 del self.front[path]['future']
             else:
                 # get the time step
-                store, state = self._process_state(path)
+                state = types.view(
+                    self.config['schema'],
+                    self.state,
+                    path)
+
                 process_timestep = process.calculate_timestep(state)
 
             if force_complete:
@@ -137,11 +197,9 @@ class Composite(Process):
                 future = round(future, self.global_time_precision)
 
             if future <= end_time:
-
-                update = self._process_update(
+                update = self.process_update(
                     path,
                     process,
-                    store,
                     state,
                     process_timestep
                 )
@@ -229,15 +287,27 @@ class Composite(Process):
         # do everything
 
         # this needs to go through the bridge
+        view = types.view(
+            self.schema(),
+            state)
+
         self.state = types.apply(
-            self.config['schema'],
+            self.schema(),
             self.state,
-            state
+            view
         )
 
         self.run(interval)
 
         # pull the update out of the state and return it
+        update = types.project(
+            self.schema(),
+            state,
+            (),
+            self.state)
+
+        return update
+
 
 
 class IncreaseProcess(Process):
