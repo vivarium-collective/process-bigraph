@@ -88,7 +88,7 @@ class Composite(Process):
     config_schema = {
         'schema': 'tree[any]',
         'bridge': 'wires',
-        'instance': 'tree[any]',
+        'state': 'tree[any]',
         'initial_time': 'float',
         'global_time_precision': 'maybe[float]',
     }
@@ -99,7 +99,7 @@ class Composite(Process):
         self.global_time = self.config['initial_time']
         self.state = types.fill(
             self.config['schema'],
-            self.config['instance']
+            self.config['state']
         )
         self.process_paths = find_process_paths(self.state)
         self.front: Dict = {
@@ -171,9 +171,11 @@ class Composite(Process):
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
         while self.global_time < end_time or force_complete:
-            full_step = math.inf
+            steps = [math.inf]
             for path, process in self.process_paths.items():
-                full_step = self.run_process(process, path)
+                next_step = self.run_process(process, path)
+                steps.append(next_step)
+            full_step = min(steps)
 
             # apply updates based on process times in self.front
             if full_step == math.inf:
@@ -228,7 +230,7 @@ class Composite(Process):
 
         # this needs to go through the bridge
         self.state = types.apply(
-            self.schema,
+            self.config['schema'],
             self.state,
             state
         )
@@ -283,9 +285,8 @@ def test_composite():
         'bridge': {
             'exchange': 'value'
         },
-        'instance': {
+        'state': {
             'increase': {
-                '_type': 'process[level:float]',
                 'address': 'local:IncreaseProcess',
                 'config': {'rate': '0.3'},
                 'wires': {'level': 'value'}},
@@ -294,6 +295,7 @@ def test_composite():
     })
 
     composite.update({'exchange': 3.33}, 10.0)
+
     import ipdb; ipdb.set_trace()
 
 
@@ -303,7 +305,7 @@ def test_serialized_composite():
         '_type': 'process[?]',
         'address': 'local:Composite',
         'config': {
-            'instance': {
+            'state': {
                 'increase': {
                     '_type': 'process[level:float]',
                     'address': 'local:IncreaseProcess',
