@@ -1,20 +1,53 @@
+import sys
 import importlib
 
 from bigraph_schema import TypeSystem
+
+
+def lookup_local(address):
+    if '.' in address:
+        module_name, class_name = address.rsplit('.', 1)
+        module = importlib.import_module(module_name)
+        return getattr(module, class_name)
+    else:
+        return getattr(sys.modules[__name__], address)
+
+
+def lookup_local_process(address, config):
+    local = lookup_local(address)
+    return local(config)
 
 
 # TODO: implement these
 def apply_process(current, update, bindings=None, types=None):
     pass
 
+
 def divide_process(value, bindings=None, types=None):
     return value
+
 
 def serialize_process(value, bindings=None, types=None):
     return value
 
+
 def deserialize_process(serialized, bindings=None, types=None):
-    return value
+    protocol, address = serialized['address'].split(':', 1)
+
+    if protocol == 'local':
+        instantiate = lookup_local(address)
+    else:
+        raise Exception(f'protocol "{protocol}" not implemented')
+
+    config = types.hydrate_state(
+        instantiate.config_schema,
+        serialized.get('config', {}))
+
+    process = instantiate(config)
+    process.address = serialized['address']
+    process.wires = serialized['wires']
+
+    return process
 
 
 process_types = {
@@ -63,11 +96,27 @@ class ProcessTypes(TypeSystem):
     #     return {}
 
 
-    # TODO: maybe this is just deserialization?
-    def lookup_local(self, config):
-        module_name, class_name = config.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, class_name)
+    def hydrate_state(self, schema, state):
+        if isinstance(state, str) or '_deserialize' in schema:
+            result = self.deserialize(schema, state)
+        elif isinstance(state, dict):
+            if isinstance(schema, str):
+                import ipdb; ipdb.set_trace()
+            result = {
+                key: self.hydrate_state(schema[key], state[key])
+                for key, value in state.items()}
+        return result
+
+
+    def hydrate(self, schema, state):
+        hydrated = self.hydrate_state(schema, state)
+        return self.fill(schema, hydrated)
+        
+
+    def dehydrate(self, schema):
+        return {}
+
+
 
 
     def lookup_address(self, address):
