@@ -48,7 +48,7 @@ def register_process_types(types):
     return types
 
 
-class ProcessTypes(SchemaTypes):
+class ProcessTypes(TypeSystem):
     def __init__(self):
         super().__init__()
 

@@ -1,6 +1,10 @@
 import abc
+import sys
+import copy
+import math
+import collections
 
-from bigraph_schema import fill
+from type_system import types, lookup_local
 
 
 def hierarchy_depth(hierarchy, path=()):
@@ -21,11 +25,131 @@ def hierarchy_depth(hierarchy, path=()):
     return base
 
 
+# deal with steps vs temporal process vs edges
+
+
+class SyncUpdate():
+    def __init__(self, update):
+        self.update = update
+
+    def get(self):
+        return self.update
+
+
+class Process():
+    config_schema = {}
+
+    def __init__(self, config=None):
+        if config is None:
+            config = {}
+
+        self.config_schema.setdefault(
+            'timestep', {
+                '_type': 'float',
+                '_default': '1.0'})
+
+        self.config = types.fill(
+            self.config_schema,
+            config)
+
+        self.state = {}
+
+
+    def __getitem__(self, key):
+        return self.state[key]
+
+
+    def __setitem__(self, key, value):
+        self.state[key] = value
+
+
+    def get(self, key, default=None):
+        return self.__dict__.get(key, default)
+
+
+    def fill(self, state):
+        if isinstance(state, dict):
+            for key, value in state:
+                setattr(self, key, value)
+        else:
+            raise Exception(
+                f'process: {self}\ncannot fill state: {state}')
+        
+
+    @abc.abstractmethod
+    def schema(self):
+        return {}
+
+
+    def calculate_timestep(self, state):
+        return self.config['timestep']
+
+
+    def invoke(self, state, interval):
+        update = self.update(state, interval)
+        sync = SyncUpdate(update)
+
+        return sync
+
+
+    @abc.abstractmethod
+    def update(self, state, interval):
+        return {}
+
+
+    # TODO: should we include run(interval) here?
+    #   process would have to maintain state
+
+
+class Defer:
+    def __init__(
+            self,
+            defer,
+            f,
+            args):
+            # defer: Any,
+            # f: Callable,
+            # args: Tuple,
+    # ) -> None:
+        """Allows for delayed application of a function to an update.
+
+        The object simply holds the provided arguments until it's time
+        for the computation to be performed. Then, the function is
+        called.
+
+        Args:
+            defer: An object with a ``.get_command_result()`` method
+                whose output will be passed to the function. For
+                example, the object could be an
+                :py:class:`vivarium.core.process.Process` object whose
+                ``.get_command_result()`` method will return the process
+                update.
+            function: The function. For example,
+                :py:func:`invert_topology` to transform the returned
+                update.
+            args: Passed as the second argument to the function.
+        """
+        self.defer = defer
+        self.f = f
+        self.args = args
+
+    def get(self):
+        """Perform the deferred computation.
+
+        Returns:
+            The result of calling the function.
+        """
+        return self.f(
+            self.defer.get(),
+            self.args)
+
+# maybe keep wires as tuples/paths to distinguish them from schemas?
+
 def find_processes(state):
     found = {}
 
     for key, inner in state.items():
-        if isinstance(inner, Process):
+        if isinstance(inner, lookup_local('process_bigraph.composite.Process')):
             found[key] = inner
         elif isinstance(inner, dict):
             result = find_processes(inner)
@@ -47,71 +171,90 @@ def empty_front(time):
     }
 
 
-# deal with steps vs temporal process vs edges
-
-class Process:
-    config_schema = {}
-
-    def __init__(self, config=None):
-        if config is None:
-            config = {}
-
-        self.config_schema.setdefault(
-            'timestep',
-            {'_type': 'float', '_default': '1.0'}
-        )
-
-        self.config = fill(
-            self.config_schema,
-            config
-        )
-
-    @abc.abstractmethod
-    def schema(self):
-        return {}
-
-    def calculate_timestep(self, state):
-        return self.config['timestep']
-
-    @abc.abstractmethod
-    def update(self, state, interval):
-        return {}
-
-    # TODO: should we include run(interval) here?
-    #   process would have to maintain state
-
-
-
-# maybe keep wires as tuples/paths to distinguish them from schemas?
-
 class Composite(Process):
     config_schema = {
-        'schema': 'tree[any]',
+        # TODO: add schema type
+        'composition': 'tree[any]', # 'schema',
+        'state': 'tree[any]',
+        'schema': 'tree[any]', # 'schema',
         'bridge': 'wires',
-        'instance': 'tree[any]',
         'initial_time': 'float',
         'global_time_precision': 'maybe[float]',
     }
 
+
     # TODO: if processes are serialized, deserialize them first
     def __init__(self, config=None):
         super().__init__(config)
+
+        self.composition = types.access(self.config['composition'])
+        self.composition = copy.deepcopy(self.composition)
+
+        self.state = types.hydrate(
+            self.composition,
+            self.config['state'])
+
         self.global_time = self.config['initial_time']
-        self.state = fill(
-            self.config['schema'],
-            self.config['instance']
-        )
-        self.process_paths = find_process_paths(state)
+        self.global_time_precision = self.config['global_time_precision']
+
+        self.process_paths = find_process_paths(self.state)
         self.front: Dict = {
             path: empty_front(self.global_time)
-            for path in self.process_paths
-        }
-        self.global_time_precision = self.config['global_time_precision']
+            for path in self.process_paths}
+
 
     def schema(self):
         return self.config['schema']
 
-    def run_process(self, path, process):
+
+    def process_update(
+            self,
+            path,
+            process,
+            states,
+            interval,
+    ):
+        """Start generating a process's update.
+
+        This function is similar to :py:meth:`_invoke_process` except in
+        addition to triggering the computation of the process's update
+        (by calling ``_invoke_process``), it also generates a
+        :py:class:`Defer` object to transform the update into absolute
+        terms.
+
+        Args:
+            path: Path to process.
+            process: The process.
+            store: The store at ``path``.
+            states: Simulation state to pass to process's
+                ``next_update`` method.
+            interval: Timestep for which to compute the update.
+
+        Returns:
+            Tuple of the deferred update (in absolute terms) and
+            ``store``.
+        """
+        update = process.invoke(states, interval)
+
+        def defer_project(update, args):
+            schema, state, path = args
+            return types.project(
+                schema,
+                state,
+                path,
+                update)
+
+        absolute = Defer(
+            update,
+            defer_project, (
+                self.config['composition'],
+                self.state,
+                path))
+
+        return absolute
+
+
+    def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
             self.front[path] = empty_front(self.global_time)
         process_time = self.front[path]['time']
@@ -124,7 +267,11 @@ class Composite(Process):
                 del self.front[path]['future']
             else:
                 # get the time step
-                store, state = self._process_state(path)
+                state = types.view(
+                    self.composition,
+                    self.state,
+                    path)
+
                 process_timestep = process.calculate_timestep(state)
 
             if force_complete:
@@ -137,11 +284,9 @@ class Composite(Process):
                 future = round(future, self.global_time_precision)
 
             if future <= end_time:
-
-                update = self._process_update(
+                update = self.process_update(
                     path,
                     process,
-                    store,
                     state,
                     process_timestep
                 )
@@ -168,12 +313,40 @@ class Composite(Process):
 
         return full_step
 
+
+    def apply_updates(self, updates):
+        # view_expire = False
+        for defer in updates:
+            series = defer.get()
+            if not isinstance(series, list):
+                series = [series]
+            for update in series:
+                self.state = types.apply(
+                    self.composition,
+                    self.state,
+                    update)
+
+                # view_expire_update = self.apply_update(up, store)
+                # view_expire = view_expire or view_expire_update
+
+        # if view_expire:
+        #     self.state.build_topology_views()
+
+        # self.run_steps()
+
+
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
         while self.global_time < end_time or force_complete:
             full_step = math.inf
+
             for path, process in self.process_paths.items():
-                full_step = self.run_process(process, path)
+                full_step = self.run_process(
+                    path,
+                    process,
+                    end_time,
+                    full_step,
+                    force_complete)
 
             # apply updates based on process times in self.front
             if full_step == math.inf:
@@ -189,10 +362,6 @@ class Composite(Process):
                 # increase the time, apply updates, and continue
                 self.global_time += full_step
 
-                # advance all quiet processes to current time
-                for quiet in quiet_paths:
-                    self.front[quiet]['time'] = self.global_time
-
                 # apply updates that are behind global time
                 updates = []
                 paths = []
@@ -204,17 +373,17 @@ class Composite(Process):
                         advance['update'] = {}
                         paths.append(path)
 
-                self._send_updates(updates)
+                self.apply_updates(updates)
 
-                # display and emit
-                if self.progress_bar:
-                    print_progress_bar(self.global_time, end_time)
-                if self.emit_step == 1:
-                    self._emit_store_data()
-                elif emit_time <= self.global_time:
-                    while emit_time <= self.global_time:
-                        self._emit_store_data()
-                        emit_time += self.emit_step
+                # # display and emit
+                # if self.progress_bar:
+                #     print_progress_bar(self.global_time, end_time)
+                # if self.emit_step == 1:
+                #     self._emit_store_data()
+                # elif emit_time <= self.global_time:
+                #     while emit_time <= self.global_time:
+                #         self._emit_store_data()
+                #         emit_time += self.emit_step
 
             else:
                 # all processes have run past the interval
@@ -227,49 +396,63 @@ class Composite(Process):
         # do everything
 
         # this needs to go through the bridge
-        self.state = apply_update(
-            self.schema,
+        projection = types.project_state(
+            self.schema(),
+            self.config['bridge'],
+            [],
+            state)
+
+        self.state = types.apply(
+            self.composition,
             self.state,
-            state
-        )
+            projection)
 
         self.run(interval)
 
         # pull the update out of the state and return it
+        update = types.view_state(
+            self.schema(),
+            self.config['bridge'],
+            [],
+            self.state)
+
+        return update
 
 
 class IncreaseProcess(Process):
     config_schema = {
         'rate': {
             '_type': 'float',
-            '_default': '0.1',
-        }
-    }
+            '_default': '0.1'}}
+
 
     def __init__(self, config=None):
         super().__init__(config)
 
+
     def schema(self):
         return {
-            'level': 'float',
-        }
+            'level': 'float'}
+
 
     def update(self, state, interval):
         return {
-            'level': state['level'] * self.config['rate']
-        }
+            'level': state['level'] * self.config['rate']}
+
+
+def test_default_config():
+    process = IncreaseProcess()
+    assert process.config['rate'] == 0.1
 
 
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
-    state = fill(schema)
+    state = types.fill(schema)
     update = process.update({'level': 5.5}, 1.0)
-    new_state = apply_update(schema, state, update)
+    new_state = types.apply(schema, state, update)
+
     assert new_state['level'] == 1.1
-
-
-{"level": "float", "down": {"a": "int"}}
 
 
 def test_composite():
@@ -278,42 +461,39 @@ def test_composite():
     # increase = IncreaseProcess({'rate': 0.3})
     # TODO: This is the config of the composite,
     #   we also need a way to serialize the entire composite
+
     composite = Composite({
-        'schema': {
+        'composition': {
             'increase': 'process[level:float]',
-            # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
-            'value': 'float',
-        },
+            'value': 'float'},
+        'schema': {
+            'exchange': 'float'},
         'bridge': {
-            'exchange': 'value'
-        },
-        'instance': {
+            'exchange': ['value']},
+        'state': {
             'increase': {
-                '_type': 'process[level:float]',
-                'address': 'local:IncreaseProcess',
+                'address': 'local:process_bigraph.composite.IncreaseProcess',
                 'config': {'rate': '0.3'},
-                'wires': {'level': 'value'}},
-            'value': '11.11',
-        },
-    })
+                'wires': {'level': ['value']}},
+            'value': '11.11'}})
 
     composite.update({'exchange': 3.33}, 10.0)
-    import ipdb;
-    ipdb.set_trace()
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_serialized_composite():
     # This should specify the same thing as above
     composite_schema = {
-        '_type': 'process[?]',
+        '_type': 'process[exchange:float]',
         'address': 'local:Composite',
         'config': {
-            'instance': {
+            'state': {
                 'increase': {
                     '_type': 'process[level:float]',
                     'address': 'local:IncreaseProcess',
                     'config': {'rate': '0.3'},
-                    'wires': {'level': 'value'}
+                    'wires': {'level': ['value']}
                 },
                 'value': '11.11',
             },
@@ -333,5 +513,6 @@ def test_serialized_composite():
 
 
 if __name__ == '__main__':
+    test_default_config()
     test_process()
     test_composite()
