@@ -66,14 +66,13 @@ class Process:
             config = {}
 
         self.config_schema.setdefault(
-            'timestep',
-            {'_type': 'float', '_default': '1.0'}
-        )
+            'timestep', {
+                '_type': 'float',
+                '_default': '1.0'})
 
         self.config = types.fill(
             self.config_schema,
-            config
-        )
+            config)
 
     @abc.abstractmethod
     def schema(self):
@@ -332,12 +331,18 @@ class IncreaseProcess(Process):
         }
 
 
+def test_default_config():
+    process = IncreaseProcess()
+    assert process.config['rate'] == 0.1
+
+
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
     state = types.fill(schema)
     update = process.update({'level': 5.5}, 1.0)
     new_state = types.apply(schema, state, update)
+
     assert new_state['level'] == 1.1
 
 
@@ -400,5 +405,6 @@ def test_serialized_composite():
 
 
 if __name__ == '__main__':
+    test_default_config()
     test_process()
     test_composite()
