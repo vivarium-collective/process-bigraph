@@ -56,7 +56,7 @@ process_types = {
     },
 
     'process': {
-        '_super': 'edge',
+        '_super': ['edge'],
         '_apply': 'apply_process',
         '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_process',
@@ -100,8 +100,6 @@ class ProcessTypes(TypeSystem):
         if isinstance(state, str) or '_deserialize' in schema:
             result = self.deserialize(schema, state)
         elif isinstance(state, dict):
-            if isinstance(schema, str):
-                import ipdb; ipdb.set_trace()
             result = {
                 key: self.hydrate_state(schema[key], state[key])
                 for key, value in state.items()}

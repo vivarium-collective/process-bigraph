@@ -64,7 +64,7 @@ class Process():
 
 
     def get(self, key, default=None):
-        return self.state.get(key, default)
+        return self.__dict__.get(key, default)
 
 
     def fill(self, state):
@@ -147,8 +147,6 @@ class Defer:
 
 def find_processes(state):
     found = {}
-
-    import ipdb; ipdb.set_trace()
 
     for key, inner in state.items():
         if isinstance(inner, lookup_local('process_bigraph.composite.Process')):
@@ -249,14 +247,14 @@ class Composite(Process):
         absolute = Defer(
             update,
             defer_project, (
-                self.config['schema'],
+                self.config['composition'],
                 self.state,
                 path))
 
         return absolute
 
 
-    def run_process(self, path, process):
+    def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
             self.front[path] = empty_front(self.global_time)
         process_time = self.front[path]['time']
@@ -270,7 +268,7 @@ class Composite(Process):
             else:
                 # get the time step
                 state = types.view(
-                    self.config['schema'],
+                    self.composition,
                     self.state,
                     path)
 
@@ -315,14 +313,40 @@ class Composite(Process):
 
         return full_step
 
+
+    def apply_updates(self, updates):
+        # view_expire = False
+        for defer in updates:
+            series = defer.get()
+            if not isinstance(series, list):
+                series = [series]
+            for update in series:
+                self.state = types.apply(
+                    self.composition,
+                    self.state,
+                    update)
+
+                # view_expire_update = self.apply_update(up, store)
+                # view_expire = view_expire or view_expire_update
+
+        # if view_expire:
+        #     self.state.build_topology_views()
+
+        # self.run_steps()
+
+
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
         while self.global_time < end_time or force_complete:
-            steps = [math.inf]
+            full_step = math.inf
+
             for path, process in self.process_paths.items():
-                next_step = self.run_process(process, path)
-                steps.append(next_step)
-            full_step = min(steps)
+                full_step = self.run_process(
+                    path,
+                    process,
+                    end_time,
+                    full_step,
+                    force_complete)
 
             # apply updates based on process times in self.front
             if full_step == math.inf:
@@ -338,10 +362,6 @@ class Composite(Process):
                 # increase the time, apply updates, and continue
                 self.global_time += full_step
 
-                # advance all quiet processes to current time
-                for quiet in quiet_paths:
-                    self.front[quiet]['time'] = self.global_time
-
                 # apply updates that are behind global time
                 updates = []
                 paths = []
@@ -353,17 +373,17 @@ class Composite(Process):
                         advance['update'] = {}
                         paths.append(path)
 
-                self._send_updates(updates)
+                self.apply_updates(updates)
 
-                # display and emit
-                if self.progress_bar:
-                    print_progress_bar(self.global_time, end_time)
-                if self.emit_step == 1:
-                    self._emit_store_data()
-                elif emit_time <= self.global_time:
-                    while emit_time <= self.global_time:
-                        self._emit_store_data()
-                        emit_time += self.emit_step
+                # # display and emit
+                # if self.progress_bar:
+                #     print_progress_bar(self.global_time, end_time)
+                # if self.emit_step == 1:
+                #     self._emit_store_data()
+                # elif emit_time <= self.global_time:
+                #     while emit_time <= self.global_time:
+                #         self._emit_store_data()
+                #         emit_time += self.emit_step
 
             else:
                 # all processes have run past the interval
@@ -455,7 +475,6 @@ def test_composite():
                 'config': {'rate': '0.3'},
                 'wires': {'level': ['value']}},
             'value': '11.11'}})
-
 
     import ipdb; ipdb.set_trace()
     composite.update({'exchange': 3.33}, 10.0)
