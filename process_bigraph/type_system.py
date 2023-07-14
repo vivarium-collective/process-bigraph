@@ -1,6 +1,9 @@
+"""
+Process Types
+"""
+
 import sys
 import importlib
-
 from bigraph_schema import TypeSystem
 
 

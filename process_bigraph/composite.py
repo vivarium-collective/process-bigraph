@@ -1,9 +1,10 @@
+"""
+Composite and Process classes
+"""
+
 import abc
-import sys
 import copy
 import math
-import collections
-
 from bigraph_schema.type_system import TypeSystem
 
 

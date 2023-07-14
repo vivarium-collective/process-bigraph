@@ -1,5 +1,8 @@
-import importlib
+"""
+Types
+"""
 
+import importlib
 from bigraph_schema import TypeSystem
 
 
@@ -7,11 +10,14 @@ from bigraph_schema import TypeSystem
 def apply_process(current, update, type_parameters, types):
     pass
 
+
 def divide_process(value, type_parameters, types):
     return value
 
+
 def serialize_process(value, type_parameters, types):
     return value
+
 
 def deserialize_process(value, type_parameters, types):
     return value
@@ -21,7 +27,6 @@ process_types = {
     'protocol': {
         '_super': 'string'
     },
-
     'process': {
         '_super': 'edge',
         '_apply': apply_process,
@@ -51,19 +56,15 @@ def register_process_types(types):
 class ProcessTypes(TypeSystem):
     def __init__(self):
         super().__init__()
-
         register_process_types(self)
-
 
     def serialize(self, live):
         return encoded
-
 
     def deserialize(self, encoded):
         # TODO: if this is a process, do lookup
         #   otherwise call super
         return live
-
 
     # TODO: maybe this is just deserialization?
     def lookup_local(self, config):
@@ -71,12 +72,8 @@ class ProcessTypes(TypeSystem):
         module = importlib.import_module(module_name)
         return getattr(module, class_name)
 
-
     def lookup_address(self, address):
         protocol, config = address.split(':')
 
         if protocol == 'local':
             self.lookup_local(config)
-
-
-    
