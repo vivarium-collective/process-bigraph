@@ -461,6 +461,7 @@ def test_composite():
     # increase = IncreaseProcess({'rate': 0.3})
     # TODO: This is the config of the composite,
     #   we also need a way to serialize the entire composite
+
     composite = Composite({
         'composition': {
             'increase': 'process[level:float]',
@@ -468,7 +469,7 @@ def test_composite():
         'schema': {
             'exchange': 'float'},
         'bridge': {
-            'exchange': 'value'},
+            'exchange': ['value']},
         'state': {
             'increase': {
                 'address': 'local:process_bigraph.composite.IncreaseProcess',
@@ -476,14 +477,15 @@ def test_composite():
                 'wires': {'level': ['value']}},
             'value': '11.11'}})
 
-    import ipdb; ipdb.set_trace()
     composite.update({'exchange': 3.33}, 10.0)
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_serialized_composite():
     # This should specify the same thing as above
     composite_schema = {
-        '_type': 'process[?]',
+        '_type': 'process[exchange:float]',
         'address': 'local:Composite',
         'config': {
             'state': {
