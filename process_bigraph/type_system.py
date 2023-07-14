@@ -84,17 +84,13 @@ def register_process_types(types):
 class ProcessTypes(TypeSystem):
     def __init__(self):
         super().__init__()
-
         register_process_types(self)
-
 
     # def serialize(self, schema, state):
     #     return ''
 
-
     # def deserialize(self, schema, encoded):
     #     return {}
-
 
     def hydrate_state(self, schema, state):
         if isinstance(state, str) or '_deserialize' in schema:
@@ -105,17 +101,12 @@ class ProcessTypes(TypeSystem):
                 for key, value in state.items()}
         return result
 
-
     def hydrate(self, schema, state):
         hydrated = self.hydrate_state(schema, state)
         return self.fill(schema, hydrated)
-        
 
     def dehydrate(self, schema):
         return {}
-
-
-
 
     def lookup_address(self, address):
         protocol, config = address.split(':')
@@ -124,5 +115,4 @@ class ProcessTypes(TypeSystem):
             self.lookup_local(config)
 
 
-    
 types = ProcessTypes()

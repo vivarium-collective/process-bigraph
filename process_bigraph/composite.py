@@ -4,7 +4,10 @@ import copy
 import math
 import collections
 
-from type_system import types, lookup_local
+from bigraph_schema.type_system import TypeSystem
+
+
+types = TypeSystem()
 
 
 def hierarchy_depth(hierarchy, path=()):
@@ -26,7 +29,6 @@ def hierarchy_depth(hierarchy, path=()):
 
 
 # deal with steps vs temporal process vs edges
-
 
 class SyncUpdate():
     def __init__(self, update):
@@ -54,18 +56,14 @@ class Process():
 
         self.state = {}
 
-
     def __getitem__(self, key):
         return self.state[key]
-
 
     def __setitem__(self, key, value):
         self.state[key] = value
 
-
     def get(self, key, default=None):
         return self.__dict__.get(key, default)
-
 
     def fill(self, state):
         if isinstance(state, dict):
@@ -74,23 +72,19 @@ class Process():
         else:
             raise Exception(
                 f'process: {self}\ncannot fill state: {state}')
-        
 
     @abc.abstractmethod
     def schema(self):
         return {}
 
-
     def calculate_timestep(self, state):
         return self.config['timestep']
-
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
         sync = SyncUpdate(update)
 
         return sync
-
 
     @abc.abstractmethod
     def update(self, state, interval):
@@ -145,6 +139,7 @@ class Defer:
 
 # maybe keep wires as tuples/paths to distinguish them from schemas?
 
+
 def find_processes(state):
     found = {}
 
@@ -182,7 +177,6 @@ class Composite(Process):
         'global_time_precision': 'maybe[float]',
     }
 
-
     # TODO: if processes are serialized, deserialize them first
     def __init__(self, config=None):
         super().__init__(config)
@@ -202,10 +196,8 @@ class Composite(Process):
             path: empty_front(self.global_time)
             for path in self.process_paths}
 
-
     def schema(self):
         return self.config['schema']
-
 
     def process_update(
             self,
@@ -252,7 +244,6 @@ class Composite(Process):
                 path))
 
         return absolute
-
 
     def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
@@ -313,7 +304,6 @@ class Composite(Process):
 
         return full_step
 
-
     def apply_updates(self, updates):
         # view_expire = False
         for defer in updates:
@@ -333,7 +323,6 @@ class Composite(Process):
         #     self.state.build_topology_views()
 
         # self.run_steps()
-
 
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
@@ -425,15 +414,12 @@ class IncreaseProcess(Process):
             '_type': 'float',
             '_default': '0.1'}}
 
-
     def __init__(self, config=None):
         super().__init__(config)
-
 
     def schema(self):
         return {
             'level': 'float'}
-
 
     def update(self, state, interval):
         return {
@@ -479,8 +465,6 @@ def test_composite():
 
     composite.update({'exchange': 3.33}, 10.0)
 
-    import ipdb; ipdb.set_trace()
-
 
 def test_serialized_composite():
     # This should specify the same thing as above
@@ -508,7 +492,7 @@ def test_serialized_composite():
         }
     }
 
-    composite_instance = deserialize(composite_schema)
+    composite_instance = types.deserialize(composite_schema)
     composite_instance.update()
 
 
