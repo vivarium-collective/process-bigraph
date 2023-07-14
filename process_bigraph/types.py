@@ -1,6 +1,6 @@
 import importlib
 
-from bigraph_schema import SchemaTypes
+from bigraph_schema import TypeSystem
 
 
 # TODO: implement these
@@ -23,11 +23,11 @@ process_types = {
     },
 
     'process': {
-        '_super': 'edge'
-        '_apply': 'apply_process',
-        '_serialize': 'serialize_process',
-        '_deserialize': 'deserialize_process',
-        '_divide': 'divide_process',
+        '_super': 'edge',
+        '_apply': apply_process,
+        '_serialize': serialize_process,
+        '_deserialize': deserialize_process,
+        '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
         'address': 'protocol',
