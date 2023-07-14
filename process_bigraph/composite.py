@@ -95,6 +95,44 @@ class Process:
     #   process would have to maintain state
 
 
+class Defer:
+    def __init__(
+            self,
+            defer: Any,
+            f: Callable,
+            args: Tuple,
+    ) -> None:
+        """Allows for delayed application of a function to an update.
+
+        The object simply holds the provided arguments until it's time
+        for the computation to be performed. Then, the function is
+        called.
+
+        Args:
+            defer: An object with a ``.get_command_result()`` method
+                whose output will be passed to the function. For
+                example, the object could be an
+                :py:class:`vivarium.core.process.Process` object whose
+                ``.get_command_result()`` method will return the process
+                update.
+            function: The function. For example,
+                :py:func:`invert_topology` to transform the returned
+                update.
+            args: Passed as the second argument to the function.
+        """
+        self.defer = defer
+        self.f = f
+        self.args = args
+
+    def get(self) -> Update:
+        """Perform the deferred computation.
+
+        Returns:
+            The result of calling the function.
+        """
+        return self.f(
+            self.defer.get(),
+            self.args)
 
 # maybe keep wires as tuples/paths to distinguish them from schemas?
 
@@ -156,15 +194,23 @@ class Composite(Process):
         """
         update = process.invoke(states, interval)
 
+        def defer_project(update, args):
+            schema, state, path = args
+            return types.project(
+                schema,
+                state,
+                path,
+                update)
+
         absolute = Defer(
             update,
-            types.project_topology, (
+            defer_project, (
                 self.config['schema'],
                 self.state,
-                path,
-                states))
+                path))
 
         return absolute
+
 
     def run_process(self, path, process):
         if path not in self.front:
@@ -369,9 +415,8 @@ def test_composite():
         },
     })
 
-    composite.update({'exchange': 3.33}, 10.0)
-
     import ipdb; ipdb.set_trace()
+    composite.update({'exchange': 3.33}, 10.0)
 
 
 def test_serialized_composite():
