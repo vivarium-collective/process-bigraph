@@ -46,6 +46,8 @@ def deserialize_process(serialized, bindings=None, types=None):
         instantiate.config_schema,
         serialized.get('config', {}))
 
+    # this instance always acts like a process no matter
+    # where it is running
     process = instantiate(config)
     process.address = serialized['address']
     process.wires = serialized['wires']
@@ -58,16 +60,26 @@ process_types = {
         '_super': 'string'
     },
 
-    'process': {
+    'step': {
         '_super': ['edge'],
+        '_apply': 'apply_step',
+        '_serialize': 'serialize_step',
+        '_deserialize': 'deserialize_step',
+        '_divide': 'divide_step',
+        '_description': '',
+        # TODO: support reference to type parameters from other states
+        'address': 'protocol',
+        'config': 'tree[any]'},
+
+    'process': {
+        '_super': ['step'],
         '_apply': 'apply_process',
         '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_process',
         '_divide': 'divide_process',
         '_description': '',
         # TODO: support reference to type parameters from other states
-        'address': 'protocol',
-        'config': 'tree[any]',
+        'timestep': 'float',
     }
 }
 

@@ -5,10 +5,11 @@ Composite and Process classes
 import abc
 import copy
 import math
-from bigraph_schema.type_system import TypeSystem
 
+from process_bigraph.type_system import types, lookup_local
 
-types = TypeSystem()
+# from bigraph_schema.type_system import TypeSystem
+# types = TypeSystem()
 
 
 def hierarchy_depth(hierarchy, path=()):
@@ -78,6 +79,9 @@ class Process():
     def schema(self):
         return {}
 
+    # TODO: this could be the Step part of being a process
+    #   timestep is derived from other states (!)
+    #   and should probably be in a store somewhere
     def calculate_timestep(self, state):
         return self.config['timestep']
 
@@ -392,6 +396,8 @@ class Composite(Process):
             [],
             state)
 
+        # TODO: this may need to be a set instead of an update
+        #   add a force set?
         self.state = types.apply(
             self.composition,
             self.state,
@@ -400,6 +406,9 @@ class Composite(Process):
         self.run(interval)
 
         # pull the update out of the state and return it
+        # TODO: this is the state, but we need to return an update
+        #   store all updates to the bridge internally, then return them
+        #   as the update
         update = types.view_state(
             self.schema(),
             self.config['bridge'],
@@ -458,11 +467,19 @@ def test_composite():
         'bridge': {
             'exchange': ['value']},
         'state': {
+            # TODO: maybe emitter is just a process?
+            'emitter': {
+                'address': 'DatabaseEmitter',
+                'config': {'database': 'what'},
+                'wires': {'output': ['value']}},
+            # TODO: timestep is state?
             'increase': {
                 'address': 'local:process_bigraph.composite.IncreaseProcess',
                 'config': {'rate': '0.3'},
                 'wires': {'level': ['value']}},
             'value': '11.11'}})
+
+    import ipdb; ipdb.set_trace()
 
     composite.update({'exchange': 3.33}, 10.0)
 
