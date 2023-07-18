@@ -49,10 +49,14 @@ def deserialize_process(serialized, bindings=None, types=None):
     # this instance always acts like a process no matter
     # where it is running
     process = instantiate(config)
-    process.address = serialized['address']
-    process.wires = serialized['wires']
+    deserialized = serialized.copy()
+    deserialized['instance'] = process
 
-    return process
+    return deserialized
+
+    # process.address = serialized['address']
+    # process.wires = serialized['wires']
+    # return process
 
 
 process_types = {

@@ -22,7 +22,7 @@ def hierarchy_depth(hierarchy, path=()):
 
     for key, inner in hierarchy.items():
         down = tuple(path + (key,))
-        if isinstance(inner, dict):
+        if isinstance(inner, dict) and 'instance' not in inner:
             base.update(hierarchy_depth(inner, down))
         else:
             base[down] = inner
@@ -47,10 +47,10 @@ class Process():
         if config is None:
             config = {}
 
-        self.config_schema.setdefault(
-            'timestep', {
-                '_type': 'float',
-                '_default': '1.0'})
+        # self.config_schema.setdefault(
+        #     'default_timestep', {
+        #         '_type': 'float',
+        #         '_default': '1.0'})
 
         self.config = types.fill(
             self.config_schema,
@@ -58,32 +58,33 @@ class Process():
 
         self.state = {}
 
-    def __getitem__(self, key):
-        return self.state[key]
+    # def __getitem__(self, key):
+    #     return self.state[key]
 
-    def __setitem__(self, key, value):
-        self.state[key] = value
+    # def __setitem__(self, key, value):
+    #     self.state[key] = value
 
-    def get(self, key, default=None):
-        return self.__dict__.get(key, default)
+    # def get(self, key, default=None):
+    #     return self.__dict__.get(key, default)
 
-    def fill(self, state):
-        if isinstance(state, dict):
-            for key, value in state:
-                setattr(self, key, value)
-        else:
-            raise Exception(
-                f'process: {self}\ncannot fill state: {state}')
+    # def fill(self, state):
+    #     if isinstance(state, dict):
+    #         for key, value in state:
+    #             setattr(self, key, value)
+    #     else:
+    #         raise Exception(
+    #             f'process: {self}\ncannot fill state: {state}')
 
     @abc.abstractmethod
     def schema(self):
         return {}
 
+
     # TODO: this could be the Step part of being a process
     #   timestep is derived from other states (!)
     #   and should probably be in a store somewhere
     def calculate_timestep(self, state):
-        return self.config['timestep']
+        return state['timestep']
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
@@ -146,15 +147,18 @@ class Defer:
 
 
 def find_processes(state):
+    process_class = lookup_local('process_bigraph.composite.Process')
     found = {}
 
     for key, inner in state.items():
-        if isinstance(inner, lookup_local('process_bigraph.composite.Process')):
+        if isinstance(inner, dict) and isinstance(inner.get('instance'), process_class):
             found[key] = inner
-        elif isinstance(inner, dict):
-            result = find_processes(inner)
-            if result:
-                found[key] = result
+        # if isinstance(inner, process_class):
+        #     found[key] = inner
+        # elif isinstance(inner, dict):
+        #     result = find_processes(inner)
+        #     if result:
+        #         found[key] = result
 
     return found
 
@@ -231,7 +235,7 @@ class Composite(Process):
             Tuple of the deferred update (in absolute terms) and
             ``store``.
         """
-        update = process.invoke(states, interval)
+        update = process['instance'].invoke(states, interval)
 
         def defer_project(update, args):
             schema, state, path = args
@@ -268,13 +272,14 @@ class Composite(Process):
                     self.state,
                     path)
 
-                process_timestep = process.calculate_timestep(state)
+                process_timestep = process['instance'].calculate_timestep(state)
 
             if force_complete:
                 # force the process to complete at end_time
                 future = min(process_time + process_timestep, end_time)
             else:
                 future = process_time + process_timestep
+
             if self.global_time_precision is not None:
                 # set future time based on global_time_precision
                 future = round(future, self.global_time_precision)
@@ -467,11 +472,6 @@ def test_composite():
         'bridge': {
             'exchange': ['value']},
         'state': {
-            # TODO: maybe emitter is just a process?
-            'emitter': {
-                'address': 'DatabaseEmitter',
-                'config': {'database': 'what'},
-                'wires': {'output': ['value']}},
             # TODO: timestep is state?
             'increase': {
                 'address': 'local:process_bigraph.composite.IncreaseProcess',
