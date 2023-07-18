@@ -77,14 +77,16 @@ class Process():
 
     @abc.abstractmethod
     def schema(self):
-        return {}
+        return {
+            'timestep': 'float',
+            'wires': 'wires'}
 
 
-    # TODO: this could be the Step part of being a process
-    #   timestep is derived from other states (!)
-    #   and should probably be in a store somewhere
-    def calculate_timestep(self, state):
-        return state['timestep']
+    # # TODO: this could be the Step part of being a process
+    # #   timestep is derived from other states (!)
+    # #   and should probably be in a store somewhere
+    # def calculate_timestep(self, state):
+    #     return state['timestep']
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
@@ -239,7 +241,7 @@ class Composite(Process):
 
         def defer_project(update, args):
             schema, state, path = args
-            return types.project(
+            return types.project_state(
                 schema,
                 state,
                 path,
@@ -267,7 +269,7 @@ class Composite(Process):
                 del self.front[path]['future']
             else:
                 # get the time step
-                state = types.view(
+                state = types.view_state(
                     self.composition,
                     self.state,
                     path)
@@ -395,7 +397,7 @@ class Composite(Process):
         # do everything
 
         # this needs to go through the bridge
-        projection = types.project_state(
+        projection = types.project(
             self.schema(),
             self.config['bridge'],
             [],
@@ -414,7 +416,7 @@ class Composite(Process):
         # TODO: this is the state, but we need to return an update
         #   store all updates to the bridge internally, then return them
         #   as the update
-        update = types.view_state(
+        update = types.view(
             self.schema(),
             self.config['bridge'],
             [],
