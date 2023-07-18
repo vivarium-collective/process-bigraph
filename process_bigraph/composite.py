@@ -8,9 +8,6 @@ import math
 
 from process_bigraph.type_system import types, lookup_local
 
-# from bigraph_schema.type_system import TypeSystem
-# types = TypeSystem()
-
 
 def hierarchy_depth(hierarchy, path=()):
     """
@@ -40,6 +37,36 @@ class SyncUpdate():
         return self.update
 
 
+class Step():
+    # TODO: support trigger every time
+    #   as well as dependency trigger
+    config_schema = {}
+
+
+    def __init__(self, config=None):
+        if config is None:
+            config = {}
+
+        self.config = types.fill(
+            self.config_schema,
+            config)
+        
+
+    def schema(self):
+        return {}
+
+
+    def invoke(self, state):
+        update = self.update(state)
+        sync = SyncUpdate(update)
+
+        return sync
+
+    @abc.abstractmethod
+    def update(self, state):
+        return {}
+
+
 class Process():
     config_schema = {}
 
@@ -47,46 +74,22 @@ class Process():
         if config is None:
             config = {}
 
-        # self.config_schema.setdefault(
-        #     'default_timestep', {
-        #         '_type': 'float',
-        #         '_default': '1.0'})
-
         self.config = types.fill(
             self.config_schema,
             config)
 
-        self.state = {}
-
-    # def __getitem__(self, key):
-    #     return self.state[key]
-
-    # def __setitem__(self, key, value):
-    #     self.state[key] = value
-
-    # def get(self, key, default=None):
-    #     return self.__dict__.get(key, default)
-
-    # def fill(self, state):
-    #     if isinstance(state, dict):
-    #         for key, value in state:
-    #             setattr(self, key, value)
-    #     else:
-    #         raise Exception(
-    #             f'process: {self}\ncannot fill state: {state}')
 
     @abc.abstractmethod
     def schema(self):
-        return {
-            'timestep': 'float',
-            'wires': 'wires'}
+        return {}
 
 
-    # # TODO: this could be the Step part of being a process
-    # #   timestep is derived from other states (!)
-    # #   and should probably be in a store somewhere
-    # def calculate_timestep(self, state):
-    #     return state['timestep']
+    def initial_state(self, initial=None):
+        initial = initial or {}
+        return types.fill(
+            self.schema(),
+            initial)
+        
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
@@ -155,12 +158,6 @@ def find_processes(state):
     for key, inner in state.items():
         if isinstance(inner, dict) and isinstance(inner.get('instance'), process_class):
             found[key] = inner
-        # if isinstance(inner, process_class):
-        #     found[key] = inner
-        # elif isinstance(inner, dict):
-        #     result = find_processes(inner)
-        #     if result:
-        #         found[key] = result
 
     return found
 
@@ -231,7 +228,7 @@ class Composite(Process):
             store: The store at ``path``.
             states: Simulation state to pass to process's
                 ``next_update`` method.
-            interval: Timestep for which to compute the update.
+            interval: Interval for which to compute the update.
 
         Returns:
             Tuple of the deferred update (in absolute terms) and
@@ -241,7 +238,7 @@ class Composite(Process):
 
         def defer_project(update, args):
             schema, state, path = args
-            return types.project_state(
+            return types.project_edge(
                 schema,
                 state,
                 path,
@@ -263,24 +260,24 @@ class Composite(Process):
         if process_time <= self.global_time:
             if self.front[path].get('future'):
                 future_front = self.front[path]['future']
-                process_timestep = future_front['timestep']
+                process_interval = future_front['interval']
                 store = future_front['store']
                 state = future_front['state']
                 del self.front[path]['future']
             else:
-                # get the time step
-                state = types.view_state(
+                state = types.view_edge(
                     self.composition,
                     self.state,
                     path)
 
-                process_timestep = process['instance'].calculate_timestep(state)
+                process_interval = process['interval']
+                # process_timestep = process['instance'].calculate_timestep(state)
 
             if force_complete:
                 # force the process to complete at end_time
-                future = min(process_time + process_timestep, end_time)
+                future = min(process_time + process_interval, end_time)
             else:
-                future = process_time + process_timestep
+                future = process_time + process_interval
 
             if self.global_time_precision is not None:
                 # set future time based on global_time_precision
@@ -291,22 +288,22 @@ class Composite(Process):
                     path,
                     process,
                     state,
-                    process_timestep
+                    process_interval
                 )
 
                 # update front, to be applied at its projected time
                 self.front[path]['time'] = future
                 self.front[path]['update'] = update
 
-                # absolute timestep
-                timestep = future - self.global_time
-                if timestep < full_step:
-                    full_step = timestep
+                # absolute interval
+                interval = future - self.global_time
+                if interval < full_step:
+                    full_step = interval
             else:
-                # absolute timestep
-                timestep = future - self.global_time
-                if timestep < full_step:
-                    full_step = timestep
+                # absolute interval
+                interval = future - self.global_time
+                if interval < full_step:
+                    full_step = interval
 
         else:
             # don't shoot past processes that didn't run this time
@@ -327,6 +324,8 @@ class Composite(Process):
                     self.composition,
                     self.state,
                     update)
+
+        # TODO: keep track of updated paths so we can trigger steps
 
                 # view_expire_update = self.apply_update(up, store)
                 # view_expire = view_expire or view_expire_update
@@ -392,6 +391,7 @@ class Composite(Process):
 
             if force_complete and self.global_time == end_time:
                 force_complete = False
+        
 
     def update(self, state, interval):
         # do everything
@@ -423,6 +423,15 @@ class Composite(Process):
             self.state)
 
         return update
+
+
+class Generator():
+    def __init__(self, config):
+        self.config = config
+
+    def __call__(self, config=None):
+        config = deep_merge(self.config, config)
+        return Composite(config)
 
 
 class IncreaseProcess(Process):
@@ -474,16 +483,16 @@ def test_composite():
         'bridge': {
             'exchange': ['value']},
         'state': {
-            # TODO: timestep is state?
+            # TODO: interval is state?
             'increase': {
                 'address': 'local:process_bigraph.composite.IncreaseProcess',
                 'config': {'rate': '0.3'},
                 'wires': {'level': ['value']}},
             'value': '11.11'}})
 
-    import ipdb; ipdb.set_trace()
-
     composite.update({'exchange': 3.33}, 10.0)
+
+    assert composite.state['value'] > 199
 
 
 def test_serialized_composite():

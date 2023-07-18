@@ -54,16 +54,14 @@ def deserialize_process(serialized, bindings=None, types=None):
 
     return deserialized
 
-    # process.address = serialized['address']
-    # process.wires = serialized['wires']
-    # return process
-
 
 process_types = {
     'protocol': {
-        '_super': 'string'
-    },
+        '_super': 'string'},
 
+    # TODO: step wires are directional ie, we make a distinction
+    #   between inputs and outputs, and the same wire cannot be both
+    #   an input and output at the same time
     'step': {
         '_super': ['edge'],
         '_apply': 'apply_step',
@@ -76,15 +74,19 @@ process_types = {
         'config': 'tree[any]'},
 
     'process': {
-        '_super': ['step'],
+        '_super': ['edge'],
         '_apply': 'apply_process',
         '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_process',
         '_divide': 'divide_process',
         '_description': '',
         # TODO: support reference to type parameters from other states
-        'timestep': 'float',
-    }
+        'interval': {
+            '_type': 'float',
+            '_apply': 'set',
+            '_default': '1.0'},
+        'address': 'protocol',
+        'config': 'tree[any]'},
 }
 
 
