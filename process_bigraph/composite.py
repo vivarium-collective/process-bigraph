@@ -181,7 +181,9 @@ def find_step_triggers(path, step):
     triggers = {}
     for wire in step['wires']['inputs'].values():
         trigger_path = tuple(prefix) + tuple(wire)
-        triggers[trigger_path] = path
+        if trigger_path not in triggers:
+            triggers[trigger_path] = []
+        triggers[trigger_path].append(path)
 
     return triggers
 

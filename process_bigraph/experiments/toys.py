@@ -340,6 +340,72 @@ def test_gillespie_composite():
     gillespie = GillespieComposite({})
 
 
+def test_sed_composite():
+    workflow = Composite({
+        'composition': {
+            'data': 'tree[any]',
+            'model': 'sbml',
+            'parameters': 'tree[any]',
+            'simulation_results': 'tree[any]',
+            'analysis_results': 'tree[any]',
+            'parameter_estimation': {
+                '_type': 'step',
+                '_ports': {
+                    'inputs': {
+                        'data': 'tree[any]',
+                        'model': 'sbml'},
+                    'outputs': {
+                        'parameters': 'tree[any]'}}},
+            'simulator': {
+                '_type': 'step',
+                '_ports': {
+                    'inputs': {
+                        'model': 'sbml',
+                        'parameters': 'tree[any]'},
+                    'outputs': {
+                        'simulation_results': 'tree[any]'}}},
+            'analysis': {
+                '_type': 'step',
+                '_ports': {
+                    'inputs': {
+                        'simulation_results': 'tree[any]'},
+                    'outputs': {
+                        'analysis_results': 'tree[any]'}}}},
+        'schema': {
+            'results': 'tree[any]'},
+        'bridge': {
+            'results': ['analysis_results']},
+        'state': {
+            'data': {},
+            'model': 'something.sbml',
+            'parameter_estimation': {
+                'address': 'local:process_bigraph.experiments.toys.EstimateParameters',
+                'config': {},
+                'wires': {
+                    'inputs': {
+                        'data': ['data'],
+                        'model': ['model']},
+                    'outputs': {
+                        'parameters': ['parameters']}}},
+            'simulator': {
+                'address': 'local:process_bigraph.experiments.toys.UniformTimecourse',
+                'config': {},
+                'wires': {
+                    'inputs': {
+                        'model': ['model'],
+                        'parameters': ['parameters']},
+                    'outputs': {
+                        'simulation_results': ['simulation_results']}}},
+            'analysis': {
+                'address': 'local:process_bigraph.experiments.toys.AnalyzeResults',
+                'config': {},
+                'wires': {
+                    'inputs': {
+                        'simulation_results': ['simulation_results'],
+                    'outputs': {
+                        'analysis_results': ['analysis_results']}}}}}})
+    
+
 
 
 if __name__ == '__main__':
