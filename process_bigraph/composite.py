@@ -6,6 +6,7 @@ import abc
 import copy
 import math
 
+from bigraph_schema.registry import deep_merge
 from process_bigraph.type_system import types, lookup_local
 
 
@@ -151,8 +152,8 @@ class Defer:
 # maybe keep wires as tuples/paths to distinguish them from schemas?
 
 
-def find_processes(state):
-    process_class = lookup_local('process_bigraph.composite.Process')
+def find_instances(state, instance_type='process_bigraph.composite.Process'):
+    process_class = lookup_local(instance_type)
     found = {}
 
     for key, inner in state.items():
@@ -162,9 +163,27 @@ def find_processes(state):
     return found
 
 
-def find_process_paths(state):
-    processes = find_processes(state)
-    return hierarchy_depth(processes)
+def find_processes(state):
+    return find_instances(state, 'process_bigraph.composite.Process')
+
+
+def find_steps(state):
+    return find_instances(state, 'process_bigraph.composite.Step')
+
+
+def find_instance_paths(state, instance_type='process_bigraph.composite.Process'):
+    instances = find_instances(state, instance_type)
+    return hierarchy_depth(instances)
+
+
+def find_step_triggers(path, step):
+    prefix = path[:-1]
+    triggers = {}
+    for wire in step['wires']['inputs'].values():
+        trigger_path = tuple(prefix) + tuple(wire)
+        triggers[trigger_path] = path
+
+    return triggers
 
 
 def empty_front(time):
@@ -199,7 +218,23 @@ class Composite(Process):
         self.global_time = self.config['initial_time']
         self.global_time_precision = self.config['global_time_precision']
 
-        self.process_paths = find_process_paths(self.state)
+        self.process_paths = find_instance_paths(
+            self.state,
+            'process_bigraph.composite.Process')
+
+        self.step_paths = find_instance_paths(
+            self.state,
+            'process_bigraph.composite.Step')
+
+        import ipdb; ipdb.set_trace()
+
+        self.step_triggers = {}
+
+        for step_path, step in self.step_paths.items():
+            step_triggers = find_step_triggers(
+                step_path, step)
+            # TODO: merge all triggers together
+
         self.front: Dict = {
             path: empty_front(self.global_time)
             for path in self.process_paths}
@@ -315,10 +350,14 @@ class Composite(Process):
 
     def apply_updates(self, updates):
         # view_expire = False
+        resolved = []
         for defer in updates:
             series = defer.get()
             if not isinstance(series, list):
                 series = [series]
+
+            resolved.append(series)
+
             for update in series:
                 self.state = types.apply(
                     self.composition,

@@ -317,7 +317,7 @@ def test_gillespie_composite():
             'mRNA': ['mRNA']},
         'state': {
             'interval': {
-                'address': 'process_bigraph.experiment.toys.GillespieInterval',
+                'address': 'local:process_bigraph.experiments.toys.GillespieInterval',
                 'config': {'ktsc': '6e0'},
                 'wires': {
                     'inputs': {
@@ -326,7 +326,7 @@ def test_gillespie_composite():
                     'outputs': {
                         'interval': ['interval', 'interval']}}},
             'event': {
-                'address': 'process_bigraph.experiment.toys.GillespieEvent',
+                'address': 'local:process_bigraph.experiments.toys.GillespieEvent',
                 'config': {'ktsc': '6e0'},
                 'wires': {
                     'DNA': ['DNA'],
@@ -343,5 +343,5 @@ def test_gillespie_composite():
 
 
 if __name__ == '__main__':
-    main()
+    test_gillespie_composite()
 

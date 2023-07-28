@@ -55,6 +55,27 @@ def deserialize_process(serialized, bindings=None, types=None):
     return deserialized
 
 
+# def deserialize_step(serialized, bindings=None, types=None):
+#     protocol, address = serialized['address'].split(':', 1)
+
+#     if protocol == 'local':
+#         instantiate = lookup_local(address)
+#     else:
+#         raise Exception(f'protocol "{protocol}" not implemented')
+
+#     config = types.hydrate_state(
+#         instantiate.config_schema,
+#         serialized.get('config', {}))
+
+#     # this instance always acts like a process no matter
+#     # where it is running
+#     step = instantiate(config)
+#     deserialized = serialized.copy()
+#     deserialized['instance'] = step
+
+#     return deserialized
+
+
 process_types = {
     'protocol': {
         '_super': 'string'},
@@ -64,10 +85,10 @@ process_types = {
     #   an input and output at the same time
     'step': {
         '_super': ['edge'],
-        '_apply': 'apply_step',
-        '_serialize': 'serialize_step',
-        '_deserialize': 'deserialize_step',
-        '_divide': 'divide_step',
+        '_apply': 'apply_process',
+        '_serialize': 'serialize_process',
+        '_deserialize': 'deserialize_process',
+        '_divide': 'divide_process',
         '_description': '',
         # TODO: support reference to type parameters from other states
         'address': 'protocol',
