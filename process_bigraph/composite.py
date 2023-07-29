@@ -275,6 +275,9 @@ class Composite(Process):
             path: empty_front(self.global_time)
             for path in self.process_paths}
 
+        self.run_steps(self.step_paths.keys())
+
+
     def schema(self):
         return self.config['schema']
 
