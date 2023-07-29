@@ -275,7 +275,7 @@ class Composite(Process):
             path: empty_front(self.global_time)
             for path in self.process_paths}
 
-        self.run_steps(self.step_paths.keys())
+        self.run_steps(self.step_triggers.keys())
 
 
     def schema(self):
