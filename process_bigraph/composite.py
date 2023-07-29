@@ -5,8 +5,9 @@ Composite and Process classes
 import abc
 import copy
 import math
+import collections
 
-from bigraph_schema.registry import deep_merge
+from bigraph_schema.registry import deep_merge, get_path
 from process_bigraph.type_system import types, lookup_local
 
 
@@ -57,7 +58,7 @@ class Step():
         return {}
 
 
-    def invoke(self, state):
+    def invoke(self, state, _=None):
         update = self.update(state)
         sync = SyncUpdate(update)
 
@@ -177,7 +178,7 @@ def find_instance_paths(state, instance_type='process_bigraph.composite.Process'
 
 
 def find_step_triggers(path, step):
-    prefix = path[:-1]
+    prefix = tuple(path[:-1])
     triggers = {}
     for wire in step['wires']['inputs'].values():
         trigger_path = tuple(prefix) + tuple(wire)
@@ -186,6 +187,37 @@ def find_step_triggers(path, step):
         triggers[trigger_path].append(path)
 
     return triggers
+
+
+def explode_path(path):
+    explode = ()
+    paths = [explode]
+
+    for node in path:
+        explode = explode + (node,)
+        paths.append(explode)
+
+    return paths
+
+
+def merge_collections(existing, new):
+    if existing is None:
+        existing = {}
+    if new is None:
+        new = {}
+    for key, value in new.items():
+        if key in existing:
+            if (isinstance(existing[key], dict) and isinstance(new[key], collections.abc.Mapping)):
+                merge_collections(existing[key], new[key])
+            elif (isinstance(existing[key], list) and isinstance(new[key], collections.abc.Sequence)):
+                existing[key].extend(new[key])
+            else:
+                raise Exception(
+                    f'cannot merge collections as they do not match:\n{existing}\n{new}')
+        else:
+            existing[key] = value
+
+    return existing
 
 
 def empty_front(time):
@@ -228,14 +260,16 @@ class Composite(Process):
             self.state,
             'process_bigraph.composite.Step')
 
-        import ipdb; ipdb.set_trace()
-
         self.step_triggers = {}
 
         for step_path, step in self.step_paths.items():
             step_triggers = find_step_triggers(
                 step_path, step)
-            # TODO: merge all triggers together
+            self.step_triggers = merge_collections(
+                self.step_triggers,
+                step_triggers)
+
+        self.steps_run = set([])
 
         self.front: Dict = {
             path: empty_front(self.global_time)
@@ -250,6 +284,7 @@ class Composite(Process):
             process,
             states,
             interval,
+            ports_key=None,
     ):
         """Start generating a process's update.
 
@@ -279,7 +314,8 @@ class Composite(Process):
                 schema,
                 state,
                 path,
-                update)
+                update,
+                ports_key)
 
         absolute = Defer(
             update,
@@ -352,29 +388,31 @@ class Composite(Process):
 
     def apply_updates(self, updates):
         # view_expire = False
-        resolved = []
+        update_paths = []
+
         for defer in updates:
             series = defer.get()
             if not isinstance(series, list):
                 series = [series]
 
-            resolved.append(series)
-
             for update in series:
+                print(update)
+
+                paths = hierarchy_depth(update)
+                update_paths.extend(paths.keys())
+
                 self.state = types.apply(
                     self.composition,
                     self.state,
                     update)
 
-        # TODO: keep track of updated paths so we can trigger steps
+        self.run_steps(update_paths)
 
                 # view_expire_update = self.apply_update(up, store)
                 # view_expire = view_expire or view_expire_update
 
         # if view_expire:
         #     self.state.build_topology_views()
-
-        # self.run_steps()
 
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
@@ -433,6 +471,42 @@ class Composite(Process):
             if force_complete and self.global_time == end_time:
                 force_complete = False
         
+
+    def run_steps(self, update_paths):
+        steps_to_run = []
+
+        for update_path in update_paths:
+            paths = explode_path(update_path)
+            for path in paths:
+                step_paths = self.step_triggers.get(path, [])
+                for step_path in step_paths:
+                    if step_path is not None and step_path not in self.steps_run:
+                        steps_to_run.append(step_path)
+                        self.steps_run.add(step_path)
+
+        if len(steps_to_run) > 0:
+            updates = []
+            for step_path in steps_to_run:
+                step = get_path(self.state, step_path)
+                state = types.view_edge(
+                    self.composition,
+                    self.state,
+                    step_path,
+                    'inputs')
+
+                step_update = self.process_update(
+                    step_path,
+                    step,
+                    state,
+                    -1.0,
+                    'outputs')
+
+                updates.append(step_update)
+
+            self.apply_updates(updates)
+        else:
+            self.steps_run = set([])
+                    
 
     def update(self, state, interval):
         # do everything
@@ -498,6 +572,15 @@ def test_default_config():
     assert process.config['rate'] == 0.1
 
 
+def test_merge_collections():
+    a = {('what',): [1, 2, 3]}
+    b = {('okay', 'yes'): [3, 3], ('what',): [4, 5, 11]}
+
+    c = merge_collections(a, b)
+
+    assert c[('what',)] == [1, 2, 3, 4, 5, 11]
+
+
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
@@ -524,10 +607,10 @@ def test_composite():
         'bridge': {
             'exchange': ['value']},
         'state': {
-            # TODO: interval is state?
             'increase': {
                 'address': 'local:process_bigraph.composite.IncreaseProcess',
                 'config': {'rate': '0.3'},
+                'interval': '1.0',
                 'wires': {'level': ['value']}},
             'value': '11.11'}})
 
@@ -568,5 +651,6 @@ def test_serialized_composite():
 
 if __name__ == '__main__':
     test_default_config()
+    test_merge_collections()
     test_process()
     test_composite()

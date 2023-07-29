@@ -61,6 +61,8 @@ class GillespieInterval(Step):
         output = {
             'interval': interval}
 
+        return output
+
 
 class GillespieEvent(Process):
     """stochastic toy transcription"""
@@ -324,7 +326,7 @@ def test_gillespie_composite():
                         'DNA': ['DNA'],
                         'mRNA': ['mRNA']},
                     'outputs': {
-                        'interval': ['interval', 'interval']}}},
+                        'interval': ['event', 'interval']}}},
             'event': {
                 'address': 'local:process_bigraph.experiments.toys.GillespieEvent',
                 'config': {'ktsc': '6e0'},
@@ -338,6 +340,10 @@ def test_gillespie_composite():
                 'C': '21.0'}}})
 
     gillespie = GillespieComposite({})
+
+    gillespie.update({'DNA': {'G': 11.0}, 'mRNA': {'C': 5.0}}, 10000.0)
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_sed_composite():
