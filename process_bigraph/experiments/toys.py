@@ -20,11 +20,9 @@ class GillespieInterval(Step):
         'kdeg': {
             '_type': 'float',
             '_default': '1e-1'}}
-    
 
     def __init__(self, config=None):
         super().__init__(config)
-
 
     def schema(self):
         # Step schemas always have 'inputs' and 'outputs' as top level keys
@@ -40,7 +38,6 @@ class GillespieInterval(Step):
                         '_default': '1.0'}}},
             'outputs': {
                 'interval': 'float'}}
-
 
     def update(self, input):
         # retrieve the state values
@@ -60,7 +57,6 @@ class GillespieInterval(Step):
 
         output = {
             'interval': interval}
-
         return output
 
 
@@ -74,15 +70,9 @@ class GillespieEvent(Process):
             '_type': 'float',
             '_default': '1e-1'}}
 
-
     def __init__(self, config=None):
         super().__init__(config)
-
         self.stoichiometry = np.array([[0, 1], [0, -1]])
-
-        # self.time_left = None
-        # self.event = None
-
 
     def schema(self):
         return {
@@ -114,15 +104,6 @@ class GillespieEvent(Process):
         return x
 
     def update(self, state, interval):
-        # if self.time_left is not None:
-        #     if interval >= self.time_left:
-        #         event = self.event
-        #         self.event = None
-        #         self.time_left = None
-        #         return event
-
-        #     self.time_left -= interval
-        #     return {}
 
         # retrieve the state values, put them in array
         g = state['DNA']['G']
@@ -139,156 +120,68 @@ class GillespieEvent(Process):
         update = {
             'mRNA': {
                 'C': d_c}}
-
-        # if self.calculated_interval > interval:
-        #     # didn't get all of our time, store the event for later
-        #     self.time_left = self.calculated_interval - interval
-        #     self.event = update
-        #     return {}
-
         return update
 
 
+class EstimateParameters(Step):
+    defaults = {}
+
+    def __init__(self, config=None):
+        super().__init__(config)
+
+    def schema(self):
+        return {
+            'inputs': {
+                'data': 'tree[any]',
+                'model': 'sbml'},
+            'outputs': {
+                'parameters': 'tree[any]'
+            }
+        }
+
+    def update(self, input):
+        return {}
 
 
+class UniformTimecourse(Step):
+    defaults = {}
 
-# class TRL(Process):
-#     """deterministic toy translation"""
+    def __init__(self, config=None):
+        super().__init__(config)
 
-#     defaults = {
-#         'ktrl': 1e-2,
-#         'kdeg': 1e-4,
-#         }
+    def schema(self):
+        return {
+            'inputs': {
+                'model': 'sbml',
+                'parameters': 'tree[any]'
+            },
+            'outputs': {
+                'simulation_results': 'tree[any]'
+            }
+        }
 
-#     def ports_schema(self):
-#         return {
-#             'mRNA': {
-#                 'C': {
-#                     '_default': 1.0,
-#                     '_emit': True}},
-#             'Protein': {
-#                 'X': {
-#                     '_default': 1.0,
-#                     '_emit': True}}}
-
-#     def next_update(self, timestep, states):
-#         c = states['mRNA']['C']
-#         x = states['Protein']['X']
-#         d_x = (
-#             self.parameters['ktrl'] * c -
-#             self.parameters['kdeg'] * x) * timestep
-#         return {
-#             'Protein': {
-#                 'X': d_x}}
+    def update(self, input):
+        return {}
 
 
-# class TrlConcentration(TRL):
-#     """rescale mRNA"""
+class AnalyzeResults(Step):
+    defaults = {}
 
-#     def next_update(self, timestep, states):
-#         states['mRNA']['C'] = states['mRNA']['C'] * 1e5
-#         return super().next_update(timestep, states)
+    def __init__(self, config=None):
+        super().__init__(config)
 
+    def schema(self):
+        return {
+            'inputs': {
+                'simulation_results': 'tree[any]'
+            },
+            'outputs': {
+                'analysis_results': 'tree[any]'
+            }
+        }
 
-# class StochasticTscTrl(Composer):
-#     """
-#     composite toy model with stochastic transcription,
-#     deterministic translation.
-#     """
-#     defaults = {
-#         'stochastic_TSC': {'time_step': 10},
-#         'TRL': {'time_step': 10},
-#     }
-
-#     def generate_processes(self, config):
-#         counts_to_molar = process_registry.access(
-#             'counts_to_molar')
-#         return {
-#             'stochastic_TSC': StochasticTSC(config['stochastic_TSC']),
-#             'TRL': TrlConcentration(config['TRL']),
-#             'concs': counts_to_molar({'keys': ['C']})
-#         }
-
-#     def generate_topology(self, config):
-#         return {
-#             'stochastic_TSC': {
-#                 'DNA': ('DNA',),
-#                 'mRNA': ('mRNA_counts',)
-#             },
-#             'TRL': {
-#                 'mRNA': ('mRNA',),
-#                 'Protein': ('Protein',)
-#             },
-#             'concs': {
-#                 'counts': ('mRNA_counts',),
-#                 'concentrations': ('mRNA',)}
-#         }
-
-
-
-# def test_gillespie_process(total_time=1000):
-#     gillespie_process = StochasticTSC({'name': 'process'})
-
-#     # make the experiment
-#     exp_settings = {
-#         'display_info': False,
-#         'experiment_id': 'TscTrl'}
-#     composite = gillespie_process.generate()
-#     gillespie_experiment = Engine(
-#         composite=composite,
-#         **exp_settings)
-
-#     # run the experiment in large increments
-#     increment = 10
-#     for i in range(total_time):
-#         if i == total_time - 1:
-#             gillespie_experiment.run_for(increment, force_complete=True)
-#             # Now the process is at the global time.
-#             break
-#         gillespie_experiment.run_for(increment)
-#         # check that process remains behind global time
-#         front = gillespie_experiment.front
-#         assert front[('process',)]['time'] < gillespie_experiment.global_time
-
-#     front = gillespie_experiment.front
-#     assert front[('process',)]['time'] == gillespie_experiment.global_time
-
-#     gillespie_data = gillespie_experiment.emitter.get_timeseries()
-#     return gillespie_data
-
-
-# def test_gillespie_composite(total_time=10000):
-#     stochastic_tsc_trl = StochasticTscTrl().generate()
-
-#     # make the experiment
-#     exp_settings = {
-#         'experiment_id': 'stochastic_tsc_trl'}
-#     stoch_experiment = Engine(
-#         composite=stochastic_tsc_trl,
-#         **exp_settings)
-
-#     # simulate and retrieve the data from emitter
-#     stoch_experiment.update(total_time)
-#     data = stoch_experiment.emitter.get_timeseries()
-
-#     return data
-
-
-# def main():
-#     """run the tests and plot"""
-#     out_dir = os.path.join(PROCESS_OUT_DIR, 'toy_gillespie')
-#     if not os.path.exists(out_dir):
-#         os.makedirs(out_dir)
-
-#     process_output = test_gillespie_process()
-#     composite_output = test_gillespie_composite()
-
-#     # plot the simulation output
-#     plot_settings = {}
-#     plot_simulation_output(
-#         process_output, plot_settings, out_dir, filename='process')
-#     plot_simulation_output(
-#         composite_output, plot_settings, out_dir, filename='composite')
+    def update(self, input):
+        return {}
 
 
 def test_gillespie_composite():
@@ -343,10 +236,15 @@ def test_gillespie_composite():
 
     gillespie.update({'DNA': {'G': 11.0}, 'mRNA': {'C': 5.0}}, 10000.0)
 
-    import ipdb; ipdb.set_trace()
-
 
 def test_sed_composite():
+
+    # TODO - perhaps we should not register directly to the base "type_registry" systems but rather pass it in to the composite?
+    types.type_registry.register('sbml', {
+        '_super': 'string',
+        '_default': '"something.sbml"',
+        '_description': 'sbml model file'})
+
     workflow = Composite({
         'composition': {
             'data': 'tree[any]',
@@ -356,7 +254,7 @@ def test_sed_composite():
             'analysis_results': 'tree[any]',
             'parameter_estimation': {
                 '_type': 'step',
-                '_ports': {
+                '_ports': {   # TODO -- this is provided by the Process schema, why is it required here?
                     'inputs': {
                         'data': 'tree[any]',
                         'model': 'sbml'},
@@ -383,7 +281,7 @@ def test_sed_composite():
             'results': ['analysis_results']},
         'state': {
             'data': {},
-            'model': 'something.sbml',
+            'model': '"something.sbml"',
             'parameter_estimation': {
                 'address': 'local:process_bigraph.experiments.toys.EstimateParameters',
                 'config': {},
@@ -407,13 +305,10 @@ def test_sed_composite():
                 'config': {},
                 'wires': {
                     'inputs': {
-                        'simulation_results': ['simulation_results'],
+                        'simulation_results': ['simulation_results']},
                     'outputs': {
-                        'analysis_results': ['analysis_results']}}}}}})
-    
-
+                        'analysis_results': ['analysis_results']}}}}})
 
 
 if __name__ == '__main__':
     test_gillespie_composite()
-

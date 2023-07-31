@@ -6,7 +6,7 @@ import abc
 import copy
 import math
 import collections
-
+from typing import Dict
 from bigraph_schema.registry import deep_merge, get_path
 from process_bigraph.type_system import types, lookup_local
 
@@ -39,11 +39,10 @@ class SyncUpdate():
         return self.update
 
 
-class Step():
+class Step:
     # TODO: support trigger every time
     #   as well as dependency trigger
     config_schema = {}
-
 
     def __init__(self, config=None):
         if config is None:
@@ -52,16 +51,13 @@ class Step():
         self.config = types.fill(
             self.config_schema,
             config)
-        
 
     def schema(self):
         return {}
 
-
     def invoke(self, state, _=None):
         update = self.update(state)
         sync = SyncUpdate(update)
-
         return sync
 
     @abc.abstractmethod
@@ -69,7 +65,7 @@ class Step():
         return {}
 
 
-class Process():
+class Process:
     config_schema = {}
 
     def __init__(self, config=None):
@@ -80,29 +76,24 @@ class Process():
             self.config_schema,
             config)
 
-
     @abc.abstractmethod
     def schema(self):
         return {}
-
 
     def initial_state(self, initial=None):
         initial = initial or {}
         return types.fill(
             self.schema(),
             initial)
-        
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
         sync = SyncUpdate(update)
-
         return sync
 
     @abc.abstractmethod
     def update(self, state, interval):
         return {}
-
 
     # TODO: should we include run(interval) here?
     #   process would have to maintain state
@@ -114,10 +105,6 @@ class Defer:
             defer,
             f,
             args):
-            # defer: Any,
-            # f: Callable,
-            # args: Tuple,
-    # ) -> None:
         """Allows for delayed application of a function to an update.
 
         The object simply holds the provided arguments until it's time
@@ -207,9 +194,9 @@ def merge_collections(existing, new):
         new = {}
     for key, value in new.items():
         if key in existing:
-            if (isinstance(existing[key], dict) and isinstance(new[key], collections.abc.Mapping)):
+            if isinstance(existing[key], dict) and isinstance(new[key], collections.abc.Mapping):
                 merge_collections(existing[key], new[key])
-            elif (isinstance(existing[key], list) and isinstance(new[key], collections.abc.Sequence)):
+            elif isinstance(existing[key], list) and isinstance(new[key], collections.abc.Sequence):
                 existing[key].extend(new[key])
             else:
                 raise Exception(
@@ -230,9 +217,9 @@ def empty_front(time):
 class Composite(Process):
     config_schema = {
         # TODO: add schema type
-        'composition': 'tree[any]', # 'schema',
+        'composition': 'tree[any]',
         'state': 'tree[any]',
-        'schema': 'tree[any]', # 'schema',
+        'schema': 'tree[any]',
         'bridge': 'wires',
         'initial_time': 'float',
         'global_time_precision': 'maybe[float]',
@@ -276,7 +263,6 @@ class Composite(Process):
             for path in self.process_paths}
 
         self.run_steps(self.step_triggers.keys())
-
 
     def schema(self):
         return self.config['schema']
@@ -399,7 +385,7 @@ class Composite(Process):
                 series = [series]
 
             for update in series:
-                print(update)
+                # print(update)
 
                 paths = hierarchy_depth(update)
                 update_paths.extend(paths.keys())
@@ -473,7 +459,6 @@ class Composite(Process):
 
             if force_complete and self.global_time == end_time:
                 force_complete = False
-        
 
     def run_steps(self, update_paths):
         steps_to_run = []
@@ -509,7 +494,6 @@ class Composite(Process):
             self.apply_updates(updates)
         else:
             self.steps_run = set([])
-                    
 
     def update(self, state, interval):
         # do everything
@@ -543,7 +527,7 @@ class Composite(Process):
         return update
 
 
-class Generator():
+class Generator:
     def __init__(self, config):
         self.config = config
 
@@ -618,7 +602,6 @@ def test_composite():
             'value': '11.11'}})
 
     composite.update({'exchange': 3.33}, 10.0)
-
     assert composite.state['value'] > 199
 
 
