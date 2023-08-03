@@ -44,6 +44,7 @@ process_interval_schema = {
     '_apply': 'set',
     '_default': '1.0'}
 
+
 def deserialize_process(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
