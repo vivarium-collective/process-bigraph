@@ -40,6 +40,7 @@ class SyncUpdate():
 
 
 class Step:
+    """Step base class."""
     # TODO: support trigger every time
     #   as well as dependency trigger
     config_schema = {}
@@ -66,6 +67,22 @@ class Step:
 
 
 class Process:
+    """Process parent class.
+
+      All :term:`process` classes must inherit from this class. Each
+      class can provide a ``defaults`` class variable to specify the
+      process defaults as a dictionary.
+
+      Note that subclasses should call the superclass init function
+      first. This allows the superclass to correctly save the initial
+      parameters before they are mutated by subclass constructor code.
+      We need access to the original parameters for serialization to
+      work properly.
+
+      Args:
+          config: Override the class defaults. This dictionary may
+              also contain the following special keys (TODO):
+    """
     config_schema = {}
 
     def __init__(self, config=None):
@@ -100,29 +117,32 @@ class Process:
 
 
 class Defer:
+    """Allows for delayed application of a function to an update.
+
+    The object simply holds the provided arguments until it's time
+    for the computation to be performed. Then, the function is
+    called.
+
+    Args:
+        defer: An object with a ``.get_command_result()`` method
+            whose output will be passed to the function. For
+            example, the object could be an
+            :py:class:`vivarium.core.process.Process` object whose
+            ``.get_command_result()`` method will return the process
+            update.
+        function: The function. For example,
+            :py:func:`invert_topology` to transform the returned
+            update.
+        args: Passed as the second argument to the function.
+    """
+
     def __init__(
             self,
             defer,
             f,
-            args):
-        """Allows for delayed application of a function to an update.
+            args
+    ):
 
-        The object simply holds the provided arguments until it's time
-        for the computation to be performed. Then, the function is
-        called.
-
-        Args:
-            defer: An object with a ``.get_command_result()`` method
-                whose output will be passed to the function. For
-                example, the object could be an
-                :py:class:`vivarium.core.process.Process` object whose
-                ``.get_command_result()`` method will return the process
-                update.
-            function: The function. For example,
-                :py:func:`invert_topology` to transform the returned
-                update.
-            args: Passed as the second argument to the function.
-        """
         self.defer = defer
         self.f = f
         self.args = args
@@ -137,7 +157,7 @@ class Defer:
             self.defer.get(),
             self.args)
 
-# maybe keep wires as tuples/paths to distinguish them from schemas?
+# TODO maybe keep wires as tuples/paths to distinguish them from schemas?
 
 
 def find_instances(state, instance_type='process_bigraph.composite.Process'):
@@ -215,6 +235,9 @@ def empty_front(time):
 
 
 class Composite(Process):
+    """Composite parent class.
+
+    """
     config_schema = {
         # TODO: add schema type
         'composition': 'tree[any]',
