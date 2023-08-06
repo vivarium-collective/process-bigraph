@@ -5,6 +5,7 @@ Process Types
 import sys
 import importlib
 from bigraph_schema import TypeSystem
+from process_bigraph.registry import process_registry
 
 
 def lookup_local(address):
@@ -19,6 +20,10 @@ def lookup_local(address):
 def lookup_local_process(address, config):
     local = lookup_local(address)
     return local(config)
+
+
+def lookup_registry(address):
+    return process_registry.access(address)
 
 
 # TODO: implement these
@@ -50,6 +55,8 @@ def deserialize_process(serialized, bindings=None, types=None):
 
     if protocol == 'local':
         instantiate = lookup_local(address)
+    if protocol == 'process_registry':
+        instantiate = lookup_registry(address)
     else:
         raise Exception(f'protocol "{protocol}" not implemented')
 

@@ -136,7 +136,7 @@ def test_gillespie_composite():
                             'C': 'float'}},
                     'outputs': {
                         'interval': 'float'}}},
-            'event': 'process[DNA.G:float|mRNA.C:float]',
+            'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
             'DNA': {
                 'G': 'float'},
             'mRNA': {
