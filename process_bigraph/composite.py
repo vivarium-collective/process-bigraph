@@ -5,7 +5,9 @@ Composite and Process classes
 import abc
 import copy
 import math
-
+import collections
+from typing import Dict
+from bigraph_schema.registry import deep_merge, get_path
 from process_bigraph.type_system import types, lookup_local
 
 
@@ -37,11 +39,11 @@ class SyncUpdate():
         return self.update
 
 
-class Step():
+class Step:
+    """Step base class."""
     # TODO: support trigger every time
     #   as well as dependency trigger
     config_schema = {}
-
 
     def __init__(self, config=None):
         if config is None:
@@ -50,16 +52,13 @@ class Step():
         self.config = types.fill(
             self.config_schema,
             config)
-        
 
     def schema(self):
         return {}
 
-
-    def invoke(self, state):
+    def invoke(self, state, _=None):
         update = self.update(state)
         sync = SyncUpdate(update)
-
         return sync
 
     @abc.abstractmethod
@@ -67,7 +66,23 @@ class Step():
         return {}
 
 
-class Process():
+class Process:
+    """Process parent class.
+
+      All :term:`process` classes must inherit from this class. Each
+      class can provide a ``defaults`` class variable to specify the
+      process defaults as a dictionary.
+
+      Note that subclasses should call the superclass init function
+      first. This allows the superclass to correctly save the initial
+      parameters before they are mutated by subclass constructor code.
+      We need access to the original parameters for serialization to
+      work properly.
+
+      Args:
+          config: Override the class defaults. This dictionary may
+              also contain the following special keys (TODO):
+    """
     config_schema = {}
 
     def __init__(self, config=None):
@@ -78,62 +93,56 @@ class Process():
             self.config_schema,
             config)
 
-
     @abc.abstractmethod
     def schema(self):
         return {}
-
 
     def initial_state(self, initial=None):
         initial = initial or {}
         return types.fill(
             self.schema(),
             initial)
-        
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
         sync = SyncUpdate(update)
-
         return sync
 
     @abc.abstractmethod
     def update(self, state, interval):
         return {}
 
-
     # TODO: should we include run(interval) here?
     #   process would have to maintain state
 
 
 class Defer:
+    """Allows for delayed application of a function to an update.
+
+    The object simply holds the provided arguments until it's time
+    for the computation to be performed. Then, the function is
+    called.
+
+    Args:
+        defer: An object with a ``.get_command_result()`` method
+            whose output will be passed to the function. For
+            example, the object could be an
+            :py:class:`vivarium.core.process.Process` object whose
+            ``.get_command_result()`` method will return the process
+            update.
+        function: The function. For example,
+            :py:func:`invert_topology` to transform the returned
+            update.
+        args: Passed as the second argument to the function.
+    """
+
     def __init__(
             self,
             defer,
             f,
-            args):
-            # defer: Any,
-            # f: Callable,
-            # args: Tuple,
-    # ) -> None:
-        """Allows for delayed application of a function to an update.
+            args
+    ):
 
-        The object simply holds the provided arguments until it's time
-        for the computation to be performed. Then, the function is
-        called.
-
-        Args:
-            defer: An object with a ``.get_command_result()`` method
-                whose output will be passed to the function. For
-                example, the object could be an
-                :py:class:`vivarium.core.process.Process` object whose
-                ``.get_command_result()`` method will return the process
-                update.
-            function: The function. For example,
-                :py:func:`invert_topology` to transform the returned
-                update.
-            args: Passed as the second argument to the function.
-        """
         self.defer = defer
         self.f = f
         self.args = args
@@ -148,11 +157,11 @@ class Defer:
             self.defer.get(),
             self.args)
 
-# maybe keep wires as tuples/paths to distinguish them from schemas?
+# TODO maybe keep wires as tuples/paths to distinguish them from schemas?
 
 
-def find_processes(state):
-    process_class = lookup_local('process_bigraph.composite.Process')
+def find_instances(state, instance_type='process_bigraph.composite.Process'):
+    process_class = lookup_local(instance_type)
     found = {}
 
     for key, inner in state.items():
@@ -162,9 +171,60 @@ def find_processes(state):
     return found
 
 
-def find_process_paths(state):
-    processes = find_processes(state)
-    return hierarchy_depth(processes)
+def find_processes(state):
+    return find_instances(state, 'process_bigraph.composite.Process')
+
+
+def find_steps(state):
+    return find_instances(state, 'process_bigraph.composite.Step')
+
+
+def find_instance_paths(state, instance_type='process_bigraph.composite.Process'):
+    instances = find_instances(state, instance_type)
+    return hierarchy_depth(instances)
+
+
+def find_step_triggers(path, step):
+    prefix = tuple(path[:-1])
+    triggers = {}
+    for wire in step['wires']['inputs'].values():
+        trigger_path = tuple(prefix) + tuple(wire)
+        if trigger_path not in triggers:
+            triggers[trigger_path] = []
+        triggers[trigger_path].append(path)
+
+    return triggers
+
+
+def explode_path(path):
+    explode = ()
+    paths = [explode]
+
+    for node in path:
+        explode = explode + (node,)
+        paths.append(explode)
+
+    return paths
+
+
+def merge_collections(existing, new):
+    if existing is None:
+        existing = {}
+    if new is None:
+        new = {}
+    for key, value in new.items():
+        if key in existing:
+            if isinstance(existing[key], dict) and isinstance(new[key], collections.abc.Mapping):
+                merge_collections(existing[key], new[key])
+            elif isinstance(existing[key], list) and isinstance(new[key], collections.abc.Sequence):
+                existing[key].extend(new[key])
+            else:
+                raise Exception(
+                    f'cannot merge collections as they do not match:\n{existing}\n{new}')
+        else:
+            existing[key] = value
+
+    return existing
 
 
 def empty_front(time):
@@ -175,11 +235,14 @@ def empty_front(time):
 
 
 class Composite(Process):
+    """Composite parent class.
+
+    """
     config_schema = {
         # TODO: add schema type
-        'composition': 'tree[any]', # 'schema',
+        'composition': 'tree[any]',
         'state': 'tree[any]',
-        'schema': 'tree[any]', # 'schema',
+        'schema': 'tree[any]',
         'bridge': 'wires',
         'initial_time': 'float',
         'global_time_precision': 'maybe[float]',
@@ -199,10 +262,30 @@ class Composite(Process):
         self.global_time = self.config['initial_time']
         self.global_time_precision = self.config['global_time_precision']
 
-        self.process_paths = find_process_paths(self.state)
+        self.process_paths = find_instance_paths(
+            self.state,
+            'process_bigraph.composite.Process')
+
+        self.step_paths = find_instance_paths(
+            self.state,
+            'process_bigraph.composite.Step')
+
+        self.step_triggers = {}
+
+        for step_path, step in self.step_paths.items():
+            step_triggers = find_step_triggers(
+                step_path, step)
+            self.step_triggers = merge_collections(
+                self.step_triggers,
+                step_triggers)
+
+        self.steps_run = set([])
+
         self.front: Dict = {
             path: empty_front(self.global_time)
             for path in self.process_paths}
+
+        self.run_steps(self.step_triggers.keys())
 
     def schema(self):
         return self.config['schema']
@@ -213,6 +296,7 @@ class Composite(Process):
             process,
             states,
             interval,
+            ports_key=None,
     ):
         """Start generating a process's update.
 
@@ -225,7 +309,6 @@ class Composite(Process):
         Args:
             path: Path to process.
             process: The process.
-            store: The store at ``path``.
             states: Simulation state to pass to process's
                 ``next_update`` method.
             interval: Interval for which to compute the update.
@@ -242,7 +325,8 @@ class Composite(Process):
                 schema,
                 state,
                 path,
-                update)
+                update,
+                ports_key)
 
         absolute = Defer(
             update,
@@ -315,25 +399,31 @@ class Composite(Process):
 
     def apply_updates(self, updates):
         # view_expire = False
+        update_paths = []
+
         for defer in updates:
             series = defer.get()
             if not isinstance(series, list):
                 series = [series]
+
             for update in series:
+                # print(update)
+
+                paths = hierarchy_depth(update)
+                update_paths.extend(paths.keys())
+
                 self.state = types.apply(
                     self.composition,
                     self.state,
                     update)
 
-        # TODO: keep track of updated paths so we can trigger steps
+        self.run_steps(update_paths)
 
                 # view_expire_update = self.apply_update(up, store)
                 # view_expire = view_expire or view_expire_update
 
         # if view_expire:
         #     self.state.build_topology_views()
-
-        # self.run_steps()
 
     def run(self, interval, force_complete=False):
         end_time = self.global_time + interval
@@ -391,7 +481,41 @@ class Composite(Process):
 
             if force_complete and self.global_time == end_time:
                 force_complete = False
-        
+
+    def run_steps(self, update_paths):
+        steps_to_run = []
+
+        for update_path in update_paths:
+            paths = explode_path(update_path)
+            for path in paths:
+                step_paths = self.step_triggers.get(path, [])
+                for step_path in step_paths:
+                    if step_path is not None and step_path not in self.steps_run:
+                        steps_to_run.append(step_path)
+                        self.steps_run.add(step_path)
+
+        if len(steps_to_run) > 0:
+            updates = []
+            for step_path in steps_to_run:
+                step = get_path(self.state, step_path)
+                state = types.view_edge(
+                    self.composition,
+                    self.state,
+                    step_path,
+                    'inputs')
+
+                step_update = self.process_update(
+                    step_path,
+                    step,
+                    state,
+                    -1.0,
+                    'outputs')
+
+                updates.append(step_update)
+
+            self.apply_updates(updates)
+        else:
+            self.steps_run = set([])
 
     def update(self, state, interval):
         # do everything
@@ -425,107 +549,10 @@ class Composite(Process):
         return update
 
 
-class Generator():
+class Generator:
     def __init__(self, config):
         self.config = config
 
     def __call__(self, config=None):
         config = deep_merge(self.config, config)
         return Composite(config)
-
-
-class IncreaseProcess(Process):
-    config_schema = {
-        'rate': {
-            '_type': 'float',
-            '_default': '0.1'}}
-
-    def __init__(self, config=None):
-        super().__init__(config)
-
-    def schema(self):
-        return {
-            'level': 'float'}
-
-    def update(self, state, interval):
-        return {
-            'level': state['level'] * self.config['rate']}
-
-
-def test_default_config():
-    process = IncreaseProcess()
-    assert process.config['rate'] == 0.1
-
-
-def test_process():
-    process = IncreaseProcess({'rate': 0.2})
-    schema = process.schema()
-    state = types.fill(schema)
-    update = process.update({'level': 5.5}, 1.0)
-    new_state = types.apply(schema, state, update)
-
-    assert new_state['level'] == 1.1
-
-
-def test_composite():
-    # TODO: add support for the various vivarium emitters
-
-    # increase = IncreaseProcess({'rate': 0.3})
-    # TODO: This is the config of the composite,
-    #   we also need a way to serialize the entire composite
-
-    composite = Composite({
-        'composition': {
-            'increase': 'process[level:float]',
-            'value': 'float'},
-        'schema': {
-            'exchange': 'float'},
-        'bridge': {
-            'exchange': ['value']},
-        'state': {
-            # TODO: interval is state?
-            'increase': {
-                'address': 'local:process_bigraph.composite.IncreaseProcess',
-                'config': {'rate': '0.3'},
-                'wires': {'level': ['value']}},
-            'value': '11.11'}})
-
-    composite.update({'exchange': 3.33}, 10.0)
-
-    assert composite.state['value'] > 199
-
-
-def test_serialized_composite():
-    # This should specify the same thing as above
-    composite_schema = {
-        '_type': 'process[exchange:float]',
-        'address': 'local:Composite',
-        'config': {
-            'state': {
-                'increase': {
-                    '_type': 'process[level:float]',
-                    'address': 'local:IncreaseProcess',
-                    'config': {'rate': '0.3'},
-                    'wires': {'level': ['value']}
-                },
-                'value': '11.11',
-            },
-            'schema': {
-                'increase': 'process[level:float]',
-                # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
-                'value': 'float',
-            },
-            'bridge': {
-                'exchange': 'value'
-            },
-        }
-    }
-
-    composite_instance = types.deserialize(composite_schema)
-    composite_instance.update()
-
-
-if __name__ == '__main__':
-    test_default_config()
-    test_process()
-    test_composite()

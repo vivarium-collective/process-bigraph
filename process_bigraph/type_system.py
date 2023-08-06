@@ -23,7 +23,12 @@ def lookup_local_process(address, config):
 
 # TODO: implement these
 def apply_process(current, update, bindings=None, types=None):
-    pass
+    process_schema = dict(types.access('process'))
+    process_schema.pop('_apply')
+    return types.apply(
+        process_schema,
+        current,
+        update)
 
 
 def divide_process(value, bindings=None, types=None):
@@ -34,7 +39,40 @@ def serialize_process(value, bindings=None, types=None):
     return value
 
 
+process_interval_schema = {
+    '_type': 'float',
+    '_apply': 'set',
+    '_default': '1.0'}
+
+
 def deserialize_process(serialized, bindings=None, types=None):
+    protocol, address = serialized['address'].split(':', 1)
+
+    if protocol == 'local':
+        instantiate = lookup_local(address)
+    else:
+        raise Exception(f'protocol "{protocol}" not implemented')
+
+    config = types.hydrate_state(
+        instantiate.config_schema,
+        serialized.get('config', {}))
+
+    interval = types.deserialize(
+        process_interval_schema,
+        serialized.get('interval'))
+
+    # this instance always acts like a process no matter
+    # where it is running
+    process = instantiate(config)
+    deserialized = serialized.copy()
+    deserialized['instance'] = process
+    deserialized['config'] = config
+    deserialized['interval'] = interval
+
+    return deserialized
+
+
+def deserialize_step(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
     if protocol == 'local':
@@ -51,8 +89,30 @@ def deserialize_process(serialized, bindings=None, types=None):
     process = instantiate(config)
     deserialized = serialized.copy()
     deserialized['instance'] = process
+    deserialized['config'] = config
 
     return deserialized
+
+
+# def deserialize_step(serialized, bindings=None, types=None):
+#     protocol, address = serialized['address'].split(':', 1)
+
+#     if protocol == 'local':
+#         instantiate = lookup_local(address)
+#     else:
+#         raise Exception(f'protocol "{protocol}" not implemented')
+
+#     config = types.hydrate_state(
+#         instantiate.config_schema,
+#         serialized.get('config', {}))
+
+#     # this instance always acts like a process no matter
+#     # where it is running
+#     step = instantiate(config)
+#     deserialized = serialized.copy()
+#     deserialized['instance'] = step
+
+#     return deserialized
 
 
 process_types = {
@@ -64,10 +124,10 @@ process_types = {
     #   an input and output at the same time
     'step': {
         '_super': ['edge'],
-        '_apply': 'apply_step',
-        '_serialize': 'serialize_step',
+        '_apply': 'apply_process',
+        '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_step',
-        '_divide': 'divide_step',
+        '_divide': 'divide_process',
         '_description': '',
         # TODO: support reference to type parameters from other states
         'address': 'protocol',
@@ -81,10 +141,7 @@ process_types = {
         '_divide': 'divide_process',
         '_description': '',
         # TODO: support reference to type parameters from other states
-        'interval': {
-            '_type': 'float',
-            '_apply': 'set',
-            '_default': '1.0'},
+        'interval': process_interval_schema,
         'address': 'protocol',
         'config': 'tree[any]'},
 }
@@ -95,6 +152,8 @@ def register_process_types(types):
     types.serialize_registry.register('serialize_process', serialize_process)
     types.deserialize_registry.register('deserialize_process', deserialize_process)
     types.divide_registry.register('divide_process', divide_process)
+
+    types.deserialize_registry.register('deserialize_step', deserialize_step)
 
     for process_key, process_type in process_types.items():
         types.type_registry.register(process_key, process_type)
