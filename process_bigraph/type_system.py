@@ -23,6 +23,10 @@ def lookup_local_process(address, config):
 
 
 def lookup_registry(address):
+    """Process Registry Protocol
+
+    retrieves address from the process registry
+    """
     return process_registry.access(address)
 
 
@@ -53,9 +57,10 @@ process_interval_schema = {
 def deserialize_process(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
+    # TODO -- should we make a protocol registry? protocols take an address, return an instantiate
     if protocol == 'local':
         instantiate = lookup_local(address)
-    if protocol == 'process_registry':
+    elif protocol == 'process_registry':
         instantiate = lookup_registry(address)
     else:
         raise Exception(f'protocol "{protocol}" not implemented')
@@ -84,6 +89,8 @@ def deserialize_step(serialized, bindings=None, types=None):
 
     if protocol == 'local':
         instantiate = lookup_local(address)
+    elif protocol == 'process_registry':
+        instantiate = lookup_registry(address)
     else:
         raise Exception(f'protocol "{protocol}" not implemented')
 
