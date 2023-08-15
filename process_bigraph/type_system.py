@@ -33,7 +33,6 @@ process_interval_schema = {
 def deserialize_process(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
-    # TODO -- should we make a protocol registry? protocols take an address, return an instantiate
     lookup = protocol_registry.access(protocol)
     if not lookup:
         raise Exception(f'protocol "{protocol}" not implemented')
@@ -78,27 +77,6 @@ def deserialize_step(serialized, bindings=None, types=None):
     deserialized['config'] = config
 
     return deserialized
-
-
-# def deserialize_step(serialized, bindings=None, types=None):
-#     protocol, address = serialized['address'].split(':', 1)
-
-#     if protocol == 'local':
-#         instantiate = lookup_local(address)
-#     else:
-#         raise Exception(f'protocol "{protocol}" not implemented')
-
-#     config = types.hydrate_state(
-#         instantiate.config_schema,
-#         serialized.get('config', {}))
-
-#     # this instance always acts like a process no matter
-#     # where it is running
-#     step = instantiate(config)
-#     deserialized = serialized.copy()
-#     deserialized['instance'] = step
-
-#     return deserialized
 
 
 process_types = {
