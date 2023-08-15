@@ -29,12 +29,12 @@ def test_serialized_composite():
     # This should specify the same thing as above
     composite_schema = {
         '_type': 'process[exchange:float]',
-        'address': 'local:process_bigraph.composite.Composite',
+        'address': 'local:!process_bigraph.composite.Composite',
         'config': {
             'state': {
                 'increase': {
                     '_type': 'process[level:float]',
-                    'address': 'local:process_bigraph.tests.IncreaseProcess',
+                    'address': 'local:!process_bigraph.tests.IncreaseProcess',
                     'config': {'rate': '0.3'},
                     'wires': {'level': ['value']}
                 },
@@ -96,7 +96,7 @@ def test_composite():
             'exchange': ['value']},
         'state': {
             'increase': {
-                'address': 'local:process_bigraph.tests.IncreaseProcess',
+                'address': 'local:!process_bigraph.tests.IncreaseProcess',
                 'config': {'rate': '0.3'},
                 'interval': '1.0',
                 'wires': {'level': ['value']}},

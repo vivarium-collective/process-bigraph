@@ -136,7 +136,7 @@ def test_gillespie_composite():
                             'C': 'float'}},
                     'outputs': {
                         'interval': 'float'}}},
-            'event': 'process[DNA.G:float|mRNA.C:float]',
+            'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
             'DNA': {
                 'G': 'float'},
             'mRNA': {
@@ -151,7 +151,7 @@ def test_gillespie_composite():
             'mRNA': ['mRNA']},
         'state': {
             'interval': {
-                'address': 'local:process_bigraph.experiments.minimal_gillespie.GillespieInterval',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
                 'config': {'ktsc': '6e0'},
                 'wires': {
                     'inputs': {
@@ -160,7 +160,7 @@ def test_gillespie_composite():
                     'outputs': {
                         'interval': ['event', 'interval']}}},
             'event': {
-                'address': 'local:process_bigraph.experiments.minimal_gillespie.GillespieEvent',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
                 'config': {'ktsc': '6e0'},
                 'wires': {
                     'DNA': ['DNA'],

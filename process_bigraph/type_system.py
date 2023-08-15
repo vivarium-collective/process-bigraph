@@ -2,23 +2,8 @@
 Process Types
 """
 
-import sys
-import importlib
 from bigraph_schema import TypeSystem
-
-
-def lookup_local(address):
-    if '.' in address:
-        module_name, class_name = address.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, class_name)
-    else:
-        return getattr(sys.modules[__name__], address)
-
-
-def lookup_local_process(address, config):
-    local = lookup_local(address)
-    return local(config)
+from process_bigraph.registry import protocol_registry
 
 
 # TODO: implement these
@@ -48,10 +33,10 @@ process_interval_schema = {
 def deserialize_process(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
-    if protocol == 'local':
-        instantiate = lookup_local(address)
-    else:
+    lookup = protocol_registry.access(protocol)
+    if not lookup:
         raise Exception(f'protocol "{protocol}" not implemented')
+    instantiate = lookup(address)
 
     config = types.hydrate_state(
         instantiate.config_schema,
@@ -75,10 +60,10 @@ def deserialize_process(serialized, bindings=None, types=None):
 def deserialize_step(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
-    if protocol == 'local':
-        instantiate = lookup_local(address)
-    else:
+    lookup = protocol_registry.access(protocol)
+    if not lookup:
         raise Exception(f'protocol "{protocol}" not implemented')
+    instantiate = lookup(address)
 
     config = types.hydrate_state(
         instantiate.config_schema,
@@ -92,27 +77,6 @@ def deserialize_step(serialized, bindings=None, types=None):
     deserialized['config'] = config
 
     return deserialized
-
-
-# def deserialize_step(serialized, bindings=None, types=None):
-#     protocol, address = serialized['address'].split(':', 1)
-
-#     if protocol == 'local':
-#         instantiate = lookup_local(address)
-#     else:
-#         raise Exception(f'protocol "{protocol}" not implemented')
-
-#     config = types.hydrate_state(
-#         instantiate.config_schema,
-#         serialized.get('config', {}))
-
-#     # this instance always acts like a process no matter
-#     # where it is running
-#     step = instantiate(config)
-#     deserialized = serialized.copy()
-#     deserialized['instance'] = step
-
-#     return deserialized
 
 
 process_types = {
