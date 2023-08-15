@@ -8,7 +8,8 @@ import math
 import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, get_path
-from process_bigraph.type_system import types, lookup_local
+from process_bigraph.type_system import types
+from process_bigraph.protocols import lookup_local
 
 
 def hierarchy_depth(hierarchy, path=()):

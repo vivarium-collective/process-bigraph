@@ -2,32 +2,8 @@
 Process Types
 """
 
-import sys
-import importlib
 from bigraph_schema import TypeSystem
-from process_bigraph.registry import process_registry
-
-
-def lookup_local(address):
-    if '.' in address:
-        module_name, class_name = address.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, class_name)
-    else:
-        return getattr(sys.modules[__name__], address)
-
-
-def lookup_local_process(address, config):
-    local = lookup_local(address)
-    return local(config)
-
-
-def lookup_registry(address):
-    """Process Registry Protocol
-
-    retrieves address from the process registry
-    """
-    return process_registry.access(address)
+from process_bigraph.registry import protocol_registry
 
 
 # TODO: implement these
@@ -58,12 +34,10 @@ def deserialize_process(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
     # TODO -- should we make a protocol registry? protocols take an address, return an instantiate
-    if protocol == 'local':
-        instantiate = lookup_local(address)
-    elif protocol == 'process_registry':
-        instantiate = lookup_registry(address)
-    else:
+    lookup = protocol_registry.access(protocol)
+    if not lookup:
         raise Exception(f'protocol "{protocol}" not implemented')
+    instantiate = lookup(address)
 
     config = types.hydrate_state(
         instantiate.config_schema,
@@ -87,12 +61,10 @@ def deserialize_process(serialized, bindings=None, types=None):
 def deserialize_step(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
-    if protocol == 'local':
-        instantiate = lookup_local(address)
-    elif protocol == 'process_registry':
-        instantiate = lookup_registry(address)
-    else:
+    lookup = protocol_registry.access(protocol)
+    if not lookup:
         raise Exception(f'protocol "{protocol}" not implemented')
+    instantiate = lookup(address)
 
     config = types.hydrate_state(
         instantiate.config_schema,
