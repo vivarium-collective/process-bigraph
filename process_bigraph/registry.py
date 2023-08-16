@@ -24,3 +24,12 @@ process_registry = Registry()
 
 #: Maps process names to :term:`protocol methods`
 protocol_registry = Registry()
+
+
+# Decorator
+def register(identifier, registry):
+    def decorator(func):
+        registry.register(func, identifier=identifier)
+        return func
+
+    return decorator

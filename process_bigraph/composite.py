@@ -8,6 +8,7 @@ import abc
 import copy
 import math
 import collections
+import json
 from typing import Dict
 from bigraph_schema.registry import deep_merge, get_path
 from process_bigraph.type_system import types
@@ -289,6 +290,17 @@ class Composite(Process):
             for path in self.process_paths}
 
         self.run_steps(self.step_triggers.keys())
+
+    def to_json(self, filename=None):
+        """Write the dictionary to a JSON file"""
+        config = {
+            'composition': self.composition,
+            'state': self.state,
+            'schema': self.config['schema'],
+            'bridge': self.config['bridge'],
+        }
+        with open(filename, 'w') as file:
+            json.dump(config, file, indent=4)
 
     def schema(self):
         return self.config['schema']
