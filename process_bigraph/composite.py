@@ -1,5 +1,7 @@
 """
-Composite and Process classes
+====================================
+Composite, Process, and Step classes
+====================================
 """
 
 import abc
@@ -9,7 +11,7 @@ import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, get_path
 from process_bigraph.type_system import types
-from process_bigraph.protocols import lookup_local
+from process_bigraph.protocols import local_lookup_module
 
 
 def hierarchy_depth(hierarchy, path=()):
@@ -162,7 +164,7 @@ class Defer:
 
 
 def find_instances(state, instance_type='process_bigraph.composite.Process'):
-    process_class = lookup_local(instance_type)
+    process_class = local_lookup_module(instance_type)
     found = {}
 
     for key, inner in state.items():

@@ -1,9 +1,18 @@
 """
+=============
 Process Types
+=============
 """
 
 from bigraph_schema import TypeSystem
 from process_bigraph.registry import protocol_registry
+
+
+
+process_interval_schema = {
+    '_type': 'float',
+    '_apply': 'set',
+    '_default': '1.0'}
 
 
 # TODO: implement these
@@ -21,22 +30,17 @@ def divide_process(value, bindings=None, types=None):
 
 
 def serialize_process(value, bindings=None, types=None):
+    # TODO -- need to get back the protocol: address and the config
     return value
-
-
-process_interval_schema = {
-    '_type': 'float',
-    '_apply': 'set',
-    '_default': '1.0'}
 
 
 def deserialize_process(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
-    lookup = protocol_registry.access(protocol)
-    if not lookup:
+    process_lookup = protocol_registry.access(protocol)
+    if not process_lookup:
         raise Exception(f'protocol "{protocol}" not implemented')
-    instantiate = lookup(address)
+    instantiate = process_lookup(address)
 
     config = types.hydrate_state(
         instantiate.config_schema,

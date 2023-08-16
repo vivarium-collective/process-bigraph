@@ -1,13 +1,19 @@
 """
-Protocol for retrieving processes from address
+===============================================
+Protocols for retrieving processes from address
+===============================================
 """
+
 import importlib
 import sys
-
 from process_bigraph.registry import process_registry
 
 
-def lookup_local(address):
+def local_lookup_module(address):
+    """Local Module Protocol
+
+    Retrieves local module
+    """
     if '.' in address:
         module_name, class_name = address.rsplit('.', 1)
         module = importlib.import_module(module_name)
@@ -16,23 +22,22 @@ def lookup_local(address):
         return getattr(sys.modules[__name__], address)
 
 
-def lookup_local_process(address, config):
-    local = lookup_local(address)
-    return local(config)
-
-
-def lookup_registry(address):
+def local_lookup_registry(address):
     """Process Registry Protocol
 
-    retrieves address from the process registry
+    Retrieves from the process registry
     """
     return process_registry.access(address)
 
 
 def local_lookup(address):
+    """Local Lookup Protocol
+
+    Retrieves local processes, from the process registry or from a local module
+    """
     if address[0] == '!':
-        instantiate = lookup_local(address[1:])
+        instantiate = local_lookup_module(address[1:])
     else:
-        instantiate = lookup_registry(address)
+        instantiate = local_lookup_registry(address)
     return instantiate
 
