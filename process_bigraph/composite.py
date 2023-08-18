@@ -288,6 +288,8 @@ class Composite(Process):
             path: empty_front(self.global_time)
             for path in self.process_paths}
 
+        self.bridge_updates = []
+
         self.run_steps(self.step_triggers.keys())
 
     def schema(self):
@@ -420,6 +422,15 @@ class Composite(Process):
                     self.state,
                     update)
 
+                bridge_update = types.view(
+                    self.config['schema'],
+                    self.config['bridge'],
+                    (),
+                    update)
+
+                if bridge_update:
+                    self.bridge_updates.append(bridge_update)
+
         self.run_steps(update_paths)
 
                 # view_expire_update = self.apply_update(up, store)
@@ -532,7 +543,7 @@ class Composite(Process):
 
         # TODO: this may need to be a set instead of an update
         #   add a force set?
-        self.state = types.apply(
+        self.state = types.set(
             self.composition,
             self.state,
             projection)
@@ -543,13 +554,11 @@ class Composite(Process):
         # TODO: this is the state, but we need to return an update
         #   store all updates to the bridge internally, then return them
         #   as the update
-        update = types.view(
-            self.schema(),
-            self.config['bridge'],
-            [],
-            self.state)
 
-        return update
+        updates = self.bridge_updates
+        self.bridge_updates = []
+
+        return updates
 
 
 class Generator:

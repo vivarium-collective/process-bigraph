@@ -102,8 +102,17 @@ def test_composite():
                 'wires': {'level': ['value']}},
             'value': '11.11'}})
 
-    composite.update({'exchange': 3.33}, 10.0)
-    assert composite.state['value'] > 199
+    initial_state = {'exchange': 3.33}
+
+    updates = composite.update(initial_state, 10.0)
+
+    final_exchange = sum([
+        update['exchange']
+        for update in [initial_state] + updates])
+
+    assert composite.state['value'] > 45
+    assert 'exchange' in updates[0]
+    assert updates[0]['exchange'] == 0.999
 
 
 if __name__ == '__main__':
