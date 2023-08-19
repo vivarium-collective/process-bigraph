@@ -534,26 +534,18 @@ class Composite(Process):
     def update(self, state, interval):
         # do everything
 
-        # this needs to go through the bridge
         projection = types.project(
             self.schema(),
             self.config['bridge'],
             [],
             state)
 
-        # TODO: this may need to be a set instead of an update
-        #   add a force set?
         self.state = types.set(
             self.composition,
             self.state,
             projection)
 
         self.run(interval)
-
-        # pull the update out of the state and return it
-        # TODO: this is the state, but we need to return an update
-        #   store all updates to the bridge internally, then return them
-        #   as the update
 
         updates = self.bridge_updates
         self.bridge_updates = []

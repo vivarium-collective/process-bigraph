@@ -2,3 +2,6 @@
 __pycache__/
 .idea/
 *.ipynb_checkpoints/
+dist/
+
+process_bigraph.egg-info/
