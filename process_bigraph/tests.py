@@ -115,8 +115,25 @@ def test_composite():
     assert updates[0]['exchange'] == 0.999
 
 
+def test_infer():
+    composite = Composite({
+        'composition': {},
+        'state': {
+            'increase': {
+                '_type': 'process',
+                'address': 'local:!process_bigraph.tests.IncreaseProcess',
+                'config': {'rate': '0.3'},
+                # 'interval': '1.0',
+                'wires': {'level': ['value']}},
+            'value': '11.11'}})
+
+    import ipdb; ipdb.set_trace()
+    
+
+
 if __name__ == '__main__':
     test_default_config()
     test_merge_collections()
     test_process()
     test_composite()
+    test_infer()

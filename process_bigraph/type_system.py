@@ -34,6 +34,9 @@ def serialize_process(value, bindings=None, types=None):
     return value
 
 
+DEFAULT_INTERVAL = 1.0
+
+
 def deserialize_process(serialized, bindings=None, types=None):
     protocol, address = serialized['address'].split(':', 1)
 
@@ -139,6 +142,50 @@ class ProcessTypes(TypeSystem):
 
     # def deserialize(self, schema, encoded):
     #     return {}
+
+    def infer_schema(self, schema, state):
+        schema = schema or {}
+        if isinstance(state, dict):
+            import ipdb; ipdb.set_trace()
+
+            if '_type' in state:
+                state_type = state['_type']
+                state_schema = self.access(state_type)
+                # TODO: fix is_descendant
+                # if types.type_registry.is_descendant('process', state_schema) or types.registry.is_descendant('step', state_schema):
+                if state_type == 'process' or state_type == 'step':
+                    edge_instance = self.deserialize(state_schema, state)
+                    # TODO: retain the process instance and reuse
+                    # TODO: iterate through process wires and generate
+                    #   missing composition for every wire entry
+                    return {
+                        '_type': state_type,
+                        '_ports': edge_instance['instance'].schema()}
+                else:
+                    return state_type
+            else:
+                inferred_schema = {}
+                for key, value in state.items():
+                    # TODO: check to see if the state matches the given schema
+                    inner_schema = schema.get(key)
+                    if inner_schema:
+                        access = self.access(inner_schema)
+                        # TODO: do validation
+                        # self.validate_state(access, value)
+                        inferred_schema[key] = access
+                    else:
+                        # TODO: get missing schema for states from
+                        #   the wires and ports of the process
+                        inner_schema = self.infer_schema(
+                            schema.get(key),
+                            value)
+                        if inner_schema:
+                            inferred_schema[key] = inner_schema
+
+                return schema
+        else:
+            return schema
+        
 
     def hydrate_state(self, schema, state):
         if isinstance(state, str) or '_deserialize' in schema:

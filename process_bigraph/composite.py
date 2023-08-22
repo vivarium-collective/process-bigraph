@@ -255,8 +255,17 @@ class Composite(Process):
     def __init__(self, config=None):
         super().__init__(config)
 
-        self.composition = types.access(self.config['composition'])
-        self.composition = copy.deepcopy(self.composition)
+        # TODO: default tree should be hydrated, not '{}'
+        composition = self.config.get('composition', {})
+
+        # TODO: infer full composition
+
+        # TODO: hydrate all processes, then perform infer and fill
+        state = self.config.get('state', {})
+
+        composition = types.infer_schema(composition, state)
+        composition_schema = types.access(composition)
+        self.composition = copy.deepcopy(composition_schema)
 
         self.state = types.hydrate(
             self.composition,
@@ -553,10 +562,3 @@ class Composite(Process):
         return updates
 
 
-class Generator:
-    def __init__(self, config):
-        self.config = config
-
-    def __call__(self, config=None):
-        config = deep_merge(self.config, config)
-        return Composite(config)
