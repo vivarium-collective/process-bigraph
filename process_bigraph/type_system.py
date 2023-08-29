@@ -143,6 +143,10 @@ class ProcessTypes(TypeSystem):
     # def deserialize(self, schema, encoded):
     #     return {}
 
+    def infer_wires(self, schema, state, wires):
+        return {}
+
+
     def infer_schema(self, schema, state):
         schema = schema or {}
         if isinstance(state, dict):
@@ -150,39 +154,42 @@ class ProcessTypes(TypeSystem):
 
             if '_type' in state:
                 state_type = state['_type']
-                state_schema = self.access(state_type)
+
                 # TODO: fix is_descendant
                 # if types.type_registry.is_descendant('process', state_schema) or types.registry.is_descendant('step', state_schema):
                 if state_type == 'process' or state_type == 'step':
+                    state_schema = self.access(state_type)
                     edge_instance = self.deserialize(state_schema, state)
                     # TODO: retain the process instance and reuse
                     # TODO: iterate through process wires and generate
                     #   missing composition for every wire entry
+                    
+                    ports_schema = edge_instance['instance'].schema()
+                    inferred_schema = self.infer_wires(
+                        ports_schema,
+                        state,
+                        state['wires'])
+                    
                     return {
                         '_type': state_type,
-                        '_ports': edge_instance['instance'].schema()}
+                        '_ports': ports_schema}
                 else:
                     return state_type
             else:
                 inferred_schema = {}
                 for key, value in state.items():
-                    # TODO: check to see if the state matches the given schema
-                    inner_schema = schema.get(key)
-                    if inner_schema:
-                        access = self.access(inner_schema)
-                        # TODO: do validation
-                        # self.validate_state(access, value)
-                        inferred_schema[key] = access
-                    else:
-                        # TODO: get missing schema for states from
-                        #   the wires and ports of the process
-                        inner_schema = self.infer_schema(
-                            schema.get(key),
-                            value)
-                        if inner_schema:
-                            inferred_schema[key] = inner_schema
+                    # TODO: get missing schema for states from
+                    #   the wires and ports of the process
+                    inner_schema = self.infer_schema(
+                        schema.get(key),
+                        value)
 
-                return schema
+                    # TODO: do validation
+                    # self.validate_state(access, value)
+                    if inner_schema:
+                        inferred_schema[key] = inner_schema
+
+                return inferred_schema
         else:
             return schema
         
