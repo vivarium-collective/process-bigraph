@@ -38,12 +38,19 @@ DEFAULT_INTERVAL = 1.0
 
 
 def deserialize_process(serialized, bindings=None, types=None):
+    deserialized = serialized.copy()
     protocol, address = serialized['address'].split(':', 1)
 
-    process_lookup = protocol_registry.access(protocol)
-    if not process_lookup:
-        raise Exception(f'protocol "{protocol}" not implemented')
-    instantiate = process_lookup(address)
+    if 'instance' in deserialized:
+        instantiate = type(deserialized['instance'])
+    else:
+        process_lookup = protocol_registry.access(protocol)
+        if not process_lookup:
+            raise Exception(f'protocol "{protocol}" not implemented')
+
+        instantiate = process_lookup(address)
+        if not instantiate:
+            raise Exception(f'process "{address}" not found')
 
     config = types.hydrate_state(
         instantiate.config_schema,
@@ -53,15 +60,44 @@ def deserialize_process(serialized, bindings=None, types=None):
         process_interval_schema,
         serialized.get('interval'))
 
-    # this instance always acts like a process no matter
-    # where it is running
-    process = instantiate(config)
-    deserialized = serialized.copy()
-    deserialized['instance'] = process
+    if not 'instance' in deserialized:
+        process = instantiate(config)
+        deserialized['instance'] = process
+
     deserialized['config'] = config
     deserialized['interval'] = interval
 
     return deserialized
+
+    # if 'instance' in deserialized:
+    #     return deserialized
+    # else:
+    #     protocol, address = serialized['address'].split(':', 1)
+
+    #     process_lookup = protocol_registry.access(protocol)
+    #     if not process_lookup:
+    #         raise Exception(f'protocol "{protocol}" not implemented')
+    #     instantiate = process_lookup(address)
+    #     process = instantiate(config)
+    #     deserialized['instance'] = process
+
+    #     return deserialized
+
+
+    # config = types.hydrate_state(
+    #     instantiate.config_schema,
+    #     serialized.get('config', {}))
+
+    # interval = types.deserialize(
+    #     process_interval_schema,
+    #     serialized.get('interval'))
+
+    # # this instance always acts like a process no matter
+    # # where it is running
+    # process = instantiate(config)
+    # deserialized = serialized.copy()
+    # deserialized['config'] = config
+    # deserialized['interval'] = interval
 
 
 def deserialize_step(serialized, bindings=None, types=None):
@@ -148,23 +184,31 @@ class ProcessTypes(TypeSystem):
 
 
     def infer_schema(self, schema, state):
+        '''
+        Given a schema fragment and an existing state with _type keys,
+        return the full schema required to describe that state,
+        and whatever state was hydrated (processes/steps) during this process
+        '''
         schema = schema or {}
-        if isinstance(state, dict):
-            import ipdb; ipdb.set_trace()
+        schema = types.access(schema)
 
+        import ipdb; ipdb.set_trace()
+
+        if isinstance(state, dict):
             if '_type' in state:
                 state_type = state['_type']
+                state_schema = self.access(state_type)
 
                 # TODO: fix is_descendant
                 # if types.type_registry.is_descendant('process', state_schema) or types.registry.is_descendant('step', state_schema):
                 if state_type == 'process' or state_type == 'step':
-                    state_schema = self.access(state_type)
-                    edge_instance = self.deserialize(state_schema, state)
+
                     # TODO: retain the process instance and reuse
+                    state = self.deserialize(state_schema, state)
+
                     # TODO: iterate through process wires and generate
                     #   missing composition for every wire entry
-                    
-                    ports_schema = edge_instance['instance'].schema()
+                    ports_schema = state['instance'].schema()
                     inferred_schema = self.infer_wires(
                         ports_schema,
                         state,
@@ -172,15 +216,15 @@ class ProcessTypes(TypeSystem):
                     
                     return {
                         '_type': state_type,
-                        '_ports': ports_schema}
+                        '_ports': ports_schema}, state
                 else:
-                    return state_type
+                    return state_type, state
             else:
                 inferred_schema = {}
                 for key, value in state.items():
                     # TODO: get missing schema for states from
                     #   the wires and ports of the process
-                    inner_schema = self.infer_schema(
+                    inner_schema, state = self.infer_schema(
                         schema.get(key),
                         value)
 
@@ -189,9 +233,9 @@ class ProcessTypes(TypeSystem):
                     if inner_schema:
                         inferred_schema[key] = inner_schema
 
-                return inferred_schema
+                return inferred_schema, state
         else:
-            return schema
+            return schema, state
         
 
     def hydrate_state(self, schema, state):
@@ -204,6 +248,7 @@ class ProcessTypes(TypeSystem):
         return result
 
     def hydrate(self, schema, state):
+        # TODO: support partial hydration (!)
         hydrated = self.hydrate_state(schema, state)
         return self.fill(schema, hydrated)
 

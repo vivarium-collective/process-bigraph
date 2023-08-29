@@ -256,20 +256,23 @@ class Composite(Process):
         super().__init__(config)
 
         # TODO: default tree should be hydrated, not '{}'
-        composition = self.config.get('composition', {})
+        initial_composition = self.config.get('composition', {})
 
         # TODO: infer full composition
 
         # TODO: hydrate all processes, then perform infer and fill
-        state = self.config.get('state', {})
+        initial_state = self.config.get('state', {})
 
-        composition = types.infer_schema(composition, state)
+        composition, state = types.infer_schema(
+            initial_composition,
+            initial_state)
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
 
         self.state = types.hydrate(
             self.composition,
-            self.config['state'])
+            state)
+            # self.config['state'])
 
         self.global_time = self.config['initial_time']
         self.global_time_precision = self.config['global_time_precision']

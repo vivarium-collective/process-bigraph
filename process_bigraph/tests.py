@@ -132,8 +132,8 @@ def test_infer():
 
 
 if __name__ == '__main__':
-    test_default_config()
-    test_merge_collections()
-    test_process()
-    test_composite()
+    # test_default_config()
+    # test_merge_collections()
+    # test_process()
+    # test_composite()
     test_infer()
