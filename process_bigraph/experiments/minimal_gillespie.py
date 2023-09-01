@@ -124,6 +124,8 @@ class GillespieEvent(Process):
 
 def test_gillespie_composite():
     composite_schema = {
+        # This all gets inferred -------------
+        # ==================================
         # 'composition': {
         #     'interval': {
         #         '_type': 'step',
@@ -135,7 +137,22 @@ def test_gillespie_composite():
         #                     'C': 'float'}},
         #             'outputs': {
         #                 'interval': 'float'}}},
-        #     'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
+        #     'event': {
+        #         '_type': 'process',
+        #         '_ports': {
+        #             'DNA': {
+        #                 'G': 'float'},
+        #             'mRNA': {
+        #                 'C': 'float'}},
+        #             'interval': 'float'}}},
+        #     'emitter': {
+        #         '_type': 'step',
+        #         '_ports': {
+        #             'inputs': {
+        #                 'DNA': {
+        #                     'G': 'float'},
+        #                 'mRNA': {
+        #                     'C': 'float'}}},
         #     'DNA': {
         #         'G': 'float'},
         #     'mRNA': {
@@ -145,6 +162,7 @@ def test_gillespie_composite():
         #         'G': 'float'},
         #     'mRNA': {
         #         'C': 'float'}},
+
         'bridge': {
             'DNA': ['DNA'],
             'mRNA': ['mRNA']},
@@ -159,6 +177,7 @@ def test_gillespie_composite():
                         'mRNA': ['mRNA']},
                     'outputs': {
                         'interval': ['event', 'interval']}}},
+
             'event': {
                 '_type': 'process',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
@@ -167,6 +186,7 @@ def test_gillespie_composite():
                     'DNA': ['DNA'],
                     'mRNA': ['mRNA']},
                 'interval': '3.0'},
+
             'emitter': {
                 '_type': 'step',
                 'address': 'local:console-emitter',
@@ -179,8 +199,10 @@ def test_gillespie_composite():
                     'inputs': {
                         'mRNA': ['mRNA'],
                         'interval': ['event', 'interval']}}},
+
             'DNA': {
                 'G': 13.0},
+
             'mRNA': {
                 'C': '21.0'}}}
 
