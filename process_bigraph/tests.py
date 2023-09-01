@@ -117,18 +117,17 @@ def test_composite():
 
 def test_infer():
     composite = Composite({
-        'composition': {},
         'state': {
             'increase': {
                 '_type': 'process',
                 'address': 'local:!process_bigraph.tests.IncreaseProcess',
                 'config': {'rate': '0.3'},
-                # 'interval': '1.0',
                 'wires': {'level': ['value']}},
             'value': '11.11'}})
 
-    import ipdb; ipdb.set_trace()
-    
+    assert composite.composition['value']['_type'] == 'float'
+    assert composite.state['value'] == 11.11
+
 
 
 if __name__ == '__main__':
