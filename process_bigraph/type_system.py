@@ -243,19 +243,20 @@ class ProcessTypes(TypeSystem):
                         path=path[:-1])
             else:
                 for key, value in state.items():
-                    inner_path = path + (key,)
-                    top_schema, top_state = self.infer_schema(
-                        schema.get(key),
-                        value,
-                        top_schema=top_schema,
-                        top_state=top_state,
-                        path=inner_path)
+                    if key not in schema:
+                        inner_path = path + (key,)
+                        top_schema, top_state = self.infer_schema(
+                            schema.get(key),
+                            value,
+                            top_schema=top_schema,
+                            top_state=top_state,
+                            path=inner_path)
 
         elif isinstance(state, str):
             pass
 
         else:
-            type_schema = TYPE_SCHEMAS.get(state, schema)
+            type_schema = TYPE_SCHEMAS.get(type(state), schema)
 
             peer = get_path(top_schema, path)
             destination = establish_path(

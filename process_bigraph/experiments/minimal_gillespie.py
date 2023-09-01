@@ -9,7 +9,7 @@ general stochastic transcription.
 import os
 import numpy as np
 
-from process_bigraph.composite import types, Step, Process, Composite, Generator
+from process_bigraph.composite import types, Step, Process, Composite
 
 
 class GillespieInterval(Step):
@@ -174,8 +174,6 @@ def test_gillespie_composite():
     gillespie = Composite(composite_schema)
 
     updates = gillespie.update({'DNA': {'G': 11.0}, 'mRNA': {'C': 5.0}}, 10000.0)
-
-    import ipdb; ipdb.set_trace()
 
 
 def test_gillespie_generate():
