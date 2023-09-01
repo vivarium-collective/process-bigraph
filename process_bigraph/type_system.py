@@ -202,15 +202,18 @@ class ProcessTypes(TypeSystem):
         return top_schema
 
 
-    def infer_schema(self, schema, state, top_schema=None, top_state=None, path=None):
+    def infer_schema(self, schema, state, top_state=None, path=None):
         '''
         Given a schema fragment and an existing state with _type keys,
         return the full schema required to describe that state,
         and whatever state was hydrated (processes/steps) during this process
         '''
 
-        schema = types.access(schema or {}) or {}
-        top_schema = top_schema or schema
+        schema = schema or {}
+        # TODO: deal with this
+        if schema == '{}':
+            schema = {}
+
         top_state = top_state or state
         path = path or ()
 
@@ -225,8 +228,8 @@ class ProcessTypes(TypeSystem):
                     path,
                     hydrated_state)
 
-                top_schema = set_path(
-                    top_schema,
+                schema = set_path(
+                    schema,
                     path,
                     {'_type': state_type})
 
@@ -234,8 +237,8 @@ class ProcessTypes(TypeSystem):
                 # if types.type_registry.is_descendant('process', state_schema) or types.registry.is_descendant('step', state_schema):
                 if state_type == 'process' or state_type == 'step':
                     port_schema = hydrated_state['instance'].schema()
-                    top_schema = set_path(
-                        top_schema,
+                    schema = set_path(
+                        schema,
                         path + ('_ports',),
                         port_schema)
 
@@ -244,20 +247,19 @@ class ProcessTypes(TypeSystem):
                         subwires = subwires.get('inputs', {})
                         port_schema = port_schema.get('inputs', {})
 
-                    top_schema = self.infer_wires(
+                    schema = self.infer_wires(
                         port_schema,
                         hydrated_state,
                         subwires,
-                        top_schema=top_schema,
+                        top_schema=schema,
                         path=path[:-1])
             else:
                 for key, value in state.items():
                     inner_path = path + (key,)
-                    if get_path(top_schema, inner_path) is None:
-                        top_schema, top_state = self.infer_schema(
-                            schema.get(key),
+                    if get_path(schema, inner_path) is None:
+                        schema, top_state = self.infer_schema(
+                            schema,
                             value,
-                            top_schema=top_schema,
                             top_state=top_state,
                             path=inner_path)
 
@@ -267,11 +269,11 @@ class ProcessTypes(TypeSystem):
         else:
             type_schema = TYPE_SCHEMAS.get(str(type(state)), schema)
 
-            peer = get_path(top_schema, path)
+            peer = get_path(schema, path)
             destination = establish_path(
                 peer,
                 path[:-1],
-                top=top_schema,
+                top=schema,
                 cursor=path[:-1])
 
             path_key = path[-1]
@@ -281,7 +283,7 @@ class ProcessTypes(TypeSystem):
             else:
                 destination[path_key] = type_schema
 
-        return top_schema, top_state
+        return schema, top_state
         
 
     def infer_edge(self, schema, wires):

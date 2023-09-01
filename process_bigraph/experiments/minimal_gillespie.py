@@ -196,6 +196,8 @@ def test_gillespie_composite():
             'C': 5.0}},
         10000.0)
 
+    assert 'mRNA' in updates[0]
+
 
 def test_stochastic_deterministic_composite():
     # TODO make the demo for a hybrid stochastic/deterministic simulator
