@@ -342,7 +342,7 @@ class Composite(Process):
         absolute = Defer(
             update,
             defer_project, (
-                self.config['composition'],
+                self.composition,
                 self.state,
                 path))
 

@@ -21,8 +21,6 @@ class GillespieInterval(Step):
             '_type': 'float',
             '_default': '1e-1'}}
 
-    def __init__(self, config=None):
-        super().__init__(config)
 
     def schema(self):
         # Step schemas always have 'inputs' and 'outputs' as top level keys
@@ -38,6 +36,7 @@ class GillespieInterval(Step):
                         '_default': '1.0'}}},
             'outputs': {
                 'interval': 'float'}}
+
 
     def update(self, input):
         # retrieve the state values
@@ -125,22 +124,22 @@ class GillespieEvent(Process):
 
 def test_gillespie_composite():
     composite_schema = {
-        'composition': {
-            'interval': {
-                '_type': 'step',
-                '_ports': {
-                    'inputs': {
-                        'DNA': {
-                            'G': 'float'},
-                        'mRNA': {
-                            'C': 'float'}},
-                    'outputs': {
-                        'interval': 'float'}}},
-            'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
-            'DNA': {
-                'G': 'float'},
-            'mRNA': {
-                'C': 'float'}},
+        # 'composition': {
+        #     'interval': {
+        #         '_type': 'step',
+        #         '_ports': {
+        #             'inputs': {
+        #                 'DNA': {
+        #                     'G': 'float'},
+        #                 'mRNA': {
+        #                     'C': 'float'}},
+        #             'outputs': {
+        #                 'interval': 'float'}}},
+        #     'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
+            # 'DNA': {
+            #     'G': 'float'},
+            # 'mRNA': {
+            #     'C': 'float'}},
         'schema': {
             'DNA': {
                 'G': 'float'},
@@ -151,6 +150,7 @@ def test_gillespie_composite():
             'mRNA': ['mRNA']},
         'state': {
             'interval': {
+                '_type': 'step',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
                 'config': {'ktsc': '6e0'},
                 'wires': {
@@ -160,12 +160,25 @@ def test_gillespie_composite():
                     'outputs': {
                         'interval': ['event', 'interval']}}},
             'event': {
+                '_type': 'process',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
                 'config': {'ktsc': '6e0'},
                 'wires': {
                     'DNA': ['DNA'],
                     'mRNA': ['mRNA']},
                 'interval': '3.0'},
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:console-emitter',
+                'config': {
+                    'ports': {
+                        'inputs': {
+                            'mRNA': {'C': 'float'},
+                            'interval': 'float'}}},
+                'wires': {
+                    'inputs': {
+                        'mRNA': ['mRNA'],
+                        'interval': ['event', 'interval']}}},
             'DNA': {
                 'G': '13.0'},
             'mRNA': {
@@ -175,25 +188,27 @@ def test_gillespie_composite():
 
     updates = gillespie.update({'DNA': {'G': 11.0}, 'mRNA': {'C': 5.0}}, 10000.0)
 
+    import ipdb; ipdb.set_trace()
+
 
 def test_gillespie_generate():
-    GillespieComposite = Generator({
-        'composition': {
-            'interval': {
-                '_type': 'step',
-                '_ports': {
-                    'inputs': {
-                        'DNA': {
-                            'G': 'float'},
-                        'mRNA': {
-                            'C': 'float'}},
-                    'outputs': {
-                        'interval': 'float'}}},
-            'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
-            'DNA': {
-                'G': 'float'},
-            'mRNA': {
-                'C': 'float'}},
+    composite = {
+        # 'composition': {
+        #     'interval': {
+        #         '_type': 'step',
+        #         '_ports': {
+        #             'inputs': {
+        #                 'DNA': {
+        #                     'G': 'float'},
+        #                 'mRNA': {
+        #                     'C': 'float'}},
+        #             'outputs': {
+        #                 'interval': 'float'}}},
+        #     'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
+        #     'DNA': {
+        #         'G': 'float'},
+        #     'mRNA': {
+        #         'C': 'float'}},
         'schema': {
             'DNA': {
                 'G': 'float'},
@@ -220,14 +235,29 @@ def test_gillespie_generate():
                     'DNA': ['DNA'],
                     'mRNA': ['mRNA']},
                 'interval': '3.0'},
+            'emitter': {
+                'address': 'local:console-emitter',
+                'config': {
+                    'ports': {
+                        'mRNA': {'C': 'float'},
+                        'interval': 'float'}},
+                'wires': {
+                    'inputs': {
+                        'mRNA': ['mRNA'],
+                        'interval': ['interval', 'interval']}}},
             'DNA': {
                 'G': '13.0'},
             'mRNA': {
-                'C': '21.0'}}})
+                'C': '21.0'}}}
 
-    gillespie = GillespieComposite({})
+    gillespie = Composite(composite)
 
-    gillespie.update({'DNA': {'G': 11.0}, 'mRNA': {'C': 5.0}}, 10000.0)
+    gillespie.update({
+        'DNA': {'G': 11.0},
+        'mRNA': {'C': 5.0}},
+        10000.0)
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_stochastic_deterministic_composite():

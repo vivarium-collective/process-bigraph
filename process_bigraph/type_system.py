@@ -163,6 +163,7 @@ class ProcessTypes(TypeSystem):
 
 
     def infer_wires(self, schema, ports, state, wires, top_schema=None, path=None):
+        schema = schema or {}
         top_schema = top_schema or schema
         path = path or ()
 
@@ -171,7 +172,7 @@ class ProcessTypes(TypeSystem):
             if isinstance(port_wires, dict):
                 top_schema = self.infer_wires(
                     schema.get(port_key, {}),
-                    port_schema,
+                    ports,
                     state.get(port_key),
                     port_wires,
                     top_schema,
@@ -186,6 +187,9 @@ class ProcessTypes(TypeSystem):
                     port_wires[:-1],
                     top=top_schema,
                     cursor=path[:-1])
+
+                if len(port_wires) == 0:
+                    raise Exception(f'no wires at port "{port_key}" in ports {ports} with state {state}')
 
                 destination_key = port_wires[-1]
                 if destination_key in destination:
@@ -204,7 +208,7 @@ class ProcessTypes(TypeSystem):
         and whatever state was hydrated (processes/steps) during this process
         '''
 
-        schema = types.access(schema or {})
+        schema = types.access(schema or {}) or {}
         top_schema = top_schema or schema
         top_state = top_state or state
         path = path or ()
@@ -234,11 +238,16 @@ class ProcessTypes(TypeSystem):
                         path + ('_ports',),
                         port_schema)
 
+                    subwires = hydrated_state['wires']
+                    if state_type == 'step':
+                        subwires = subwires.get('inputs', {})
+                        port_schema = port_schema.get('inputs', {})
+
                     top_schema = self.infer_wires(
                         schema,
                         port_schema,
                         hydrated_state,
-                        hydrated_state['wires'],
+                        subwires,
                         top_schema=top_schema,
                         path=path[:-1])
             else:
@@ -256,7 +265,7 @@ class ProcessTypes(TypeSystem):
             pass
 
         else:
-            type_schema = TYPE_SCHEMAS.get(type(state), schema)
+            type_schema = TYPE_SCHEMAS.get(str(type(state)), schema)
 
             peer = get_path(top_schema, path)
             destination = establish_path(
@@ -279,9 +288,21 @@ class ProcessTypes(TypeSystem):
         if isinstance(state, str) or '_deserialize' in schema:
             result = self.deserialize(schema, state)
         elif isinstance(state, dict):
-            result = {
-                key: self.hydrate_state(schema[key], state[key])
-                for key, value in state.items()}
+            if isinstance(schema, str):
+                schema = self.access(schema)
+                return self.hydrate_state(schema, state)
+            else:
+                result = {}
+                for key, value in state.items():
+                    if key in schema:
+                        subschema = schema[key]
+                    else:
+                        import ipdb; ipdb.set_trace()
+                        subschema = schema
+
+                    result[key] = self.hydrate_state(
+                        subschema,
+                        state.get(key))
         else:
             result = state
 
