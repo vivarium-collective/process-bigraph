@@ -290,6 +290,9 @@ class ProcessTypes(TypeSystem):
         schema = schema or {}
         edge = {}
 
+        if isinstance(wires, str):
+            import ipdb; ipdb.set_trace()
+
         for port_key, wire in wires.items():
             if isinstance(wire, dict):
                 edge[port_key] = self.infer_edge(

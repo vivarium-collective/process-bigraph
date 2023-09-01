@@ -166,6 +166,7 @@ def test_gillespie_composite():
         'bridge': {
             'DNA': ['DNA'],
             'mRNA': ['mRNA']},
+
         'state': {
             'interval': {
                 '_type': 'step',
@@ -187,6 +188,11 @@ def test_gillespie_composite():
                     'mRNA': ['mRNA']},
                 'interval': '3.0'},
 
+            # TODO: provide a way to emit everything:
+            # 'emitter': emit_all(
+            #     'console-emitter',
+            #     exclusions={'DNA': {}}),
+
             'emitter': {
                 '_type': 'step',
                 'address': 'local:console-emitter',
@@ -198,18 +204,25 @@ def test_gillespie_composite():
                 'wires': {
                     'inputs': {
                         'mRNA': ['mRNA'],
-                        'interval': ['event', 'interval']}}},
+                        'interval': ['event', 'interval']}}}}}
 
-            'DNA': {
-                'G': 13.0},
+            # TODO: make us able to wire to the top with '**'
+            # 'ram': {
+            #     '_type': 'step',
+            #     'address': 'local:ram-emitter',
+            #     'config': {
+            #         'ports': {
+            #             'inputs': 'tree[any]'}},
+            #     'wires': {
+            #         'inputs': '**'}}}}
 
-            'mRNA': {
-                'C': '21.0'}}}
+            # 'DNA': {
+            #     'G': 13.0},
+
+            # 'mRNA': {
+            #     'C': '21.0'}}}
 
     gillespie = Composite(composite_schema)
-
-    assert gillespie.state['mRNA']['C'] == 21.0
-    assert gillespie.state['DNA']['G'] == 13.0
 
     updates = gillespie.update({
         'DNA': {
@@ -217,6 +230,11 @@ def test_gillespie_composite():
         'mRNA': {
             'C': 5.0}},
         10000.0)
+
+    import ipdb; ipdb.set_trace()
+
+    # TODO: make this work
+    # gillespie.gather_results([('ram',)])
 
     assert 'mRNA' in updates[0]
 

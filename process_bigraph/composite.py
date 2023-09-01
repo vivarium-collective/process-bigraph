@@ -286,6 +286,10 @@ class Composite(Process):
             self.state,
             'process_bigraph.composite.Step')
 
+        self.emitter_paths = find_instance_paths(
+            self.state,
+            'process_bigraph.emitter.Emitter')
+
         self.step_triggers = {}
 
         for step_path, step in self.step_paths.items():
@@ -543,6 +547,15 @@ class Composite(Process):
             self.apply_updates(updates)
         else:
             self.steps_run = set([])
+
+
+    def gather_results(self, paths):
+        results = {}
+        for path in paths:
+            emitter = get_path(self.state, path)
+            results[path] = emitter['instance'].query()
+        return results
+
 
     def update(self, state, interval):
         # do everything
