@@ -257,12 +257,19 @@ class Composite(Process):
 
         initial_composition = self.config.get('composition', {})
         initial_state = self.config.get('state', {})
+        initial_schema = types.access(
+            self.config.get('schema', {})) or {}
+        self.bridge = self.config.get('bridge', {})
 
         composition, state = types.infer_schema(
             initial_composition,
             initial_state)
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
+
+        self.process_schema = types.infer_edge(
+            self.composition,
+            self.bridge)
 
         self.state = types.hydrate(
             self.composition,
@@ -299,7 +306,7 @@ class Composite(Process):
         self.run_steps(self.step_triggers.keys())
 
     def schema(self):
-        return self.config['schema']
+        return self.process_schema
 
     def process_update(
             self,
@@ -429,8 +436,8 @@ class Composite(Process):
                     update)
 
                 bridge_update = types.view(
-                    self.config['schema'],
-                    self.config['bridge'],
+                    self.process_schema,
+                    self.bridge,
                     (),
                     update)
 
@@ -542,7 +549,7 @@ class Composite(Process):
 
         projection = types.project(
             self.schema(),
-            self.config['bridge'],
+            self.bridge,
             [],
             state)
 

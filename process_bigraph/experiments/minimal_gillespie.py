@@ -136,15 +136,15 @@ def test_gillespie_composite():
         #             'outputs': {
         #                 'interval': 'float'}}},
         #     'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
-            # 'DNA': {
-            #     'G': 'float'},
-            # 'mRNA': {
-            #     'C': 'float'}},
-        'schema': {
-            'DNA': {
-                'G': 'float'},
-            'mRNA': {
-                'C': 'float'}},
+        #     'DNA': {
+        #         'G': 'float'},
+        #     'mRNA': {
+        #         'C': 'float'}},
+        # 'schema': {
+        #     'DNA': {
+        #         'G': 'float'},
+        #     'mRNA': {
+        #         'C': 'float'}},
         'bridge': {
             'DNA': ['DNA'],
             'mRNA': ['mRNA']},
@@ -162,7 +162,7 @@ def test_gillespie_composite():
             'event': {
                 '_type': 'process',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
-                'config': {'ktsc': '6e0'},
+                'config': {'ktsc': 6e0},
                 'wires': {
                     'DNA': ['DNA'],
                     'mRNA': ['mRNA']},
@@ -180,84 +180,21 @@ def test_gillespie_composite():
                         'mRNA': ['mRNA'],
                         'interval': ['event', 'interval']}}},
             'DNA': {
-                'G': '13.0'},
+                'G': 13.0},
             'mRNA': {
                 'C': '21.0'}}}
 
     gillespie = Composite(composite_schema)
 
-    updates = gillespie.update({'DNA': {'G': 11.0}, 'mRNA': {'C': 5.0}}, 10000.0)
+    assert gillespie.state['mRNA']['C'] == 21.0
+    assert gillespie.state['DNA']['G'] == 13.0
 
-    import ipdb; ipdb.set_trace()
-
-
-def test_gillespie_generate():
-    composite = {
-        # 'composition': {
-        #     'interval': {
-        #         '_type': 'step',
-        #         '_ports': {
-        #             'inputs': {
-        #                 'DNA': {
-        #                     'G': 'float'},
-        #                 'mRNA': {
-        #                     'C': 'float'}},
-        #             'outputs': {
-        #                 'interval': 'float'}}},
-        #     'event': 'process[DNA.G:float|mRNA.C:float]',  # shouldn't this just automatically be the inputs? because of step type
-        #     'DNA': {
-        #         'G': 'float'},
-        #     'mRNA': {
-        #         'C': 'float'}},
-        'schema': {
-            'DNA': {
-                'G': 'float'},
-            'mRNA': {
-                'C': 'float'}},
-        'bridge': {
-            'DNA': ['DNA'],
-            'mRNA': ['mRNA']},
-        'state': {
-            'interval': {
-                
-                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
-                'config': {'ktsc': '6e0'},
-                'wires': {
-                    'inputs': {
-                        'DNA': ['DNA'],
-                        'mRNA': ['mRNA']},
-                    'outputs': {
-                        'interval': ['event', 'interval']}}},
-            'event': {
-                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
-                'config': {'ktsc': '6e0'},
-                'wires': {
-                    'DNA': ['DNA'],
-                    'mRNA': ['mRNA']},
-                'interval': '3.0'},
-            'emitter': {
-                'address': 'local:console-emitter',
-                'config': {
-                    'ports': {
-                        'mRNA': {'C': 'float'},
-                        'interval': 'float'}},
-                'wires': {
-                    'inputs': {
-                        'mRNA': ['mRNA'],
-                        'interval': ['interval', 'interval']}}},
-            'DNA': {
-                'G': '13.0'},
-            'mRNA': {
-                'C': '21.0'}}}
-
-    gillespie = Composite(composite)
-
-    gillespie.update({
-        'DNA': {'G': 11.0},
-        'mRNA': {'C': 5.0}},
+    updates = gillespie.update({
+        'DNA': {
+            'G': 11.0},
+        'mRNA': {
+            'C': 5.0}},
         10000.0)
-
-    import ipdb; ipdb.set_trace()
 
 
 def test_stochastic_deterministic_composite():

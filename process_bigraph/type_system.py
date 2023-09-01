@@ -162,16 +162,17 @@ class ProcessTypes(TypeSystem):
     #     return {}
 
 
-    def infer_wires(self, schema, ports, state, wires, top_schema=None, path=None):
-        schema = schema or {}
-        top_schema = top_schema or schema
+    def infer_wires(self, ports, state, wires, top_schema=None, path=None):
+        top_schema = top_schema or {}
         path = path or ()
 
-        for port_key, port_schema in ports.items():
-            port_wires = wires.get(port_key, ())
+        for port_key, port_wires in wires.items():
+            if isinstance(ports, str):
+                import ipdb; ipdb.set_trace()
+            port_schema = ports.get(port_key, {})
+            # port_wires = wires.get(port_key, ())
             if isinstance(port_wires, dict):
                 top_schema = self.infer_wires(
-                    schema.get(port_key, {}),
                     ports,
                     state.get(port_key),
                     port_wires,
@@ -244,7 +245,6 @@ class ProcessTypes(TypeSystem):
                         port_schema = port_schema.get('inputs', {})
 
                     top_schema = self.infer_wires(
-                        schema,
                         port_schema,
                         hydrated_state,
                         subwires,
@@ -252,8 +252,8 @@ class ProcessTypes(TypeSystem):
                         path=path[:-1])
             else:
                 for key, value in state.items():
-                    if key not in schema:
-                        inner_path = path + (key,)
+                    inner_path = path + (key,)
+                    if get_path(top_schema, inner_path) is None:
                         top_schema, top_state = self.infer_schema(
                             schema.get(key),
                             value,
@@ -283,6 +283,22 @@ class ProcessTypes(TypeSystem):
 
         return top_schema, top_state
         
+
+    def infer_edge(self, schema, wires):
+        schema = schema or {}
+        edge = {}
+
+        for port_key, wire in wires.items():
+            if isinstance(wire, dict):
+                edge[port_key] = self.infer_edge(
+                    schema.get(port_key, {}),
+                    wire)
+            else:
+                subschema = get_path(schema, wire)
+                edge[port_key] = subschema
+
+        return edge
+
 
     def hydrate_state(self, schema, state):
         if isinstance(state, str) or '_deserialize' in schema:
