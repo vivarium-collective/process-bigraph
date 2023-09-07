@@ -38,6 +38,12 @@ class GillespieInterval(Step):
                 'interval': 'float'}}
 
 
+    def initial_state(self, config=None):
+        return {
+            'mRNA': {
+                'C': 2.0}}
+
+
     def update(self, input):
         # retrieve the state values
         g = input['DNA']['G']
@@ -69,9 +75,17 @@ class GillespieEvent(Process):
             '_type': 'float',
             '_default': '1e-1'}}
 
+
     def __init__(self, config=None):
         super().__init__(config)
         self.stoichiometry = np.array([[0, 1], [0, -1]])
+
+
+    def initial_state(self, config=None):
+        return {
+            'DNA': {
+                'G': 3.0}}
+
 
     def schema(self):
         return {
@@ -83,6 +97,7 @@ class GillespieEvent(Process):
                 'C': {
                     '_type': 'float',
                     '_default': '1.0'}}}
+
 
     def next_reaction(self, x):
         """get the next reaction and return a new state"""
@@ -101,6 +116,7 @@ class GillespieEvent(Process):
                 break
         x += self.stoichiometry[i]
         return x
+
 
     def update(self, state, interval):
 

@@ -42,7 +42,14 @@ class SyncUpdate():
         return self.update
 
 
-class Step:
+# TODO: create base class for Step and Process
+#   maybe it comes from bigraph-schema?
+class Edge:
+    def __init__(self):
+        pass
+
+
+class Step(Edge):
     """Step base class."""
     # TODO: support trigger every time
     #   as well as dependency trigger
@@ -59,6 +66,36 @@ class Step:
     def schema(self):
         return {}
 
+    def initial_state(self):
+        return {}
+        # initial = {}
+        # return types.fill(
+        #     self.schema(),
+        #     initial)
+
+
+    def project_state(self, ports, wires, path, state):
+        inputs = {}
+        if 'inputs' in ports and 'inputs' in wires:
+            inputs = types.project(
+                ports['inputs'],
+                wires['inputs'],
+                path,
+                state)
+
+        outputs = {}
+        if 'outputs' in ports and 'outputs' in wires:
+            outputs = types.project(
+                ports['outputs'],
+                wires['outputs'],
+                path,
+                state)
+
+        result = deep_merge(inputs, outputs)
+        
+        return result
+
+
     def invoke(self, state, _=None):
         update = self.update(state)
         sync = SyncUpdate(update)
@@ -69,7 +106,7 @@ class Step:
         return {}
 
 
-class Process:
+class Process(Edge):
     """Process parent class.
 
       All :term:`process` classes must inherit from this class. Each
@@ -100,11 +137,19 @@ class Process:
     def schema(self):
         return {}
 
-    def initial_state(self, initial=None):
-        initial = initial or {}
-        return types.fill(
-            self.schema(),
-            initial)
+    def initial_state(self):
+        return {}
+        # initial = {}
+        # return types.fill(
+        #     self.schema(),
+        #     initial)
+
+    def project_state(self, ports, wires, path, state):
+        return types.project(
+            ports,
+            wires,
+            path,
+            state)
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
@@ -267,28 +312,46 @@ class Composite(Process):
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
 
+        # TODO: use process/step instances to generate initial state
+        #   prefer initial state from config
+        #   finally, fill in state from composition
+
+        self.process_paths = find_instance_paths(
+            state,
+            'process_bigraph.composite.Process')
+
+        self.step_paths = find_instance_paths(
+            state,
+            'process_bigraph.composite.Step')
+
+        # self.emitter_paths = find_instance_paths(
+        #     state,
+        #     'process_bigraph.emitter.Emitter')
+
+        self.edge_paths = self.process_paths.copy()
+        self.edge_paths.update(self.step_paths)
+
+        edge_states = []
+        for path, edge in self.edge_paths.items():
+            initial = types.initialize_edge_state(
+                self.composition,
+                path,
+                edge)
+
+            edge_states.append(initial)
+
+        # calling hydrate here assumes all processes have already been
+        # deserialized in the call to infer_schema above.
+        self.state = types.hydrate(
+            self.composition,
+            initialized)
+
         self.process_schema = types.infer_edge(
             self.composition,
             self.bridge)
 
-        self.state = types.hydrate(
-            self.composition,
-            state)
-
         self.global_time = self.config['initial_time']
         self.global_time_precision = self.config['global_time_precision']
-
-        self.process_paths = find_instance_paths(
-            self.state,
-            'process_bigraph.composite.Process')
-
-        self.step_paths = find_instance_paths(
-            self.state,
-            'process_bigraph.composite.Step')
-
-        self.emitter_paths = find_instance_paths(
-            self.state,
-            'process_bigraph.emitter.Emitter')
 
         self.step_triggers = {}
 

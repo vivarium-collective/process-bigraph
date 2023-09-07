@@ -237,6 +237,7 @@ class ProcessTypes(TypeSystem):
                 # if types.type_registry.is_descendant('process', state_schema) or types.registry.is_descendant('step', state_schema):
                 if state_type == 'process' or state_type == 'step':
                     port_schema = hydrated_state['instance'].schema()
+
                     schema = set_path(
                         schema,
                         path + ('_ports',),
@@ -304,6 +305,19 @@ class ProcessTypes(TypeSystem):
 
         return edge
 
+
+    def initialize_edge_state(self, schema, path, edge):
+        import ipdb; ipdb.set_trace()
+
+        initial_state = edge['instance'].initial_state()
+        ports = get_path(schema, path + ('_ports',))
+
+        return edge['instance'].project_state(
+            ports,
+            edge['wires'],
+            path[:-1],
+            initial_state)
+        
 
     def hydrate_state(self, schema, state):
         if isinstance(state, str) or '_deserialize' in schema:
