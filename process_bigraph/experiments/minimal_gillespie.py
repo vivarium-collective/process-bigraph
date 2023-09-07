@@ -38,7 +38,7 @@ class GillespieInterval(Step):
                 'interval': 'float'}}
 
 
-    def initial_state(self, config=None):
+    def initial_state(self):
         return {
             'mRNA': {
                 'C': 2.0}}
@@ -81,7 +81,7 @@ class GillespieEvent(Process):
         self.stoichiometry = np.array([[0, 1], [0, -1]])
 
 
-    def initial_state(self, config=None):
+    def initial_state(self):
         return {
             'DNA': {
                 'G': 3.0}}
@@ -89,14 +89,17 @@ class GillespieEvent(Process):
 
     def schema(self):
         return {
-            'DNA': {
-                'G': {
-                    '_type': 'float',
-                    '_default': '1.0'}},
-            'mRNA': {
-                'C': {
-                    '_type': 'float',
-                    '_default': '1.0'}}}
+            'DNA': 'tree[float]',
+            'mRNA': 'tree[float]'}
+
+            # 'DNA': {
+            #     'G': {
+            #         '_type': 'float',
+            #         '_default': '1.0'}},
+            # 'mRNA': {
+            #     'C': {
+            #         '_type': 'float',
+            #         '_default': '1.0'}}}
 
 
     def next_reaction(self, x):
@@ -184,6 +187,15 @@ def test_gillespie_composite():
             'mRNA': ['mRNA']},
 
         'state': {
+            'event': {
+                '_type': 'process',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
+                'config': {'ktsc': 6e0},
+                'wires': {
+                    'DNA': ['DNA'],
+                    'mRNA': ['mRNA']},
+                'interval': '3.0'},
+
             'interval': {
                 '_type': 'step',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
@@ -194,15 +206,6 @@ def test_gillespie_composite():
                         'mRNA': ['mRNA']},
                     'outputs': {
                         'interval': ['event', 'interval']}}},
-
-            'event': {
-                '_type': 'process',
-                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
-                'config': {'ktsc': 6e0},
-                'wires': {
-                    'DNA': ['DNA'],
-                    'mRNA': ['mRNA']},
-                'interval': '3.0'},
 
             # TODO: provide a way to emit everything:
             # 'emitter': emit_all(
@@ -215,7 +218,7 @@ def test_gillespie_composite():
                 'config': {
                     'ports': {
                         'inputs': {
-                            'mRNA': {'C': 'float'},
+                            'mRNA': 'tree[float]',
                             'interval': 'float'}}},
                 'wires': {
                     'inputs': {
