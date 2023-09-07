@@ -312,16 +312,15 @@ class Composite(Process):
             self.config.get('schema', {})) or {}
         self.bridge = self.config.get('bridge', {})
 
+        # fill in the parts of the composition schema
+        # determined by the state
         composition, state = types.infer_schema(
             initial_composition,
             initial_state)
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
 
-        # TODO: use process/step instances to generate initial state
-        #   prefer initial state from config
-        #   finally, fill in state from composition
-
+        # find all processes, steps, and emitters in the state
         self.process_paths = find_instance_paths(
             state,
             'process_bigraph.composite.Process')
@@ -330,13 +329,18 @@ class Composite(Process):
             state,
             'process_bigraph.composite.Step')
 
-        # self.emitter_paths = find_instance_paths(
-        #     state,
-        #     'process_bigraph.emitter.Emitter')
+        self.emitter_paths = find_instance_paths(
+            state,
+            'process_bigraph.emitter.Emitter')
 
+        # merge the processes and steps into a single "edges" dict
         self.edge_paths = self.process_paths.copy()
         self.edge_paths.update(self.step_paths)
 
+        # get the initial_state() for each edge and merge
+        # them all together, validating that there are no
+        # contradictions in the state (paths from initial_state
+        # that conflict/have different values at the same path)
         edge_state = {}
         for path, edge in self.edge_paths.items():
             initial = types.initialize_edge_state(
@@ -349,8 +353,6 @@ class Composite(Process):
             except:
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
-
-            import ipdb; ipdb.set_trace()
 
         state = deep_merge(edge_state, state)
 
