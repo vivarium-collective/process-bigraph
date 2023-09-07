@@ -307,8 +307,6 @@ class ProcessTypes(TypeSystem):
 
 
     def initialize_edge_state(self, schema, path, edge):
-        import ipdb; ipdb.set_trace()
-
         initial_state = edge['instance'].initial_state()
         ports = get_path(schema, path + ('_ports',))
 

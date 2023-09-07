@@ -9,7 +9,7 @@ import copy
 import math
 import collections
 from typing import Dict
-from bigraph_schema.registry import deep_merge, get_path
+from bigraph_schema.registry import deep_merge, validate_merge, get_path
 from process_bigraph.type_system import types
 from process_bigraph.protocols import local_lookup_module
 
@@ -133,9 +133,11 @@ class Process(Edge):
             self.config_schema,
             config)
 
+
     @abc.abstractmethod
     def schema(self):
         return {}
+
 
     def initial_state(self):
         return {}
@@ -144,6 +146,7 @@ class Process(Edge):
         #     self.schema(),
         #     initial)
 
+
     def project_state(self, ports, wires, path, state):
         return types.project(
             ports,
@@ -151,14 +154,17 @@ class Process(Edge):
             path,
             state)
 
+
     def invoke(self, state, interval):
         update = self.update(state, interval)
         sync = SyncUpdate(update)
         return sync
 
+
     @abc.abstractmethod
     def update(self, state, interval):
         return {}
+
 
     # TODO: should we include run(interval) here?
     #   process would have to maintain state
@@ -331,20 +337,28 @@ class Composite(Process):
         self.edge_paths = self.process_paths.copy()
         self.edge_paths.update(self.step_paths)
 
-        edge_states = []
+        edge_state = {}
         for path, edge in self.edge_paths.items():
             initial = types.initialize_edge_state(
                 self.composition,
                 path,
                 edge)
 
-            edge_states.append(initial)
+            try:
+                edge_state = validate_merge(edge_state, initial)
+            except:
+                raise Exception(
+                    f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
+
+            import ipdb; ipdb.set_trace()
+
+        state = deep_merge(edge_state, state)
 
         # calling hydrate here assumes all processes have already been
         # deserialized in the call to infer_schema above.
         self.state = types.hydrate(
             self.composition,
-            initialized)
+            state)
 
         self.process_schema = types.infer_edge(
             self.composition,
