@@ -1,3 +1,6 @@
+import copy
+from bigraph_schema import get_path, set_path
+
 from process_bigraph.composite import Step, Process
 from process_bigraph import process_registry
 
@@ -38,10 +41,18 @@ class RAMEmitter(Emitter):
 
 
     def update(self, state):
-        self.history.append(state)
+        self.history.append(copy.deepcopy(state))
 
         return {}
 
 
     def query(self, query=None):
-        return self.history
+        if isinstance(query, list):
+            result = {}
+            for path in query:
+                element = get_path(self.history, path)
+                result = set_path(result, path, element)
+        else:
+            result = self.history
+
+        return result

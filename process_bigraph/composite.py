@@ -55,11 +55,13 @@ class Step(Edge):
     #   as well as dependency trigger
     config_schema = {}
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, local_types=None):
+        self.types = local_types or types
+
         if config is None:
             config = {}
 
-        self.config = types.fill(
+        self.config = self.types.fill(
             self.config_schema,
             config)
 
@@ -77,7 +79,7 @@ class Step(Edge):
     def project_state(self, ports, wires, path, state):
         inputs = {}
         if 'inputs' in ports and 'inputs' in wires:
-            inputs = types.project(
+            inputs = self.types.project(
                 ports['inputs'],
                 wires['inputs'],
                 path,
@@ -85,7 +87,7 @@ class Step(Edge):
 
         outputs = {}
         if 'outputs' in ports and 'outputs' in wires:
-            outputs = types.project(
+            outputs = self.types.project(
                 ports['outputs'],
                 wires['outputs'],
                 path,
@@ -125,11 +127,12 @@ class Process(Edge):
     """
     config_schema = {}
 
-    def __init__(self, config=None):
+    def __init__(self, config=None, local_types=None):
+        self.types = local_types or types
         if config is None:
             config = {}
 
-        self.config = types.fill(
+        self.config = self.types.fill(
             self.config_schema,
             config)
 
@@ -148,7 +151,7 @@ class Process(Edge):
 
 
     def project_state(self, ports, wires, path, state):
-        return types.project(
+        return self.types.project(
             ports,
             wires,
             path,
@@ -303,8 +306,8 @@ class Composite(Process):
     }
 
     # TODO: if processes are serialized, deserialize them first
-    def __init__(self, config=None):
-        super().__init__(config)
+    def __init__(self, config=None, local_types=None):
+        super().__init__(config, local_types)
 
         initial_composition = self.config.get('composition', {})
         initial_state = self.config.get('state', {})
@@ -317,6 +320,7 @@ class Composite(Process):
         composition, state = types.infer_schema(
             initial_composition,
             initial_state)
+        # TODO: add flag to types.access(copy=True)
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
 
@@ -349,7 +353,7 @@ class Composite(Process):
                 edge)
 
             try:
-                edge_state = validate_merge(edge_state, initial)
+                edge_state = validate_merge(state, edge_state, initial)
             except:
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
@@ -628,11 +632,20 @@ class Composite(Process):
             self.steps_run = set([])
 
 
-    def gather_results(self, paths):
+    def gather_results(self, queries=None):
+        '''
+        a map of paths to emitters --> queries for the emitter at that path
+        '''
+
+        if queries is None:
+            queries = {
+                path: None
+                for path in self.emitter_paths.keys()}
+
         results = {}
-        for path in paths:
+        for path, query in queries.items():
             emitter = get_path(self.state, path)
-            results[path] = emitter['instance'].query()
+            results[path] = emitter['instance'].query(query)
         return results
 
 

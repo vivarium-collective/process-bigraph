@@ -83,6 +83,7 @@ class GillespieEvent(Process):
 
     def initial_state(self):
         return {
+            'mRNA': {'C': 11.111},
             'DNA': {
                 'G': 3.0}}
 
@@ -187,6 +188,7 @@ def test_gillespie_composite():
             'mRNA': ['mRNA']},
 
         'state': {
+            'mRNA': {'C': 23.0},
             'event': {
                 '_type': 'process',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
@@ -214,7 +216,7 @@ def test_gillespie_composite():
 
             'emitter': {
                 '_type': 'step',
-                'address': 'local:console-emitter',
+                'address': 'local:ram-emitter',
                 'config': {
                     'ports': {
                         'inputs': {
