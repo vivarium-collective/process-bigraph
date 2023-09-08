@@ -189,15 +189,6 @@ def test_gillespie_composite():
 
         'state': {
             'mRNA': {'C': 23.0},
-            'event': {
-                '_type': 'process',
-                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
-                'config': {'ktsc': 6e0},
-                'wires': {
-                    'DNA': ['DNA'],
-                    'mRNA': ['mRNA']},
-                'interval': '3.0'},
-
             'interval': {
                 '_type': 'step',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
@@ -209,10 +200,14 @@ def test_gillespie_composite():
                     'outputs': {
                         'interval': ['event', 'interval']}}},
 
-            # TODO: provide a way to emit everything:
-            # 'emitter': emit_all(
-            #     'console-emitter',
-            #     exclusions={'DNA': {}}),
+            'event': {
+                '_type': 'process',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
+                'config': {'ktsc': 6e0},
+                'wires': {
+                    'DNA': ['DNA'],
+                    'mRNA': ['mRNA']},
+                'interval': '3.0'},
 
             'emitter': {
                 '_type': 'step',
@@ -226,6 +221,11 @@ def test_gillespie_composite():
                     'inputs': {
                         'mRNA': ['mRNA'],
                         'interval': ['event', 'interval']}}}}}
+
+            # TODO: provide a way to emit everything:
+            # 'emitter': emit_all(
+            #     'console-emitter',
+            #     exclusions={'DNA': {}}),
 
             # TODO: make us able to wire to the top with '**'
             # 'ram': {
@@ -245,14 +245,14 @@ def test_gillespie_composite():
 
     gillespie = Composite(composite_schema)
 
+    import ipdb; ipdb.set_trace()
+
     updates = gillespie.update({
         'DNA': {
             'G': 11.0},
         'mRNA': {
             'C': 5.0}},
         10000.0)
-
-    import ipdb; ipdb.set_trace()
 
     # TODO: make this work
     # gillespie.gather_results([('ram',)])
