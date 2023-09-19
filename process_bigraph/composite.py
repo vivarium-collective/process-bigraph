@@ -301,7 +301,6 @@ class Composite(Process):
         'state': 'tree[any]',
         'schema': 'tree[any]',
         'bridge': 'wires',
-        'initial_time': 'float',
         'global_time_precision': 'maybe[float]',
     }
 
@@ -312,7 +311,11 @@ class Composite(Process):
         initial_composition = self.config.get('composition', {})
         if 'global_time' not in initial_composition:
             initial_composition['global_time'] = 'float'
+
         initial_state = self.config.get('state', {})
+        if 'global_time' not in initial_state:
+            initial_state['global_time'] = 0.0
+
         initial_schema = types.access(
             self.config.get('schema', {})) or {}
         self.bridge = self.config.get('bridge', {})
@@ -372,7 +375,6 @@ class Composite(Process):
             self.composition,
             self.bridge)
 
-        self.global_time = self.config['initial_time']
         self.global_time_precision = self.config['global_time_precision']
 
         self.step_triggers = {}
@@ -387,7 +389,7 @@ class Composite(Process):
         self.steps_run = set([])
 
         self.front: Dict = {
-            path: empty_front(self.global_time)
+            path: empty_front(self.state['global_time'])
             for path in self.process_paths}
 
         self.bridge_updates = []
@@ -446,9 +448,9 @@ class Composite(Process):
 
     def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
-            self.front[path] = empty_front(self.global_time)
+            self.front[path] = empty_front(self.state['global_time'])
         process_time = self.front[path]['time']
-        if process_time <= self.global_time:
+        if process_time <= self.state['global_time']:
             if self.front[path].get('future'):
                 future_front = self.front[path]['future']
                 process_interval = future_front['interval']
@@ -487,18 +489,18 @@ class Composite(Process):
                 self.front[path]['update'] = update
 
                 # absolute interval
-                interval = future - self.global_time
+                interval = future - self.state['global_time']
                 if interval < full_step:
                     full_step = interval
             else:
                 # absolute interval
-                interval = future - self.global_time
+                interval = future - self.state['global_time']
                 if interval < full_step:
                     full_step = interval
 
         else:
             # don't shoot past processes that didn't run this time
-            process_delay = process_time - self.global_time
+            process_delay = process_time - self.state['global_time']
             if process_delay < full_step:
                 full_step = process_delay
 
@@ -542,8 +544,8 @@ class Composite(Process):
         #     self.state.build_topology_views()
 
     def run(self, interval, force_complete=False):
-        end_time = self.global_time + interval
-        while self.global_time < end_time or force_complete:
+        end_time = self.state['global_time'] + interval
+        while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
 
             for path, process in self.process_paths.items():
@@ -561,18 +563,18 @@ class Composite(Process):
                 for path in self.front.keys():
                     if self.front[path]['time'] < next_event:
                         next_event = self.front[path]['time']
-                self.global_time = next_event
+                self.state['global_time'] = next_event
 
-            elif self.global_time + full_step <= end_time:
+            elif self.state['global_time'] + full_step <= end_time:
                 # at least one process ran within the interval
                 # increase the time, apply updates, and continue
-                self.global_time += full_step
+                self.state['global_time'] += full_step
 
                 # apply updates that are behind global time
                 updates = []
                 paths = []
                 for path, advance in self.front.items():
-                    if advance['time'] <= self.global_time \
+                    if advance['time'] <= self.state['global_time'] \
                             and advance['update']:
                         new_update = advance['update']
                         updates.append(new_update)
@@ -593,9 +595,9 @@ class Composite(Process):
 
             else:
                 # all processes have run past the interval
-                self.global_time = end_time
+                self.state['global_time'] = end_time
 
-            if force_complete and self.global_time == end_time:
+            if force_complete and self.state['global_time'] == end_time:
                 force_complete = False
 
     def run_steps(self, update_paths):
