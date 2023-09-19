@@ -310,6 +310,8 @@ class Composite(Process):
         super().__init__(config, local_types)
 
         initial_composition = self.config.get('composition', {})
+        if 'global_time' not in initial_composition:
+            initial_composition['global_time'] = 'float'
         initial_state = self.config.get('state', {})
         initial_schema = types.access(
             self.config.get('schema', {})) or {}
@@ -517,7 +519,7 @@ class Composite(Process):
                 paths = hierarchy_depth(update)
                 update_paths.extend(paths.keys())
 
-                self.state = types.apply(
+                self.state = types.apply_update(
                     self.composition,
                     self.state,
                     update)
@@ -647,7 +649,6 @@ class Composite(Process):
             emitter = get_path(self.state, path)
             results[path] = emitter['instance'].query(query)
         return results
-
 
     def update(self, state, interval):
         # do everything

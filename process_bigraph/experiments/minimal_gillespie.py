@@ -245,17 +245,15 @@ def test_gillespie_composite():
 
     gillespie = Composite(composite_schema)
 
-    import ipdb; ipdb.set_trace()
-
     updates = gillespie.update({
         'DNA': {
             'G': 11.0},
         'mRNA': {
             'C': 5.0}},
-        10000.0)
+        1000.0)
 
     # TODO: make this work
-    # gillespie.gather_results([('ram',)])
+    results = gillespie.gather_results()
 
     assert 'mRNA' in updates[0]
 

@@ -330,7 +330,6 @@ class ProcessTypes(TypeSystem):
                     if key in schema:
                         subschema = schema[key]
                     else:
-                        import ipdb; ipdb.set_trace()
                         subschema = schema
 
                     result[key] = self.hydrate_state(
