@@ -45,6 +45,7 @@ setup(
     install_requires=[
         # List your package dependencies here
         "bigraph-schema",
+        "numpy",
         "pytest>=6.2.5",
     ],
 )
