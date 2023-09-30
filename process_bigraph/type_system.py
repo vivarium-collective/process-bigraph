@@ -245,19 +245,40 @@ class ProcessTypes(TypeSystem):
 
                     subwires = hydrated_state['wires']
                     if state_type == 'step':
-                        subwires = subwires.get('inputs', {})
-                        port_schema = port_schema.get('inputs', {})
+                        input_subwires = subwires.get('inputs', {})
+                        input_port_schema = port_schema.get('inputs', {})
+                        schema = self.infer_wires(
+                            input_port_schema,
+                            hydrated_state,
+                            input_subwires,
+                            top_schema=schema,
+                            path=path[:-1])
 
-                    schema = self.infer_wires(
-                        port_schema,
-                        hydrated_state,
-                        subwires,
-                        top_schema=schema,
-                        path=path[:-1])
+                        output_subwires = subwires.get('outputs', {})
+                        output_port_schema = port_schema.get('outputs', {})
+                        schema = self.infer_wires(
+                            output_port_schema,
+                            hydrated_state,
+                            output_subwires,
+                            top_schema=schema,
+                            path=path[:-1])
+                    else:
+                        schema = self.infer_wires(
+                            port_schema,
+                            hydrated_state,
+                            subwires,
+                            top_schema=schema,
+                            path=path[:-1])
+            elif '_type' in schema:
+                hydrated_state = self.deserialize(schema, state)
+                top_state = set_path(
+                    top_state,
+                    path,
+                    hydrated_state)
             else:
                 for key, value in state.items():
                     inner_path = path + (key,)
-                    if get_path(schema, inner_path) is None:
+                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None:
                         schema, top_state = self.infer_schema(
                             schema,
                             value,
@@ -325,16 +346,17 @@ class ProcessTypes(TypeSystem):
                 schema = self.access(schema)
                 return self.hydrate_state(schema, state)
             else:
-                result = {}
-                for key, value in state.items():
+                result = state.copy()
+                for key, value in schema.items():
                     if key in schema:
                         subschema = schema[key]
                     else:
                         subschema = schema
 
-                    result[key] = self.hydrate_state(
-                        subschema,
-                        state.get(key))
+                    if key in state:
+                        result[key] = self.hydrate_state(
+                            subschema,
+                            state.get(key))
         else:
             result = state
 

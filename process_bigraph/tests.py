@@ -2,7 +2,7 @@
 Tests for Process Bigraph
 """
 
-from process_bigraph.composite import Process, Composite
+from process_bigraph.composite import Step, Process, Composite
 from process_bigraph.composite import merge_collections
 from process_bigraph.type_system import types
 
@@ -129,6 +129,73 @@ def test_infer():
     assert composite.state['value'] == 11.11
 
 
+class OperatorStep(Step):
+    config_schema = {
+        'operator': 'string'}
+
+
+    def __init__(self, config):
+        super().__init__(config)
+
+
+    def schema(self):
+        return {
+            'inputs': {
+                'a': 'int',
+                'b': 'int'},
+            'outputs': {
+                'c': 'int'}}
+
+
+    def update(self, inputs):
+        a = inputs['a']
+        b = inputs['b']
+
+        if self.config['operator'] == '+':
+            c = a + b
+        elif self.config['operator'] == '*':
+            c = a * b
+        elif self.config['operator'] == '-':
+            c = a - b
+
+        return {'c': c}
+
+
+def test_step_initialization():
+    composite = Composite({
+        'state': {
+            'A': 13,
+            'B': 21,
+            'step1': {
+                '_type': 'step',
+                'address': 'local:!process_bigraph.tests.OperatorStep',
+                'config': {
+                    'operator': '+'},
+                # TODO: avoid inputs/outputs key in wires?
+                'wires': {
+                    'inputs': {
+                        'a': ['A'],
+                        'b': ['B']},
+                    'outputs': {
+                        'c': ['C']}}},
+            'step2': {
+                '_type': 'step',
+                'address': 'local:!process_bigraph.tests.OperatorStep',
+                'config': {
+                    'operator': '*'},
+                'wires': {
+                    'inputs': {
+                        'a': ['B'],
+                        'b': ['C']},
+                    'outputs': {
+                        'c': ['D']}}}}})
+
+    import ipdb; ipdb.set_trace()
+
+    assert composite.state['D'] == (13 + 21) * 21
+
+
+
 
 if __name__ == '__main__':
     test_default_config()
@@ -136,3 +203,4 @@ if __name__ == '__main__':
     test_process()
     test_composite()
     test_infer()
+    test_step_initialization()

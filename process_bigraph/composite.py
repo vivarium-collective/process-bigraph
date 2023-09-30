@@ -244,7 +244,10 @@ def find_instance_paths(state, instance_type='process_bigraph.composite.Process'
 def find_step_triggers(path, step):
     prefix = tuple(path[:-1])
     triggers = {}
-    for wire in step['wires']['inputs'].values():
+    wire_paths = find_leaves(
+        step['wires']['inputs'])
+
+    for wire in wire_paths:
         trigger_path = tuple(prefix) + tuple(wire)
         if trigger_path not in triggers:
             triggers[trigger_path] = []
@@ -291,6 +294,74 @@ def empty_front(time):
     }
 
 
+def find_leaves(d, path=None):
+    leaves = []
+    path = []
+
+    for key, value in d.items():
+        if isinstance(value, dict):
+            subleaves = find_leaves(value, path + [key])
+            leaves.extend(subleaves)
+        else:
+            leaves.append(path + value)
+
+    return leaves
+
+
+def build_step_network(steps):
+    ancestors = {
+        step_key: {
+            'ancestors': [],
+            'input_paths': None,
+            'output_paths': None}
+        for step_key in steps}
+
+    for step_key, step in steps.items():
+        for other_key, other_step in steps.items():
+            if step_key == other_key:
+                continue
+
+            schema = step['instance'].schema()
+            wires = step['wires']
+            other_schema = other_step['instance'].schema()
+            other_wires = other_step['wires']
+
+            if ancestors[step_key]['input_paths'] is None:
+                ancestors[step_key]['input_paths'] = find_leaves(
+                    wires['inputs'])
+            input_paths = ancestors[step_key]['input_paths']
+
+            if ancestors[other_key]['output_paths'] is None:
+                ancestors[other_key]['output_paths'] = find_leaves(
+                    other_wires['outputs'])
+            output_paths = ancestors[other_key]['output_paths']
+
+            if any(item in output_paths for item in input_paths):
+                ancestors[step_key]['ancestors'].append(other_key)
+
+    return ancestors
+
+
+def find_starting_steps(steps):
+    ancestors = build_step_network(steps)
+    starting = []
+    for step_key, before in ancestors.items():
+        if len(before['ancestors']) == 0:
+            starting.append(step_key)
+
+    return starting
+
+
+def find_starting_paths(steps):
+    ancestors = build_step_network(steps)
+    starting = []
+    for before in ancestors.values():
+        if len(before['ancestors']) == 0:
+            starting.extend(before['input_paths'])
+
+    return starting
+
+
 class Composite(Process):
     """Composite parent class.
 
@@ -311,10 +382,16 @@ class Composite(Process):
         initial_composition = self.config.get('composition', {})
         if 'global_time' not in initial_composition:
             initial_composition['global_time'] = 'float'
+        initial_composition = types.access(
+            initial_composition)
 
         initial_state = self.config.get('state', {})
         if 'global_time' not in initial_state:
             initial_state['global_time'] = 0.0
+
+        initial_state = types.hydrate(
+            initial_composition,
+            initial_state)
 
         initial_schema = types.access(
             self.config.get('schema', {})) or {}
@@ -394,10 +471,17 @@ class Composite(Process):
 
         self.bridge_updates = []
 
-        self.run_steps(self.step_triggers.keys())
+        # this will work for dags but not for cycles
+        self.starting_steps = find_starting_steps(
+            self.step_paths)
+
+        self.run_steps(
+            self.starting_steps)
+
 
     def schema(self):
         return self.process_schema
+
 
     def process_update(
             self,
@@ -430,6 +514,8 @@ class Composite(Process):
 
         def defer_project(update, args):
             schema, state, path = args
+            # if 'c' in update:
+            #     import ipdb; ipdb.set_trace()
             return types.project_edge(
                 schema,
                 state,
@@ -535,7 +621,7 @@ class Composite(Process):
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
 
-        self.run_steps(update_paths)
+        self.trigger_steps(update_paths)
 
                 # view_expire_update = self.apply_update(up, store)
                 # view_expire = view_expire or view_expire_update
@@ -600,22 +686,15 @@ class Composite(Process):
             if force_complete and self.state['global_time'] == end_time:
                 force_complete = False
 
-    def run_steps(self, update_paths):
-        steps_to_run = []
 
-        for update_path in update_paths:
-            paths = explode_path(update_path)
-            for path in paths:
-                step_paths = self.step_triggers.get(path, [])
-                for step_path in step_paths:
-                    if step_path is not None and step_path not in self.steps_run:
-                        steps_to_run.append(step_path)
-                        self.steps_run.add(step_path)
-
-        if len(steps_to_run) > 0:
+    def run_steps(self, step_paths):
+        if len(step_paths) > 0:
             updates = []
-            for step_path in steps_to_run:
-                step = get_path(self.state, step_path)
+            for step_path in step_paths:
+                step = get_path(
+                    self.state,
+                    step_path)
+
                 state = types.view_edge(
                     self.composition,
                     self.state,
@@ -634,6 +713,21 @@ class Composite(Process):
             self.apply_updates(updates)
         else:
             self.steps_run = set([])
+
+
+    def trigger_steps(self, update_paths):
+        steps_to_run = []
+
+        for update_path in update_paths:
+            paths = explode_path(update_path)
+            for path in paths:
+                step_paths = self.step_triggers.get(path, [])
+                for step_path in step_paths:
+                    if step_path is not None and step_path not in self.steps_run:
+                        steps_to_run.append(step_path)
+                        self.steps_run.add(step_path)
+
+        self.run_steps(steps_to_run)
 
 
     def gather_results(self, queries=None):
