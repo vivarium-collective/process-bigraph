@@ -2,7 +2,7 @@
 Tests for Process Bigraph
 """
 
-from process_bigraph.composite import Step, Process, Composite
+from process_bigraph.composite import Process, Step, Composite
 from process_bigraph.composite import merge_collections
 from process_bigraph.type_system import types
 
@@ -134,17 +134,13 @@ class OperatorStep(Step):
         'operator': 'string'}
 
 
-    def __init__(self, config):
-        super().__init__(config)
-
-
     def schema(self):
         return {
             'inputs': {
-                'a': 'int',
-                'b': 'int'},
+                'a': 'float',
+                'b': 'float'},
             'outputs': {
-                'c': 'int'}}
+                'c': 'float'}}
 
 
     def update(self, inputs):
@@ -190,11 +186,121 @@ def test_step_initialization():
                     'outputs': {
                         'c': ['D']}}}}})
 
-    import ipdb; ipdb.set_trace()
 
     assert composite.state['D'] == (13 + 21) * 21
 
 
+# class AddStep(Step):
+#     config_schema = {
+#         'offset': 'float'}
+
+
+#     def schema(self):
+#         return {
+#             'inputs': {
+#                 'a': 'float',
+#                 'b': 'float'},
+#             'outputs': {
+#                 'c': 'float'}}
+
+
+#     def update(self, inputs):
+#         output = self.config['offset'] + inputs['a'] + inputs['b']
+#         outputs = {'c': output}
+
+#         return outputs
+
+
+# class SubtractStep(Step):
+#     config_schema = {
+#         'offset': 'float'}
+
+
+#     def schema(self):
+#         return {
+#             'inputs': {
+#                 'a': 'float',
+#                 'b': 'float'},
+#             'outputs': {
+#                 'c': 'float'}}
+
+
+#     def update(self, inputs):
+#         output = self.config['offset'] + inputs['a'] - inputs['b']
+#         outputs = {'c': output}
+
+#         return outputs
+
+
+# class MultiplyStep(Step):
+#     config_schema = {
+#         'scale': {
+#             '_type': 'float',
+#             '_default': 1.0}}
+
+
+#     def schema(self):
+#         return {
+#             'inputs': {
+#                 'a': {
+#                     '_type': 'float',
+#                     '_default': 1.0},
+#                 'b': {
+#                     '_type': 'float',
+#                     '_default': 1.0}},
+#             'outputs': {
+#                 'c': 'float'}}
+
+
+#     def update(self, inputs):
+#         output = self.config['scale'] * (inputs['a'] * inputs['b'])
+#         outputs = {'c': output}
+
+#         return outputs
+
+
+def test_dependencies():
+    operation = {
+        'x': 11.111,
+        'y': 22.2,
+        'z': 555.555,
+        'add': {
+            '_type': 'step',
+            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'config': {
+                'operator': '+'},
+            'wires': {
+                'inputs': {
+                    'a': ['x'],
+                    'b': ['y']},
+                'outputs': {
+                    'c': ['w']}}},
+        'subtract': {
+            '_type': 'step',
+            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'config': {
+                'operator': '-'},
+            'wires': {
+                'inputs': {
+                    'a': ['z'],
+                    'b': ['w']},
+                'outputs': {
+                    'c': ['j']}}},
+        'multiply': {
+            '_type': 'step',
+            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'config': {
+                'operator': '*'},
+            'wires': {
+                'inputs': {
+                    'a': ['j'],
+                    'b': ['w']},
+                'outputs': {
+                    'c': ['k']}}}}
+
+    import ipdb; ipdb.set_trace()
+
+    composite = Composite({'state': operation})
 
 
 if __name__ == '__main__':
@@ -204,3 +310,4 @@ if __name__ == '__main__':
     test_composite()
     test_infer()
     test_step_initialization()
+    test_dependencies()
