@@ -316,6 +316,8 @@ def build_step_network(steps):
             'output_paths': None}
         for step_key in steps}
 
+    nodes = {}
+
     for step_key, step in steps.items():
         for other_key, other_step in steps.items():
             if step_key == other_key:
@@ -336,14 +338,35 @@ def build_step_network(steps):
                     other_wires['outputs'])
             output_paths = ancestors[other_key]['output_paths']
 
-            if any(item in output_paths for item in input_paths):
-                ancestors[step_key]['ancestors'].append(other_key)
+            for item in input_paths:
+                if item in output_paths:
+                    ancestors[step_key]['ancestors'].append(other_key)
 
-    return ancestors
+                    path = tuple(item)
+                    if not path in nodes:
+                        nodes[path] = {
+                            'before': set([]),
+                            'after': set([])}
+                    nodes[path]['before'].add(other_key)
+                    nodes[path]['after'].add(step_key)
+
+    return ancestors, nodes
+
+
+def build_trigger_state(steps):
+    ancestors, nodes = build_step_network(steps)
+
+    trigger_state = {
+        'steps': ancestors,
+        'states': {
+            key: value['before']
+            for key, value in nodes.items()}}
+
+    return trigger_state
 
 
 def find_starting_steps(steps):
-    ancestors = build_step_network(steps)
+    ancestors, nodes = build_step_network(steps)
     starting = []
     for step_key, before in ancestors.items():
         if len(before['ancestors']) == 0:
@@ -353,7 +376,7 @@ def find_starting_steps(steps):
 
 
 def find_starting_paths(steps):
-    ancestors = build_step_network(steps)
+    ancestors, nodes = build_step_network(steps)
     starting = []
     for before in ancestors.values():
         if len(before['ancestors']) == 0:
@@ -471,12 +494,17 @@ class Composite(Process):
 
         self.bridge_updates = []
 
-        # this will work for dags but not for cycles
-        self.starting_steps = find_starting_steps(
+#         # this will work for dags but not for cycles
+#         self.starting_steps = find_starting_steps(
+#             self.step_paths)
+
+        self.trigger_state = build_trigger_state(
             self.step_paths)
 
-        self.run_steps(
-            self.starting_steps)
+        to_run, self.trigger_state = self.determine_steps(
+            self.trigger_state)
+
+        self.run_steps(to_run)
 
 
     def schema(self):
@@ -687,6 +715,25 @@ class Composite(Process):
                 force_complete = False
 
 
+    def determine_steps(self, trigger_state):
+        to_run = []
+        for step_key, wires in trigger_state['steps']:
+            fulfilled = True
+            for input in wires['input_paths']:
+                if len(trigger_state['states'][tuple(input)]) > 0:
+                    fulfilled = False
+                    break
+            if fulfilled:
+                to_run.append(step_key)
+
+        for step_key in to_run:
+            wires = trigger_state['steps'][step_key]
+            for output in wires['output_paths']:
+                trigger_state['states'][tuple(output)].remove(step_key)
+
+        return to_run, trigger_state
+
+
     def run_steps(self, step_paths):
         if len(step_paths) > 0:
             updates = []
@@ -726,6 +773,8 @@ class Composite(Process):
                     if step_path is not None and step_path not in self.steps_run:
                         steps_to_run.append(step_path)
                         self.steps_run.add(step_path)
+
+        
 
         self.run_steps(steps_to_run)
 

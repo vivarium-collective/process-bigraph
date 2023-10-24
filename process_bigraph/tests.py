@@ -190,124 +190,78 @@ def test_step_initialization():
     assert composite.state['D'] == (13 + 21) * 21
 
 
-# class AddStep(Step):
-#     config_schema = {
-#         'offset': 'float'}
-
-
-#     def schema(self):
-#         return {
-#             'inputs': {
-#                 'a': 'float',
-#                 'b': 'float'},
-#             'outputs': {
-#                 'c': 'float'}}
-
-
-#     def update(self, inputs):
-#         output = self.config['offset'] + inputs['a'] + inputs['b']
-#         outputs = {'c': output}
-
-#         return outputs
-
-
-# class SubtractStep(Step):
-#     config_schema = {
-#         'offset': 'float'}
-
-
-#     def schema(self):
-#         return {
-#             'inputs': {
-#                 'a': 'float',
-#                 'b': 'float'},
-#             'outputs': {
-#                 'c': 'float'}}
-
-
-#     def update(self, inputs):
-#         output = self.config['offset'] + inputs['a'] - inputs['b']
-#         outputs = {'c': output}
-
-#         return outputs
-
-
-# class MultiplyStep(Step):
-#     config_schema = {
-#         'scale': {
-#             '_type': 'float',
-#             '_default': 1.0}}
-
-
-#     def schema(self):
-#         return {
-#             'inputs': {
-#                 'a': {
-#                     '_type': 'float',
-#                     '_default': 1.0},
-#                 'b': {
-#                     '_type': 'float',
-#                     '_default': 1.0}},
-#             'outputs': {
-#                 'c': 'float'}}
-
-
-#     def update(self, inputs):
-#         output = self.config['scale'] * (inputs['a'] * inputs['b'])
-#         outputs = {'c': output}
-
-#         return outputs
-
-
 def test_dependencies():
     operation = {
-        'x': 11.111,
-        'y': 22.2,
-        'z': 555.555,
-        'add': {
+        'a': 11.111,
+        'b': 22.2,
+        'c': 555.555,
+
+        '1': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '+'},
             'wires': {
                 'inputs': {
-                    'a': ['x'],
-                    'b': ['y']},
+                    'a': ['a'],
+                    'b': ['b']},
                 'outputs': {
-                    'c': ['w']}}},
-        'subtract': {
+                    'c': ['e']}}},
+        '2.1': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '-'},
             'wires': {
                 'inputs': {
-                    'a': ['z'],
-                    'b': ['w']},
+                    'a': ['c'],
+                    'b': ['e']},
                 'outputs': {
-                    'c': ['j']}}},
-        'multiply': {
+                    'c': ['f']}}},
+        '2.2': {
+            '_type': 'step',
+            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'config': {
+                'operator': '-'},
+            'wires': {
+                'inputs': {
+                    'a': ['d'],
+                    'b': ['e']},
+                'outputs': {
+                    'c': ['g']}}},
+        '3': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '*'},
             'wires': {
                 'inputs': {
-                    'a': ['j'],
-                    'b': ['w']},
+                    'a': ['f'],
+                    'b': ['g']},
                 'outputs': {
-                    'c': ['k']}}}}
-
-    import ipdb; ipdb.set_trace()
+                    'c': ['h']}}},
+        '4': {
+            '_type': 'step',
+            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'config': {
+                'operator': '+'},
+            'wires': {
+                'inputs': {
+                    'a': ['e'],
+                    'b': ['h']},
+                'outputs': {
+                    'c': ['i']}}}}
 
     composite = Composite({'state': operation})
 
+    import ipdb; ipdb.set_trace()
+
 
 if __name__ == '__main__':
-    test_default_config()
-    test_merge_collections()
-    test_process()
-    test_composite()
-    test_infer()
-    test_step_initialization()
+    # test_default_config()
+    # test_merge_collections()
+    # test_process()
+    # test_composite()
+    # test_infer()
+    # test_step_initialization()
     test_dependencies()
