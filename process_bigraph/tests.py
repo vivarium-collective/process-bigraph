@@ -2,6 +2,8 @@
 Tests for Process Bigraph
 """
 
+import random
+
 from process_bigraph.composite import Process, Step, Composite
 from process_bigraph.composite import merge_collections
 from process_bigraph.type_system import types
@@ -255,6 +257,124 @@ def test_dependencies():
     composite = Composite({'state': operation})
 
     import ipdb; ipdb.set_trace()
+
+
+class SimpleCompartment(Process):
+    config_schema = {
+        'id': 'string'}
+
+
+    def schema(self):
+        return {
+            'outer': 'tree[process]',
+            'inner': 'tree[process]'}
+
+
+    def update(self, state, interval):
+        choice = random.random()
+        update = {}
+
+        outer = state['outer']
+        inner = state['inner']
+
+        # TODO: implement divide_state(_)
+        divisions = self.types.divide_state(
+            self.schema(),
+            inner)
+
+        if choice < 0.2:
+            # update = {
+            #     'outer': {
+            #         '_divide': {
+            #             'mother': self.config['id'],
+            #             'daughters': [
+            #                 {'id': self.config['id'] + '0'},
+            #                 {'id': self.config['id'] + '1'}]}}}
+
+            # daughter_ids = [self.config['id'] + str(i)
+            #     for i in range(2)]
+
+            # update = {
+            #     'outer': {
+            #         '_react': {
+            #             'redex': {
+            #                 'inner': {
+            #                     self.config['id']: {}}},
+            #             'reactum': {
+            #                 'inner': {
+            #                     daughter_config['id']: {
+            #                         '_type': 'process',
+            #                         'address': 'local:!process_bigraph.tests.SimpleCompartment',
+            #                         'config': daughter_config,
+            #                         'inner': daughter_inner,
+            #                         'wires': {
+            #                             'outer': ['..']}}
+            #                     for daughter_config, daughter_inner in zip(daughter_configs, divisions)}}}}}
+
+            update = {
+                'outer': {
+                    'inner': {
+                        '_react': {
+                            'reaction': 'divide',
+                            'config': {
+                                'id': self.config['id'],
+                                'daughters': [{
+                                        'id': daughter_id,
+                                        'state': daughter_state}
+                                    for daughter_id, daughter_state in zip(
+                                        daughter_ids,
+                                        divisions)]
+
+        return update
+
+
+# TODO: create reaction registry, register this under "divide"
+def divide_reaction(config):
+    return {
+        'redex': {
+            config['id']: {}},
+        'reactum': {
+            daughter_config['id']: daughter_config['state']
+            for daughter_config in config['daughters']}}
+
+
+def engulf_reaction(config):
+    return {
+        'redex': {},
+        'reactum': {}}
+
+
+def burst_reaction(config):
+    return {
+        'redex': {},
+        'reactum': {}}
+
+
+def test_reaction():
+    composite = {
+        'state': {
+            'environment': {
+                'concentrations': {},
+                'inner': {
+                    'agent1': {
+                        '_type': 'process',
+                        'address': 'local:!process_bigraph.tests.SimpleCompartment',
+                        'config': {'id': '0'},
+                        'concentrations': {},
+                        'inner': {
+                            'agent2': {
+                                '_type': 'process',
+                                'address': 'local:!process_bigraph.tests.SimpleCompartment',
+                                'config': {'id': '0'},
+                                'inner': {},
+                                'wires': {
+                                    'outer': ['..', '..'],
+                                    'inner': ['inner']}}},
+                        'wires': {
+                            'outer': ['..', '..'],
+                            'inner': ['inner']}}}}}}
+
+
 
 
 if __name__ == '__main__':
