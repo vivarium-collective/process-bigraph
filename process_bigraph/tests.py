@@ -256,6 +256,8 @@ def test_dependencies():
 
     composite = Composite({'state': operation})
 
+    assert composite.state['h'] == -17396.469884
+
 
 class SimpleCompartment(Process):
     config_schema = {

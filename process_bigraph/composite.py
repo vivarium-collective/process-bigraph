@@ -828,7 +828,9 @@ class Composite(Process):
             steps_to_run)
 
         self.reset_step_state(steps_to_run)
-        self.run_steps(steps_to_run)
+        to_run = self.cycle_step_state()
+
+        self.run_steps(to_run)
 
 
     def gather_results(self, queries=None):
