@@ -256,8 +256,6 @@ def test_dependencies():
 
     composite = Composite({'state': operation})
 
-    import ipdb; ipdb.set_trace()
-
 
 class SimpleCompartment(Process):
     config_schema = {
@@ -323,7 +321,7 @@ class SimpleCompartment(Process):
                                         'state': daughter_state}
                                     for daughter_id, daughter_state in zip(
                                         daughter_ids,
-                                        divisions)]
+                                        divisions)]}}}}}
 
         return update
 
@@ -378,10 +376,11 @@ def test_reaction():
 
 
 if __name__ == '__main__':
-    # test_default_config()
-    # test_merge_collections()
-    # test_process()
-    # test_composite()
-    # test_infer()
-    # test_step_initialization()
+    test_default_config()
+    test_merge_collections()
+    test_process()
+    test_composite()
+    test_infer()
+    test_step_initialization()
     test_dependencies()
+    # test_reaction()
