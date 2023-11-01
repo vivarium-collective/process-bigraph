@@ -27,36 +27,6 @@ class IncreaseProcess(Process):
             'level': state['level'] * self.config['rate']}
 
 
-def test_serialized_composite():
-    # This should specify the same thing as above
-    composite_schema = {
-        '_type': 'process[exchange:float]',
-        'address': 'local:!process_bigraph.composite.Composite',
-        'config': {
-            'state': {
-                'increase': {
-                    '_type': 'process[level:float]',
-                    'address': 'local:!process_bigraph.tests.IncreaseProcess',
-                    'config': {'rate': '0.3'},
-                    'wires': {'level': ['value']}
-                },
-                'value': '11.11',
-            },
-            'schema': {
-                'increase': 'process[level:float]',
-                # 'increase': 'process[{"level":"float","down":{"a":"int"}}]',
-                'value': 'float',
-            },
-            'bridge': {
-                'exchange': 'value'
-            },
-        }
-    }
-
-    composite_instance = types.deserialize(composite_schema, {})
-    composite_instance.update()
-
-
 def test_default_config():
     process = IncreaseProcess()
     assert process.config['rate'] == 0.1
@@ -259,6 +229,11 @@ def test_dependencies():
     assert composite.state['h'] == -17396.469884
 
 
+def test_dependency_cycle():
+    # test a step network with cycles in a few ways
+    pass
+
+
 class SimpleCompartment(Process):
     config_schema = {
         'id': 'string'}
@@ -329,13 +304,6 @@ class SimpleCompartment(Process):
 
 
 # TODO: create reaction registry, register this under "divide"
-def divide_reaction(config):
-    return {
-        'redex': {
-            config['id']: {}},
-        'reactum': {
-            daughter_config['id']: daughter_config['state']
-            for daughter_config in config['daughters']}}
 
 
 def engulf_reaction(config):
@@ -373,8 +341,6 @@ def test_reaction():
                         'wires': {
                             'outer': ['..', '..'],
                             'inner': ['inner']}}}}}}
-
-
 
 
 if __name__ == '__main__':

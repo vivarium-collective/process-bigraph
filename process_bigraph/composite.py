@@ -335,7 +335,7 @@ def build_step_network(steps):
 
             if ancestors[step_key]['output_paths'] is None:
                 ancestors[step_key]['output_paths'] = find_leaves(
-                    wires['outputs'])
+                    wires.get('outputs', {}))
             output_paths = ancestors[step_key]['output_paths']
 
             for input in input_paths:
@@ -414,17 +414,19 @@ def determine_steps(steps, remaining, fulfilled):
 
 
 class Composite(Process):
-    """Composite parent class.
-
     """
+    Composite parent class.
+    """
+
+
     config_schema = {
         # TODO: add schema type
         'composition': 'tree[any]',
         'state': 'tree[any]',
         'schema': 'tree[any]',
         'bridge': 'wires',
-        'global_time_precision': 'maybe[float]',
-    }
+        'global_time_precision': 'maybe[float]'}
+
 
     # TODO: if processes are serialized, deserialize them first
     def __init__(self, config=None, local_types=None):
@@ -669,8 +671,6 @@ class Composite(Process):
                 series = [series]
 
             for update in series:
-                # print(update)
-
                 paths = hierarchy_depth(update)
                 update_paths.extend(paths.keys())
 
@@ -778,8 +778,6 @@ class Composite(Process):
 
 
     def run_steps(self, step_paths):
-        print(f'running steps: {step_paths}')
-
         if len(step_paths) > 0:
             updates = []
             for step_path in step_paths:

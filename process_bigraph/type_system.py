@@ -278,7 +278,7 @@ class ProcessTypes(TypeSystem):
             else:
                 for key, value in state.items():
                     inner_path = path + (key,)
-                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None:
+                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None or (isinstance(value, dict) and '_type' in value):
                         schema, top_state = self.infer_schema(
                             schema,
                             value,
