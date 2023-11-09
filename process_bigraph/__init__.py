@@ -12,3 +12,4 @@ protocol_registry.register('local', local_lookup)
 # TODO
 process_registry.register('console-emitter', ConsoleEmitter)
 process_registry.register('ram-emitter', RAMEmitter)
+

@@ -24,3 +24,4 @@ process_registry = Registry()
 
 #: Maps process names to :term:`protocol methods`
 protocol_registry = Registry()
+

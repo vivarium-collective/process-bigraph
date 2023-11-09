@@ -296,14 +296,14 @@ def empty_front(time):
 
 def find_leaves(d, path=None):
     leaves = []
-    path = []
+    path = ()
 
     for key, value in d.items():
         if isinstance(value, dict):
-            subleaves = find_leaves(value, path + [key])
+            subleaves = find_leaves(value, path + (key,))
             leaves.extend(subleaves)
         else:
-            leaves.append(path + value)
+            leaves.append(path + tuple(value))
 
     return leaves
 
@@ -311,10 +311,12 @@ def find_leaves(d, path=None):
 def build_step_network(steps):
     ancestors = {
         step_key: {
-            'ancestors': [],
+            # 'ancestors': [],
             'input_paths': None,
             'output_paths': None}
         for step_key in steps}
+
+    nodes = {}
 
     for step_key, step in steps.items():
         for other_key, other_step in steps.items():
@@ -331,49 +333,100 @@ def build_step_network(steps):
                     wires['inputs'])
             input_paths = ancestors[step_key]['input_paths']
 
-            if ancestors[other_key]['output_paths'] is None:
-                ancestors[other_key]['output_paths'] = find_leaves(
-                    other_wires['outputs'])
-            output_paths = ancestors[other_key]['output_paths']
+            if ancestors[step_key]['output_paths'] is None:
+                ancestors[step_key]['output_paths'] = find_leaves(
+                    wires.get('outputs', {}))
+            output_paths = ancestors[step_key]['output_paths']
 
-            if any(item in output_paths for item in input_paths):
-                ancestors[step_key]['ancestors'].append(other_key)
+            for input in input_paths:
+                path = tuple(input)
+                if not path in nodes:
+                    nodes[path] = {
+                        'before': set([]),
+                        'after': set([])}
+                nodes[path]['after'].add(step_key)
 
-    return ancestors
+            for output in output_paths:
+                path = tuple(output)
+                if not path in nodes:
+                    nodes[path] = {
+                        'before': set([]),
+                        'after': set([])}
+                nodes[path]['before'].add(step_key)
+
+    return ancestors, nodes
 
 
-def find_starting_steps(steps):
-    ancestors = build_step_network(steps)
-    starting = []
-    for step_key, before in ancestors.items():
-        if len(before['ancestors']) == 0:
-            starting.append(step_key)
+def combined_step_network(steps):
+    steps, nodes = build_step_network(steps)
 
-    return starting
+    trigger_state = {
+        'steps': steps,
+        'nodes': nodes}
+
+    return trigger_state
 
 
-def find_starting_paths(steps):
-    ancestors = build_step_network(steps)
-    starting = []
-    for before in ancestors.values():
-        if len(before['ancestors']) == 0:
-            starting.extend(before['input_paths'])
+def build_trigger_state(nodes):
+    return {
+        key: value['before'].copy()
+        for key, value in nodes.items()}
 
-    return starting
+
+def find_downstream(steps, nodes, upstream):
+    downstream = set(upstream)
+    visited = set([])
+    previous_len = -1
+
+    while len(downstream) > len(visited) and len(visited) > previous_len:
+        previous_len = len(visited)
+        down = set([])
+        for step_path in downstream:
+            if step_path not in visited:
+                for output in steps[step_path]['output_paths']:
+                    for dependent in nodes[output]['after']:
+                        down.add(dependent)
+                visited.add(step_path)
+        downstream ^= down
+
+    return downstream
+
+
+def determine_steps(steps, remaining, fulfilled):
+    to_run = []
+
+    for step_path in remaining:
+        step_inputs = steps[step_path]['input_paths']
+        all_fulfilled = True
+        for input in step_inputs:
+            if len(fulfilled[input]) > 0:
+                all_fulfilled = False
+        if all_fulfilled:
+            to_run.append(step_path)
+
+    for step_path in to_run:
+        remaining.remove(step_path)
+        step_outputs = steps[step_path]['output_paths']
+        for output in step_outputs:
+            fulfilled[output].remove(step_path)
+
+    return to_run, remaining, fulfilled
 
 
 class Composite(Process):
-    """Composite parent class.
-
     """
+    Composite parent class.
+    """
+
+
     config_schema = {
         # TODO: add schema type
         'composition': 'tree[any]',
         'state': 'tree[any]',
         'schema': 'tree[any]',
         'bridge': 'wires',
-        'global_time_precision': 'maybe[float]',
-    }
+        'global_time_precision': 'maybe[float]'}
+
 
     # TODO: if processes are serialized, deserialize them first
     def __init__(self, config=None, local_types=None):
@@ -471,12 +524,29 @@ class Composite(Process):
 
         self.bridge_updates = []
 
-        # this will work for dags but not for cycles
-        self.starting_steps = find_starting_steps(
+        self.step_dependencies, self.node_dependencies = build_step_network(
             self.step_paths)
 
-        self.run_steps(
-            self.starting_steps)
+        self.reset_step_state(self.step_paths)
+        to_run = self.cycle_step_state()
+
+        self.run_steps(to_run)
+
+
+    def reset_step_state(self, step_paths):
+        self.trigger_state = build_trigger_state(
+            self.node_dependencies)
+
+        self.steps_remaining = set(step_paths)
+
+
+    def cycle_step_state(self):
+        to_run, self.steps_remaining, self.trigger_state = determine_steps(
+            self.step_dependencies,
+            self.steps_remaining,
+            self.trigger_state)
+
+        return to_run
 
 
     def schema(self):
@@ -514,8 +584,6 @@ class Composite(Process):
 
         def defer_project(update, args):
             schema, state, path = args
-            # if 'c' in update:
-            #     import ipdb; ipdb.set_trace()
             return types.project_edge(
                 schema,
                 state,
@@ -531,6 +599,7 @@ class Composite(Process):
                 path))
 
         return absolute
+
 
     def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
@@ -602,8 +671,6 @@ class Composite(Process):
                 series = [series]
 
             for update in series:
-                # print(update)
-
                 paths = hierarchy_depth(update)
                 update_paths.extend(paths.keys())
 
@@ -621,13 +688,14 @@ class Composite(Process):
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
 
-        self.trigger_steps(update_paths)
+        return update_paths
 
                 # view_expire_update = self.apply_update(up, store)
                 # view_expire = view_expire or view_expire_update
 
         # if view_expire:
         #     self.state.build_topology_views()
+
 
     def run(self, interval, force_complete=False):
         end_time = self.state['global_time'] + interval
@@ -667,7 +735,10 @@ class Composite(Process):
                         advance['update'] = {}
                         paths.append(path)
 
-                self.apply_updates(updates)
+                # get all update paths, then trigger steps that
+                # depend on those paths
+                update_paths = self.apply_updates(updates)
+                self.trigger_steps(update_paths)
 
                 # # display and emit
                 # if self.progress_bar:
@@ -685,6 +756,25 @@ class Composite(Process):
 
             if force_complete and self.state['global_time'] == end_time:
                 force_complete = False
+
+
+    def determine_steps(self):
+        to_run = []
+        for step_key, wires in trigger_state['steps']:
+            fulfilled = True
+            for input in wires['input_paths']:
+                if len(trigger_state['states'][tuple(input)]) > 0:
+                    fulfilled = False
+                    break
+            if fulfilled:
+                to_run.append(step_key)
+
+        for step_key in to_run:
+            wires = trigger_state['steps'][step_key]
+            for output in wires['output_paths']:
+                trigger_state['states'][tuple(output)].remove(step_key)
+
+        return to_run, trigger_state
 
 
     def run_steps(self, step_paths):
@@ -710,7 +800,10 @@ class Composite(Process):
 
                 updates.append(step_update)
 
-            self.apply_updates(updates)
+            update_paths = self.apply_updates(updates)
+            to_run = self.cycle_step_state()
+            if len(to_run) > 0:
+                self.run_steps(to_run)
         else:
             self.steps_run = set([])
 
@@ -727,7 +820,15 @@ class Composite(Process):
                         steps_to_run.append(step_path)
                         self.steps_run.add(step_path)
 
-        self.run_steps(steps_to_run)
+        steps_to_run = find_downstream(
+            self.step_dependencies,
+            self.node_dependencies,
+            steps_to_run)
+
+        self.reset_step_state(steps_to_run)
+        to_run = self.cycle_step_state()
+
+        self.run_steps(to_run)
 
 
     def gather_results(self, queries=None):
