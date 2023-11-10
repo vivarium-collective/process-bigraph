@@ -87,6 +87,49 @@ def test_composite():
     assert updates[0]['exchange'] == 0.999
 
 
+def test_nested_composite():
+    # TODO: add support for the various vivarium emitters
+
+    # increase = IncreaseProcess({'rate': 0.3})
+    # TODO: This is the config of the composite,
+    #   we also need a way to serialize the entire composite
+
+    composite = Composite({
+        'state': {
+            'example': {
+                '_type': 'process',
+                'address': 'ray:',
+                'interval': 0.5,
+                'config': {
+                    'composition': {
+                        'increase': 'process[level:float]',
+                        'value': 'float'},
+                    'schema': {
+                        'exchange': 'float'},
+                    'bridge': {
+                        'exchange': ['value']},
+                    'state': {
+                        'increase': {
+                            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+                            'config': {'rate': 0.3},
+                            'interval': 1.0,
+                            'wires': {'level': ['value']}},
+                        'value': 11.11}},
+                'wires': {}}}})
+
+    initial_state = {'exchange': 3.33}
+
+    updates = composite.update(initial_state, 10.0)
+
+    final_exchange = sum([
+        update['exchange']
+        for update in [initial_state] + updates])
+
+    assert composite.state['value'] > 45
+    assert 'exchange' in updates[0]
+    assert updates[0]['exchange'] == 0.999
+
+
 def test_infer():
     composite = Composite({
         'state': {
@@ -343,6 +386,34 @@ def test_reaction():
                             'inner': ['inner']}}}}}}
 
 
+def test_ray():
+    import process_bigraph.protocols.ray
+
+    composite = Composite({
+        'state': {
+            'increase': {
+                '_type': 'process',
+                'address': 'ray:!process_bigraph.tests.IncreaseProcess',
+                'config': {'rate': 0.3},
+                'interval': 1.0,
+                'wires': {'level': ['value']}},
+            'value': 11.11}})
+
+    initial_state = {'exchange': 3.33}
+
+    updates = composite.update(initial_state, 10.0)
+
+    final_exchange = sum([
+        update['exchange']
+        for update in [initial_state] + updates])
+
+    assert composite.state['value'] > 45
+    assert 'exchange' in updates[0]
+    assert updates[0]['exchange'] == 0.999
+    
+
+
+
 if __name__ == '__main__':
     test_default_config()
     test_merge_collections()
@@ -351,4 +422,4 @@ if __name__ == '__main__':
     test_infer()
     test_step_initialization()
     test_dependencies()
-    # test_reaction()
+        # test_reaction()
