@@ -2,6 +2,7 @@ import copy
 import os
 import json
 import uuid
+import orjson
 import itertools
 from functools import partial
 from warnings import warn
@@ -9,6 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 from urllib.parse import quote_plus
 from concurrent.futures import ProcessPoolExecutor
 
+import numpy as np
 from pymongo import ASCENDING
 from pymongo.errors import DocumentTooLarge
 from pymongo.mongo_client import MongoClient
@@ -217,3 +219,54 @@ def make_fallback_serializer_function() -> Callable:
                     f'inefficient.')
         return serializer.serialize(obj)
     return default
+
+
+def find_numpy_and_non_strings(
+    d: dict,
+    curr_path: Tuple = tuple(),
+    saved_paths: Optional[List[Tuple]] = None
+) -> List[Tuple]:
+    """Return list of paths which terminate in a non-string or Numpy string
+    dictionary key. Orjson does not handle these types of keys by default."""
+    if not saved_paths:
+        saved_paths = []
+    if isinstance(d, dict):
+        for key in d.keys():
+            if not isinstance(key, str):
+                saved_paths.append(curr_path + (key,))
+            elif isinstance(key, np.str_):
+                saved_paths.append(curr_path + (key,))
+            saved_paths = find_numpy_and_non_strings(
+                d[key], curr_path+(key,), saved_paths)
+    return saved_paths
+
+
+def serialize_value(
+    value: Any,
+    default: Optional[Callable] = None,
+) -> Any:
+    """Apply orjson-based serialization routine on ``value``.
+
+    Args:
+        value (Any): Data to be serialized. All keys must be strings. Notably,
+            Numpy strings (``np.str_``) are not acceptable keys.
+        default (Callable): A function that is called on any data of a type
+            that is not natively supported by orjson. Returns an object that
+            can be handled by default up to 254 times before an exception is
+            raised.
+
+    Returns:
+        Any: Serialized data
+    """
+    if default is None:
+        default = make_fallback_serializer_function()
+    try:
+        value = orjson.dumps(
+            value, option=orjson.OPT_SERIALIZE_NUMPY,
+            default=default
+        )
+        return orjson.loads(value)
+    except TypeError as e:
+        bad_keys = find_numpy_and_non_strings(value)
+        raise TypeError('These paths end in incompatible non-string or Numpy '
+            f'string keys: {bad_keys}').with_traceback(e.__traceback__) from e
