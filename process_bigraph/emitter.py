@@ -4,6 +4,7 @@ import json
 import uuid
 import itertools
 from functools import partial
+from warnings import warn
 from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 from urllib.parse import quote_plus
 from concurrent.futures import ProcessPoolExecutor
@@ -181,3 +182,38 @@ class DatabaseEmitter(Emitter):
     def get_data(self, query: Optional[list] = None) -> dict:
         return get_history_data_db(self.history, self.experiment_id, query)
 
+
+def make_fallback_serializer_function() -> Callable:
+    """Creates a fallback function that is called by orjson on data of
+    types that are not natively supported. Define and register instances of
+    :py:class:`vivarium.core.registry.Serializer()` with serialization
+    routines for the types in question."""
+
+    def default(obj: Any) -> Any:
+        # Try to lookup by exclusive type
+        serializer = process_registry.access(str(type(obj)))
+        if not serializer:
+            compatible_serializers = []
+            for serializer_name in process_registry.list():
+                test_serializer = process_registry.access(serializer_name)
+                # Subclasses with registered serializers will be caught here
+                if isinstance(obj, test_serializer.python_type):
+                    compatible_serializers.append(test_serializer)
+            if len(compatible_serializers) > 1:
+                raise TypeError(
+                    f'Multiple serializers ({compatible_serializers}) found '
+                    f'for {obj} of type {type(obj)}')
+            if not compatible_serializers:
+                raise TypeError(
+                    f'No serializer found for {obj} of type {type(obj)}')
+            serializer = compatible_serializers[0]
+            if not isinstance(obj, Process):
+                # We don't warn for processes because since their types
+                # based on their subclasses, it's not possible to avoid
+                # searching through the serializers.
+                warn(
+                    f'Searched through serializers to find {serializer} '
+                    f'for data of type {type(obj)}. This is '
+                    f'inefficient.')
+        return serializer.serialize(obj)
+    return default
