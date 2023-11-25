@@ -194,6 +194,11 @@ class DatabaseEmitter(Emitter):
         """
         return get_history_data_db(self.history, self.experiment_id, query)
 
+    def update(self, state):
+        self.emit(state)
+
+        return {}
+
 
 def make_fallback_serializer_function() -> Callable:
     """Creates a fallback function that is called by orjson on data of
