@@ -194,6 +194,9 @@ class DatabaseEmitter(Emitter):
         """
         return get_history_data_db(self.history, self.experiment_id, query)
 
+    def query(self, query: Optional[List[Tuple[str]]] = None) -> Dict:
+        return self.get_data(query)
+
     def update(self, state):
         self.emit(state)
 
