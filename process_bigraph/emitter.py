@@ -665,7 +665,3 @@ def get_local_client(host: str, port: Any, database_name: str) -> Any:
     client: MongoClient = MongoClient('{}:{}'.format(host, port))
     return client[database_name]
 
-
-emitter = DatabaseEmitter(config={})
-
-print(dir(emitter))
