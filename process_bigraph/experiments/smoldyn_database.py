@@ -36,7 +36,10 @@ def run_smoldyn_simulation():
     time_output = simulation.getOutputData('time')
     mol_output = simulation.getOutputData('molecules')
 
-    
+    # create an empty instance of database emitter
+    emitter = MongoDatabaseEmitter(config={})
+
+
 
 
 

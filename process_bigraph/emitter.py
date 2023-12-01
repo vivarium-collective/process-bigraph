@@ -161,7 +161,10 @@ class MongoDatabaseEmitter(DatabaseEmitter):
     default_host = 'localhost:27017'
     client_dict: Dict[int, MongoClient] = {}
     config_schema = {
-        'ports': 'tree[any]'}
+        'ports': 'tree[any]',
+        'emit_limit': 'int',
+        'embed_path': 'tuple[str]'
+    }
 
     @classmethod
     def create_indexes(cls, table: Any, columns: List[Any]) -> None:
