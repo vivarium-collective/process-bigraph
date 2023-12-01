@@ -129,7 +129,8 @@ class DatabaseEmitter(Emitter):
     def __init__(self, config: Dict[str, Any]) -> None:
         """Config may have 'host' and 'database' items.
 
-            PLEASE NOTE: the following command must be evoked prior to instantiating this class:
+            PLEASE NOTE: Some command must be evoked to start the MongoDb server prior to the instantiation
+                of this class. For example, the following command must be evoked prior to instantiating this class:
 
                 (on Mac):
                     `mongod --config /opt/homebrew/etc/mongod.conf --fork`
