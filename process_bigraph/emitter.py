@@ -18,6 +18,7 @@ import numpy as np
 from pymongo import ASCENDING
 from pymongo.errors import DocumentTooLarge
 from pymongo.mongo_client import MongoClient
+from pymongo.database import Database as MongoDatabase
 from pymongo.collection import Collection
 from bson import MinKey, MaxKey
 
@@ -179,7 +180,7 @@ class DatabaseEmitter(Emitter):
     config_schema = {
         'ports': 'tree[any]',
         'emit_limit': 'int',
-        'embed_path': 'tuple[string]'
+        'embed_path': 'tuple'
     }
 
     @classmethod
@@ -214,12 +215,15 @@ class DatabaseEmitter(Emitter):
         if curr_pid not in DatabaseEmitter.client_dict:
             DatabaseEmitter.client_dict[curr_pid] = MongoClient(
                 config.get('host', self.default_host))
-        self.client = DatabaseEmitter.client_dict[curr_pid]
+        self.client: MongoClient = DatabaseEmitter.client_dict[curr_pid]
 
-        self.db = getattr(self.client, config.get('database', 'simulations'))
-        self.history = getattr(self.db, 'history')
-        self.configuration = getattr(self.db, 'configuration')
-        self.phylogeny = getattr(self.db, 'phylogeny')
+        # extract objects from current mongo client instance
+        self.db: MongoDatabase = getattr(self.client, config.get('database', 'simulations'))
+        self.history: Collection = getattr(self.db, 'history')
+        self.configuration: Collection = getattr(self.db, 'configuration')
+        self.phylogeny: Collection = getattr(self.db, 'phylogeny')
+
+        # create column indexes for the given collection objects
         self.create_indexes(self.history, HISTORY_INDEXES)
         self.create_indexes(self.configuration, CONFIGURATION_INDEXES)
         self.create_indexes(self.phylogeny, CONFIGURATION_INDEXES)
