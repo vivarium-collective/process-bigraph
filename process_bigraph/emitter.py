@@ -18,7 +18,7 @@ import numpy as np
 from pymongo import ASCENDING
 from pymongo.errors import DocumentTooLarge
 from pymongo.mongo_client import MongoClient
-from pymongo.database import Database as MongoDatabase
+from pymongo.database import Database
 from pymongo.collection import Collection
 from bson import MinKey, MaxKey
 
@@ -218,7 +218,7 @@ class DatabaseEmitter(Emitter):
         self.client: MongoClient = DatabaseEmitter.client_dict[curr_pid]
 
         # extract objects from current mongo client instance
-        self.db: MongoDatabase = getattr(self.client, config.get('database', 'simulations'))
+        self.db: Database = getattr(self.client, config.get('database', 'simulations'))
         self.history: Collection = getattr(self.db, 'history')
         self.configuration: Collection = getattr(self.db, 'configuration')
         self.phylogeny: Collection = getattr(self.db, 'phylogeny')
