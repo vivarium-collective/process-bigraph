@@ -92,7 +92,7 @@ class RAMEmitter(Emitter):
         return result
 
 
-class DatabaseEmitter(Emitter):
+class _DatabaseEmitter(Emitter):
     """ABC for emitting data to some sort of Database."""
 
     default_host: str
@@ -129,12 +129,20 @@ class DatabaseEmitter(Emitter):
 
 
 # noinspection PyAbstractClass
-class SqliteDatabaseEmitter(DatabaseEmitter):
+class SqliteDatabaseEmitter(_DatabaseEmitter):
     """TODO: Implement this class for simple simulations/no Mongo access as this is built in to Python."""
-    pass
+
+    config_schema = {
+        'ports': 'tree[any]'
+    }
+
+    def __init__(self, config):
+        super().__init__(config)
 
 
-class MongoDatabaseEmitter(DatabaseEmitter):
+
+
+class DatabaseEmitter(Emitter):
     """
     Emit data to a mongoDB database
 
@@ -162,8 +170,6 @@ class MongoDatabaseEmitter(DatabaseEmitter):
     client_dict: Dict[int, MongoClient] = {}
     config_schema = {
         'ports': 'tree[any]',
-        'emit_limit': 'int',
-        'embed_path': 'tuple[str]'
     }
 
     @classmethod
@@ -172,7 +178,7 @@ class MongoDatabaseEmitter(DatabaseEmitter):
         for column in columns:
             table.create_index(column)
 
-    def __init__(self, config: Dict[str, Any]) -> None:
+    def __init__(self, config: Dict[str, Any] = None) -> None:
         """Config may have 'host' and 'database' items.
 
             PLEASE NOTE: Some command must be evoked to start the MongoDb server prior to the instantiation
@@ -184,12 +190,12 @@ class MongoDatabaseEmitter(DatabaseEmitter):
                 TODO: Automate this process for the user in builder
         """
         super().__init__(config)
-        self.experiment_id = config.get('experiment_id')
+        self.experiment_id = config['ports'].get('experiment_id')
         # In the worst case, `breakdown_data` can underestimate the size of
         # data by a factor of 4: len(str(0)) == 1 but 0 is a 4-byte int.
         # Use 4 MB as the breakdown limit to stay under MongoDB's 16 MB limit.
-        self.emit_limit = config.get('emit_limit', 4000000)
-        self.embed_path = config.get('embed_path', tuple())
+        self.emit_limit = config['ports'].get('emit_limit', 4000000)
+        self.embed_path = config['ports'].get('embed_path', tuple())
 
         # create new MongoClient per OS process
         curr_pid = os.getpid()
@@ -198,7 +204,7 @@ class MongoDatabaseEmitter(DatabaseEmitter):
                 config.get('host', self.default_host))
         self.client = DatabaseEmitter.client_dict[curr_pid]
 
-        self.db = getattr(self.client, config.get('database', 'simulations'))
+        self.db = getattr(self.client, config['ports'].get('database', 'simulations'))
         self.history = getattr(self.db, 'history')
         self.configuration = getattr(self.db, 'configuration')
         self.phylogeny = getattr(self.db, 'phylogeny')
@@ -219,8 +225,10 @@ class MongoDatabaseEmitter(DatabaseEmitter):
             'table': {
                 'id': table_id
             },
-            'time': times,
-            'values': values
+            'data': {
+                'time': times,
+                'values': values
+            }
         }
 
     def emit(self, data: Dict[str, Any]) -> None:
