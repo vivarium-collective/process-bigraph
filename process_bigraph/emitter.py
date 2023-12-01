@@ -153,27 +153,30 @@ class SqliteDatabaseEmitter(_DatabaseEmitter):
 
 class DatabaseEmitter(Emitter):
     """
-    Emit data to a mongoDB database
+        Emit data to a mongoDB database
 
-    Example:
+        Attributes:
+            default_host:`str`: host by which to create the serve instance. Defaults to `'localhost:27017'`.
+            client_dict:`Dict[str, MongoClient]`
 
-    >>> config = {
-    ...     'host': 'localhost:27017',
-    ...     'database': 'DB_NAME',
-    ... }
-    >>> # The line below works only if you have to have 27017 open locally
-    >>> # emitter = DatabaseEmitter(config)
+        Example:
 
-    PLEASE NOTE: For Mac Silicon, you can start a Mongo instance as a background process with:
+        >>> config = {
+        ...     'host': 'localhost:27017',
+        ...     'database': 'DB_NAME',
+        ... }
+        >>> # The line below works only if you have to have 27017 open locally
+        >>> # emitter = DatabaseEmitter(config)
 
-        ``mongod --config /opt/homebrew/etc/mongod.conf --fork``
+        PLEASE NOTE: For Mac Silicon, you can start a Mongo instance as a background process with:
 
-        ...and the process can be stopped in two ways:
+            ``mongod --config /opt/homebrew/etc/mongod.conf --fork``
 
-            1.) `kill {PID}`
+            ...and the process can be stopped in two ways:
 
-            2.) `mongosh -> use admin -> db.shutdownServer()`
+                1.) `kill {PID}`
 
+                2.) `mongosh -> use admin -> db.shutdownServer()`
     """
     default_host = 'localhost:27017'
     client_dict: Dict[int, MongoClient] = {}
