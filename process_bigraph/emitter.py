@@ -251,7 +251,16 @@ class DatabaseEmitter(Emitter):
             }
         }
 
-    def emit(self, data: Dict[str, Any]) -> None:
+    def emit(self, data: Dict[str, Union[str, Dict[str, Union[int, str, NoneType, Dict]]]]) -> None:
+        """Checks that the data size of the passed `data` is less than the emit limit, which can be
+            derived from `self.config['emit_limit'] and then emits data to the MongoDB collection read in from
+            the passed `data['table']`, which is the `table_id` of the given collection.
+
+            Args:
+                data:`data: Dict[str, Union[str, Dict[str, Union[int, str, NoneType, Dict]]]]`: data to be saved
+                    to the collection. The `NoneType` in the type annotations accounts for `time` (timestamp) not
+                    being passed.
+        """
         table_id = data['table']
         table = self.db.get_collection(table_id)
         time = data['data'].pop('time', None)
