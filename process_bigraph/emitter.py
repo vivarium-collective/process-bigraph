@@ -9,6 +9,7 @@ import sqlite3
 from functools import partial
 from warnings import warn
 from typing import Any, Dict, List, Optional, Tuple, Callable, Union
+from types import NoneType
 from abc import ABC, abstractmethod
 from urllib.parse import quote_plus
 from concurrent.futures import ProcessPoolExecutor
@@ -177,6 +178,8 @@ class DatabaseEmitter(Emitter):
     client_dict: Dict[int, MongoClient] = {}
     config_schema = {
         'ports': 'tree[any]',
+        'emit_limit': 'int',
+        'embed_path': 'tuple[string]'
     }
 
     @classmethod
@@ -186,7 +189,9 @@ class DatabaseEmitter(Emitter):
             table.create_index(column)
 
     def __init__(self, config: Dict[str, Any] = None) -> None:
-        """Config may have 'host' and 'database' items.
+        """Config may have 'host' and 'database' items. The config passed is expected to be:
+
+            {'ports': {'experiment_id':
 
             PLEASE NOTE: Some command must be evoked to start the MongoDb server prior to the instantiation
                 of this class. For example, the following command must be evoked prior to instantiating this class:
@@ -197,12 +202,12 @@ class DatabaseEmitter(Emitter):
                 TODO: Automate this process for the user in builder
         """
         super().__init__(config)
-        self.experiment_id = config['ports'].get('experiment_id')
+        self.experiment_id = config.get('experiment_id')
         # In the worst case, `breakdown_data` can underestimate the size of
         # data by a factor of 4: len(str(0)) == 1 but 0 is a 4-byte int.
         # Use 4 MB as the breakdown limit to stay under MongoDB's 16 MB limit.
-        self.emit_limit = config['ports'].get('emit_limit', 4000000)
-        self.embed_path = config['ports'].get('embed_path', tuple())
+        self.emit_limit = config.get('emit_limit', 4000000)
+        self.embed_path = config.get('embed_path', tuple())
 
         # create new MongoClient per OS process
         curr_pid = os.getpid()
@@ -211,7 +216,7 @@ class DatabaseEmitter(Emitter):
                 config.get('host', self.default_host))
         self.client = DatabaseEmitter.client_dict[curr_pid]
 
-        self.db = getattr(self.client, config['ports'].get('database', 'simulations'))
+        self.db = getattr(self.client, config.get('database', 'simulations'))
         self.history = getattr(self.db, 'history')
         self.configuration = getattr(self.db, 'configuration')
         self.phylogeny = getattr(self.db, 'phylogeny')
@@ -224,34 +229,29 @@ class DatabaseEmitter(Emitter):
     @staticmethod
     def format_emit_data(
             table_id: str,
-            times: Union[Tuple, List, Dict, np.ndarray],
-            values: Union[Tuple, List, Dict, np.ndarray]
-            ) -> Dict[str, Union[Tuple, List, Dict, np.ndarray]]:
-        """Format the given data for mongo db emit."""
+            time: Optional[Union[int, str, NoneType]] = None,
+            **values: Union[Tuple, List, Dict, np.ndarray]
+            ) -> Dict[str, Union[str, Tuple, List, Dict, np.ndarray]]:
+        """Format the given data for mongo db emission.
+
+            Args:
+                table_id:`str`: id of the table of insertion. Usually, this value is some sort of simulation run id.
+                time:`Optional[Union[int, str, NoneType]]`: Timestamp by which the table will be indexed and data retrieved.
+                    Defaults to `None`.
+                **values: Data values to insert into the db. Kwargs will be related only to the data being stored.
+
+            Returns:
+                `Dict`: formatted data with the typeshape: `{str: Union[str, Tuple, List, Dict, np.ndarray]]}`
+        """
         return {
-            'table': {
-                'id': table_id
-            },
+            'table': table_id,
             'data': {
-                'time': times,
-                'values': values
+                'time': time,
+                'values': {**values}
             }
         }
 
     def emit(self, data: Dict[str, Any]) -> None:
-        """Emit data to the Mongo instance.
-
-            Args:
-                `data`:`Dict[str, Any]`: data that will be emitted to the Mongo instance. The expected outermost
-                    keys of this dict are:
-
-                        `{'table': table_id of insert,
-                          'data': {
-                            'time': time value,
-                            'value': `Any`
-                         }`
-
-        """
         table_id = data['table']
         table = self.db.get_collection(table_id)
         time = data['data'].pop('time', None)
@@ -751,4 +751,3 @@ def get_local_client(host: str, port: Any, database_name: str) -> Any:
     """Open a MongoDB client onto the given host, port, and DB."""
     client: MongoClient = MongoClient('{}:{}'.format(host, port))
     return client[database_name]
-
