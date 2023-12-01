@@ -16,3 +16,27 @@
 """
 
 
+import os
+from typing import *
+from smoldyn import Simulation
+from process_bigraph.emitter import MongoDatabaseEmitter
+
+
+def run_smoldyn_simulation():
+    model_fp = 'process_bigraph/experiments/model.txt'
+    simulation = Simulation.fromFile(model_fp)
+    simulation.addOutputData('time')
+    simulation.addOutputData('molecules')
+    simulation.addCommand(cmd='executiontime time', cmd_type='E')
+    simulation.addCommand(cmd='listmols molecules', cmd_type='E')
+
+    interval = 10
+    simulation.run(interval, simulation.dt)
+
+    time_output = simulation.getOutputData('time')
+    mol_output = simulation.getOutputData('molecules')
+
+    
+
+
+

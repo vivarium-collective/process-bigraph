@@ -205,6 +205,21 @@ class MongoDatabaseEmitter(DatabaseEmitter):
 
         self.fallback_serializer = make_fallback_serializer_function()
 
+    @staticmethod
+    def format_emit_data(
+            table_id: str,
+            times: Union[Tuple, List, Dict, np.ndarray],
+            values: Union[Tuple, List, Dict, np.ndarray]
+            ) -> Dict[str, Union[Tuple, List, Dict, np.ndarray]]:
+        """Format the given data for mongo db emit."""
+        return {
+            'table': {
+                'id': table_id
+            },
+            'time': times,
+            'values': values
+        }
+
     def emit(self, data: Dict[str, Any]) -> None:
         """Emit data to the Mongo instance.
 
