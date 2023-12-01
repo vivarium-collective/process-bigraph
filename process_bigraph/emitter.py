@@ -127,7 +127,13 @@ class DatabaseEmitter(Emitter):
             table.create_index(column)
 
     def __init__(self, config: Dict[str, Any]) -> None:
-        """config may have 'host' and 'database' items."""
+        """Config may have 'host' and 'database' items.
+
+            PLEASE NOTE: the following command must be evoked prior to instantiating this class:
+
+                (on Mac):
+                    `mongod --config /opt/homebrew/etc/mongod.conf --fork`
+        """
         super().__init__(config)
         self.experiment_id = config.get('experiment_id')
         # In the worst case, `breakdown_data` can underestimate the size of
@@ -154,6 +160,19 @@ class DatabaseEmitter(Emitter):
         self.fallback_serializer = make_fallback_serializer_function()
 
     def emit(self, data: Dict[str, Any]) -> None:
+        """Emit data to the Mongo instance.
+
+            Args:
+                `data`:`Dict[str, Any]`: data that will be emitted to the Mongo instance. The expected outermost
+                    keys of this dict are:
+
+                        `{'table': table_id of insert,
+                          'data': {
+                            'time': time value,
+                            'value': `Any`
+                         }`
+
+        """
         table_id = data['table']
         table = self.db.get_collection(table_id)
         time = data['data'].pop('time', None)
