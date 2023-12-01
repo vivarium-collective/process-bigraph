@@ -230,6 +230,15 @@ class DatabaseEmitter(Emitter):
         return get_history_data_db(self.history, self.experiment_id, query)
 
     def query(self, query: Optional[List[Tuple[str]]] = None) -> Dict:
+        """API contract-wrapper for `self.get_data`. Get data based on the passed query.
+
+             Args:
+                 query: a list of tuples pointing to fields within the experiment data.
+                     In the format: [('path', 'to', 'field1'), ('path', 'to', 'field2')]
+
+            Returns:
+                 `Dict`
+        """
         return self.get_data(query)
 
     def update(self, state):
