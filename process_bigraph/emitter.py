@@ -8,6 +8,7 @@ import itertools
 from functools import partial
 from warnings import warn
 from typing import Any, Dict, List, Optional, Tuple, Callable, Union
+from abc import ABC, abstractmethod
 from urllib.parse import quote_plus
 from concurrent.futures import ProcessPoolExecutor
 
@@ -92,6 +93,42 @@ class RAMEmitter(Emitter):
 
 
 class DatabaseEmitter(Emitter):
+    """ABC for emitting data to some sort of Database."""
+
+    default_host: str
+    client_dict: Dict[Any, Any]
+    config_schema = {
+        'ports': 'tree[any]'
+    }
+
+    def __init__(self, config: Dict[str, Any]) -> None:
+        super().__init__(config)
+
+    @abstractmethod
+    def emit(self, data):
+        """Abstract origin for emitting database to the db store."""
+        pass
+
+    @abstractmethod
+    def write_emit(self, table, emit_data):
+        """Abstract method for checking that data size is less than emit limit and writing.
+            Break up large emits into smaller pieces and emit them individually (parallel?).
+        """
+        pass
+
+    @abstractmethod
+    def query(self, query=None):
+        """Abstract method for retrieving data."""
+        pass
+
+    def update(self, state) -> Dict:
+        return {}
+
+    def schema(self):
+        return self.config_schema['ports']
+
+
+class MongoDatabaseEmitter(DatabaseEmitter):
     """
     Emit data to a mongoDB database
 
