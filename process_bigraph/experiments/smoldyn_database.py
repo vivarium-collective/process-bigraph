@@ -12,7 +12,7 @@
         7. This process is repeated `N` times.
         8. The user queries the vast database based on simulation run id.
 
-    Currently, this emitter works with MongoDB. TODO: include dbTypes
+    Currently, this emitter works with MongoDB. TODO: more include dbTypes
 """
 
 

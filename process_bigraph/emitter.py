@@ -134,6 +134,8 @@ class DatabaseEmitter(Emitter):
 
                 (on Mac):
                     `mongod --config /opt/homebrew/etc/mongod.conf --fork`
+
+                TODO: Automate this process for the user in builder
         """
         super().__init__(config)
         self.experiment_id = config.get('experiment_id')
