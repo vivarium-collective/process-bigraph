@@ -128,6 +128,12 @@ class DatabaseEmitter(Emitter):
         return self.config_schema['ports']
 
 
+# noinspection PyAbstractClass
+class SqliteDatabaseEmitter(DatabaseEmitter):
+    """TODO: Implement this class for simple simulations/no Mongo access as this is built in to Python."""
+    pass
+
+
 class MongoDatabaseEmitter(DatabaseEmitter):
     """
     Emit data to a mongoDB database
