@@ -40,19 +40,21 @@ class Emitter(Step):
     def query(self, query=None):
         return {}
 
+    def update(self, state) -> Dict:
+        return {}
+
 
 class ConsoleEmitter(Emitter):
     config_schema = {
         'ports': 'tree[any]'}
 
 
-    def schema(self):
+    def schema(self) -> Dict:
         return self.config['ports']
 
 
-    def update(self, state):
+    def update(self, state) -> Dict:
         print(state)
-
         return {}
 
 
@@ -67,11 +69,11 @@ class RAMEmitter(Emitter):
         self.history = []
 
 
-    def schema(self):
+    def schema(self) -> Dict:
         return self.config['ports']
 
 
-    def update(self, state):
+    def update(self, state) -> Dict:
         self.history.append(copy.deepcopy(state))
 
         return {}
@@ -101,6 +103,17 @@ class DatabaseEmitter(Emitter):
     ... }
     >>> # The line below works only if you have to have 27017 open locally
     >>> # emitter = DatabaseEmitter(config)
+
+    PLEASE NOTE: For Mac Silicon, you can start a Mongo instance as a background process with:
+
+        ``mongod --config /opt/homebrew/etc/mongod.conf --fork``
+
+        ...and the process can be stopped in two ways:
+
+            1.) `kill {PID}`
+
+            2.) `mongosh -> use admin -> db.shutdownServer()`
+
     """
     default_host = 'localhost:27017'
     client_dict: Dict[int, MongoClient] = {}
@@ -203,6 +216,9 @@ class DatabaseEmitter(Emitter):
         self.emit(state)
 
         return {}
+
+    def schema(self) -> Dict:
+        return self.config['ports']
 
 
 def make_fallback_serializer_function() -> Callable:
@@ -628,3 +644,8 @@ def get_local_client(host: str, port: Any, database_name: str) -> Any:
     """Open a MongoDB client onto the given host, port, and DB."""
     client: MongoClient = MongoClient('{}:{}'.format(host, port))
     return client[database_name]
+
+
+emitter = DatabaseEmitter(config={})
+
+print(dir(emitter))
