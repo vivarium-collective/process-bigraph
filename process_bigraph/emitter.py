@@ -5,6 +5,7 @@ import uuid
 import orjson
 import collections
 import itertools
+import sqlite3
 from functools import partial
 from warnings import warn
 from typing import Any, Dict, List, Optional, Tuple, Callable, Union
@@ -16,6 +17,7 @@ import numpy as np
 from pymongo import ASCENDING
 from pymongo.errors import DocumentTooLarge
 from pymongo.mongo_client import MongoClient
+from pymongo.collection import Collection
 from bson import MinKey, MaxKey
 
 from bigraph_schema import get_path, set_path
@@ -92,7 +94,7 @@ class RAMEmitter(Emitter):
         return result
 
 
-class _DatabaseEmitter(Emitter):
+'''class _DatabaseEmitter(Emitter):
     """ABC for emitting data to some sort of Database."""
 
     default_host: str
@@ -133,13 +135,18 @@ class SqliteDatabaseEmitter(_DatabaseEmitter):
     """TODO: Implement this class for simple simulations/no Mongo access as this is built in to Python."""
 
     config_schema = {
-        'ports': 'tree[any]'
+        'ports': {
+            'db_name': 'string'
+        }
     }
 
     def __init__(self, config):
         super().__init__(config)
+        self.conn = sqlite3.connect(self.config['ports'].get('db_name'))
+        self.cursor = self.conn.cursor()
 
-
+    def emit(self, table_id: str):
+        pass '''
 
 
 class DatabaseEmitter(Emitter):
@@ -259,7 +266,7 @@ class DatabaseEmitter(Emitter):
         emit_data['experiment_id'] = self.experiment_id
         self.write_emit(table, emit_data)
 
-    def write_emit(self, table: Any, emit_data: Dict[str, Any]) -> None:
+    def write_emit(self, table: Collection, emit_data: Dict[str, Any]) -> None:
         """Check that data size is less than emit limit.
 
         Break up large emits into smaller pieces and emit them individually
@@ -509,7 +516,7 @@ def breakdown_data(
 
 
 def get_history_data_db(
-    history_collection: Any,
+    history_collection: Collection,
     experiment_id: Any,
     query: Optional[List] = None,
     func_dict: Optional[Dict] = None,
