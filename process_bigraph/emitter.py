@@ -227,7 +227,7 @@ class DatabaseEmitter(Emitter):
         self.fallback_serializer = make_fallback_serializer_function()
 
     @staticmethod
-    def format_emit_data(
+    def format_data(
             table_id: str,
             time: Optional[Union[int, str, NoneType]] = None,
             **values: Union[Tuple, List, Dict, np.ndarray]
@@ -251,7 +251,7 @@ class DatabaseEmitter(Emitter):
             }
         }
 
-    def emit(self, data: Dict[str, Union[str, Dict[str, Union[int, str, NoneType, Dict]]]]) -> None:
+    def emit(self, data: Dict[str, Any] = None, **unformatted_data) -> None:
         """Checks that the data size of the passed `data` is less than the emit limit, which can be
             derived from `self.config['emit_limit'] and then emits data to the MongoDB collection read in from
             the passed `data['table']`, which is the `table_id` of the given collection.
@@ -259,8 +259,25 @@ class DatabaseEmitter(Emitter):
             Args:
                 data:`data: Dict[str, Union[str, Dict[str, Union[int, str, NoneType, Dict]]]]`: data to be saved
                     to the collection. The `NoneType` in the type annotations accounts for `time` (timestamp) not
-                    being passed.
+                    being passed. Defaults to `None` in which case `**unformatted_data must be passed`.
+                    If passing `data`, the type annotation provided suggests the following schema for this argument:
+                    data = {
+                        'table': table(collection) id to which data will be saved,
+                        'data': {
+                            'time': timestamp of simulation by which to slice and retrieve the collection data,
+                            'values': {value name: value}
+                        }
+                    }
+
+                **unformatted_data:`Dict[str, Union[str, Dict]]`: args to pass as input for `self.format_data` which
+                    are as follows: table_id(str), time(int, str), values({simulation values})
         """
+        if not data:
+            data = self.format_data(
+                unformatted_data['table_id'],
+                unformatted_data['time'],
+                values=unformatted_data['values']
+            )
         table_id = data['table']
         table = self.db.get_collection(table_id)
         time = data['data'].pop('time', None)
@@ -276,9 +293,12 @@ class DatabaseEmitter(Emitter):
         self.write_emit(table, emit_data)
 
     def write_emit(self, table: Collection, emit_data: Dict[str, Any]) -> None:
-        """Check that data size is less than emit limit.
+        """Check that data size is less than emit limit. Break up large emits into smaller pieces and
+            emit them individually.
 
-        Break up large emits into smaller pieces and emit them individually
+            Args:
+                table:`pymongo.collection.Collection`: pymongo collection to which data will be written.
+                emit_data:`Dict[str, Any]`: Data to be passed and saved to the collection.
         """
         assembly_id = str(uuid.uuid4())
         emit_data = serialize_value(emit_data, self.fallback_serializer)
