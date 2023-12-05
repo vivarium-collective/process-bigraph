@@ -182,6 +182,7 @@ class DatabaseEmitter(Emitter):
     client_dict: Dict[int, MongoClient] = {}
     config_schema = {
         'ports': 'tree[any]',
+        'experiment_id': 'string',
         'emit_limit': 'int',
         'embed_path': 'tuple'
     }
@@ -301,6 +302,7 @@ class DatabaseEmitter(Emitter):
         emit_data = data.copy()
         emit_data.pop('table', None)
         emit_data['experiment_id'] = self.experiment_id
+        print(table, emit_data)
         self.write_emit(table, emit_data)
 
     def write_emit(self, table: Collection, emit_data: Dict[str, Any]) -> None:
