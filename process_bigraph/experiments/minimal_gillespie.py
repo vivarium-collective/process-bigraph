@@ -211,7 +211,7 @@ def test_gillespie_composite():
 
             'emitter': {
                 '_type': 'step',
-                'address': 'local:ram-emitter',
+                'address': 'local:database-emitter',
                 'config': {
                     'ports': {
                         'inputs': {
