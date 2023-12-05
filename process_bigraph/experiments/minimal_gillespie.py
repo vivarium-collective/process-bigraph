@@ -254,6 +254,7 @@ def test_gillespie_composite():
 
     # TODO: make this work
     results = gillespie.gather_results()
+    print(results)
 
     assert 'mRNA' in updates[0]
 

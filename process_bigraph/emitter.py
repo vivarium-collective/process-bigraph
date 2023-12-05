@@ -178,13 +178,16 @@ class DatabaseEmitter(Emitter):
 
                 2.) `mongosh -> use admin -> db.shutdownServer()`
     """
-    default_host = 'localhost:27017'
     client_dict: Dict[int, MongoClient] = {}
     config_schema = {
         'ports': 'tree[any]',
         'experiment_id': 'string',
         'emit_limit': 'int',
-        'embed_path': 'tuple'
+        'embed_path': 'tuple',
+        'host': {
+            '_type': 'string',
+            '_default': 'localhost:27017'
+        }
     }
 
     @classmethod
@@ -222,7 +225,7 @@ class DatabaseEmitter(Emitter):
         curr_pid = os.getpid()
         if curr_pid not in DatabaseEmitter.client_dict:
             DatabaseEmitter.client_dict[curr_pid] = MongoClient(
-                config.get('host', self.default_host))
+                config['host'])
         self.client: MongoClient = DatabaseEmitter.client_dict[curr_pid]
 
         # extract objects from current mongo client instance
@@ -302,7 +305,7 @@ class DatabaseEmitter(Emitter):
         emit_data = data.copy()
         emit_data.pop('table', None)
         emit_data['experiment_id'] = self.experiment_id
-        print(table, emit_data)
+        print(f'the emit data: {emit_data}')
         self.write_emit(table, emit_data)
 
     def write_emit(self, table: Collection, emit_data: Dict[str, Any]) -> None:
@@ -362,7 +365,19 @@ class DatabaseEmitter(Emitter):
         return self.get_data(query)
 
     def update(self, state):
-        self.emit(state)
+        table_id = state['table']
+        table = self.db.get_collection(table_id)
+        time = state['data'].pop('time', None)
+        state['data'] = assoc_path({}, self.embed_path, state['data'])
+        # Analysis scripts expect the time to be at the top level of the
+        # dictionary, but some emits, like configuration emits, lack a
+        # time key.
+        if time is not None:
+            state['data']['time'] = time
+        emit_data = state.copy()
+        emit_data.pop('table', None)
+        emit_data['experiment_id'] = self.experiment_id
+        self.write_emit(table, emit_data)
 
         return {}
 
