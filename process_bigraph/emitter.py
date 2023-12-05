@@ -195,7 +195,11 @@ class DatabaseEmitter(Emitter):
     def __init__(self, config: Dict[str, Any] = None) -> None:
         """Config may have 'host' and 'database' items. The config passed is expected to be:
 
-            {'ports': {'experiment_id':
+                {'experiment_id':,
+                 'emit_limit':,
+                 'embed_path':,
+                 'ports': {}}
+
 
             PLEASE NOTE: Some command must be evoked to start the MongoDb server prior to the instantiation
                 of this class. For example, the following command must be evoked prior to instantiating this class:
