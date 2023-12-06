@@ -21,18 +21,23 @@ emitter = DatabaseEmitter(emitter_config)
 
 
 sim_runs = {
-    str(n): run_simulation(n + n)
-    for n in range(10)
+    'data': {}
 }
 
 sim_runs['table'] = emitter.experiment_id
-sim_runs['data'] = {
-    'time': 0,
-    'values': {
-        'output': 23
-    }
-}
-emitter.emit(data=sim_runs)
 
-print(emitter.db.phylogeny)
+for t in range(10):
+    sim_runs['data'][str(t)] = {
+        'time': t,
+        'values': {
+            'output': run_simulation(t)
+        }
+    }
+
+print(sim_runs.get('data'))
+
+emitter.update(sim_runs)
+
+result = emitter.query([('data', 'values', 'output')])
+
 

@@ -96,75 +96,13 @@ class RAMEmitter(Emitter):
         return result
 
 
-'''class _DatabaseEmitter(Emitter):
-    """ABC for emitting data to some sort of Database."""
-
-    default_host: str
-    client_dict: Dict[Any, Any]
-    config_schema = {
-        'ports': 'tree[any]'
-    }
-
-    def __init__(self, config: Dict[str, Any]) -> None:
-        super().__init__(config)
-
-    @abstractmethod
-    def emit(self, data):
-        """Abstract origin for emitting database to the db store."""
-        pass
-
-    @abstractmethod
-    def write_emit(self, table, emit_data):
-        """Abstract method for checking that data size is less than emit limit and writing.
-            Break up large emits into smaller pieces and emit them individually (parallel?).
-        """
-        pass
-
-    @abstractmethod
-    def query(self, query=None):
-        """Abstract method for retrieving data."""
-        pass
-
-    def update(self, state) -> Dict:
-        return {}
-
-    def schema(self):
-        return self.config_schema['ports']
-
-
-# noinspection PyAbstractClass
-class SqliteDatabaseEmitter(_DatabaseEmitter):
-    """TODO: Implement this class for simple simulations/no Mongo access as this is built in to Python."""
-
-    config_schema = {
-        'ports': {
-            'db_name': 'string'
-        }
-    }
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.conn = sqlite3.connect(self.config['ports'].get('db_name'))
-        self.cursor = self.conn.cursor()
-
-    def emit(self, table_id: str):
-        pass '''
-
-
 class DatabaseEmitter(Emitter):
     """
         Emit data to a mongoDB database
 
         Attributes:
-            default_host:`str`: host by which to create the serve instance. Defaults to `'localhost:27017'`.
             client_dict:`Dict[str, MongoClient]`
 
-        Example:
-
-        >>> config = {
-        ...     'host': 'localhost:27017',
-        ...     'database': 'DB_NAME',
-        ... }
         >>> # The line below works only if you have to have 27017 open locally
         >>> # emitter = DatabaseEmitter(config)
 
@@ -241,31 +179,6 @@ class DatabaseEmitter(Emitter):
 
         self.fallback_serializer = make_fallback_serializer_function()
 
-    @staticmethod
-    def format_data(
-            table_id: str,
-            time: Optional[Union[int, str, NoneType]] = None,
-            **values: Union[Tuple, List, Dict, np.ndarray]
-            ) -> Dict[str, Union[str, Tuple, List, Dict, np.ndarray]]:
-        """Format the given data for mongo db emission.
-
-            Args:
-                table_id:`str`: id of the table of insertion. Usually, this value is some sort of simulation run id.
-                time:`Optional[Union[int, str, NoneType]]`: Timestamp by which the table will be indexed and data retrieved.
-                    Defaults to `None`.
-                **values: Data values to insert into the db. Kwargs will be related only to the data being stored.
-
-            Returns:
-                `Dict`: formatted data with the typeshape: `{str: Union[str, Tuple, List, Dict, np.ndarray]]}`
-        """
-        return {
-            'table': table_id,
-            'data': {
-                'time': time,
-                'values': {**values}
-            }
-        }
-
     def write_emit(self, table: Collection, emit_data: Dict[str, Any]) -> None:
         """Check that data size is less than emit limit. Break up large emits into smaller pieces and
             emit them individually.
@@ -324,11 +237,29 @@ class DatabaseEmitter(Emitter):
         emit_data.pop('table', None)
         emit_data['experiment_id'] = self.experiment_id
         self.write_emit(table, emit_data)
-
         return {}
 
     def schema(self) -> Dict:
         return self.config['ports']
+
+
+def format_data(table_id: str, time: Optional[Union[int, str, NoneType]] = None, **values: Any) -> Dict[str, Any]:
+    """Format the given data for mongo db emission.
+        Args:
+            table_id:`str`: id of the table of insertion. Usually, this value is some sort of simulation run id.
+            time:`Optional[Union[int, str, NoneType]]`: Timestamp by which the table will be indexed and data retrieved.
+                Defaults to `None`.
+            **values: Data values to insert into the db. Kwargs will be related only to the data being stored.
+        Returns:
+            `Dict`: formatted data with the typeshape: `{str: Union[str, Tuple, List, Dict, np.ndarray]]}`
+    """
+    return {
+        'table': table_id,
+        'data': {
+            'time': time,
+            'values': {**values}
+        }
+    }
 
 
 def make_fallback_serializer_function() -> Callable:
