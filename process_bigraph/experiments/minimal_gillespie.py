@@ -215,12 +215,25 @@ def test_gillespie_composite():
                 'config': {
                     'ports': {
                         'inputs': {
-                            'mRNA': 'tree[float]',
-                            'interval': 'float'}}},
+                            'experiment_id': 'string',
+                            'table': 'string',
+                            'data': {
+                                'mRNA': 'tree[float]',
+                                'interval': 'float'
+                            }
+
+                        }
+                    },
+                    'experiment_id': 'string'
+                },
                 'wires': {
                     'inputs': {
-                        'mRNA': ['mRNA'],
-                        'interval': ['event', 'interval']}}}}}
+                        'experiment_id': ['experiment_id'],
+                        'table': ['table'],
+                        'data': ['mRNA', 'event', 'interval'],
+                    }
+                }
+            }}}
 
             # TODO: provide a way to emit everything:
             # 'emitter': emit_all(
@@ -245,12 +258,19 @@ def test_gillespie_composite():
 
     gillespie = Composite(composite_schema)
 
-    updates = gillespie.update({
-        'DNA': {
-            'G': 11.0},
-        'mRNA': {
-            'C': 5.0}},
-        1000.0)
+    updates = gillespie.update(
+        {
+            'table': 'simrun1',
+            'data': {
+                'DNA': {
+                    'G': 11.0
+                },
+                'mRNA': {
+                    'C': 5.0
+                }
+            },
+        },
+        1000)
 
     # TODO: make this work
     results = gillespie.gather_results()
