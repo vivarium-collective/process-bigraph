@@ -188,6 +188,7 @@ def test_gillespie_composite():
             'mRNA': ['mRNA']},
 
         'state': {
+            'experiment_id': 'simulation1',
             'mRNA': {'C': 23.0},
             'interval': {
                 '_type': 'step',
