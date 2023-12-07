@@ -188,7 +188,6 @@ def test_gillespie_composite():
             'mRNA': ['mRNA']},
 
         'state': {
-            'experiment_id': 'simulation1',
             'mRNA': {'C': 23.0},
             'interval': {
                 '_type': 'step',
@@ -212,29 +211,16 @@ def test_gillespie_composite():
 
             'emitter': {
                 '_type': 'step',
-                'address': 'local:database-emitter',
+                'address': 'local:ram-emitter',
                 'config': {
                     'ports': {
                         'inputs': {
-                            'experiment_id': 'string',
-                            'table': 'string',
-                            'data': {
-                                'mRNA': 'tree[float]',
-                                'interval': 'float'
-                            }
-
-                        }
-                    },
-                    'experiment_id': 'string'
-                },
+                            'mRNA': 'tree[float]',
+                            'interval': 'float'}}},
                 'wires': {
                     'inputs': {
-                        'experiment_id': ['experiment_id'],
-                        'table': ['table'],
-                        'data': ['mRNA', 'event', 'interval'],
-                    }
-                }
-            }}}
+                        'mRNA': ['mRNA'],
+                        'interval': ['event', 'interval']}}}}}
 
             # TODO: provide a way to emit everything:
             # 'emitter': emit_all(
@@ -259,23 +245,15 @@ def test_gillespie_composite():
 
     gillespie = Composite(composite_schema)
 
-    updates = gillespie.update(
-        {
-            'table': 'simrun1',
-            'data': {
-                'DNA': {
-                    'G': 11.0
-                },
-                'mRNA': {
-                    'C': 5.0
-                }
-            },
-        },
-        1000)
+    updates = gillespie.update({
+        'DNA': {
+            'G': 11.0},
+        'mRNA': {
+            'C': 5.0}},
+        1000.0)
 
     # TODO: make this work
     results = gillespie.gather_results()
-    print(results)
 
     assert 'mRNA' in updates[0]
 
