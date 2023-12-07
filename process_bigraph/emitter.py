@@ -130,7 +130,8 @@ class DatabaseEmitter(Emitter):
         },
         'embed_path': {
             '_type': 'tuple',
-            '_default': tuple()
+            '_default': tuple(),
+            '_deserialize': 'deserialize_string'
         },
         'host': {
             '_type': 'string',
@@ -233,6 +234,7 @@ class DatabaseEmitter(Emitter):
 
     def update(self, state):
         table_id = state['table']
+        print(f'TABLE ID: {table_id}')
         table = self.db.get_collection(table_id)
         time = state['data'].pop('time', None)
         state['data'] = assoc_path({}, self.embed_path, state['data'])

@@ -193,12 +193,16 @@ def test_process():
             'config': {
                 'ports': {
                     'inputs': {
+                        'experiment_id': 'string',
+                        'table': 'string',
                         'floating_species': 'tree[float]'
                     }
                 }
             },
             'wires': {
                 'inputs': {
+                    'experiment_id': ['experiment_id_store'],
+                    'table': ['table_store'],
                     'floating_species': ['floating_species_store'],
                 }
             }

@@ -224,7 +224,6 @@ def find_instances(state, instance_type='process_bigraph.composite.Process'):
     for key, inner in state.items():
         if isinstance(inner, dict) and isinstance(inner.get('instance'), process_class):
             found[key] = inner
-    print(f'FOund: {found}')
     return found
 
 
@@ -368,9 +367,9 @@ def combined_step_network(steps):
 
 
 def build_trigger_state(nodes):
-    '''return {
+    return {
         key: value['before'].copy()
-        for key, value in nodes.items()}'''
+        for key, value in nodes.items()}
 
 
 def find_downstream(steps, nodes, upstream):
@@ -397,8 +396,6 @@ def find_downstream(steps, nodes, upstream):
 
 def determine_steps(steps, remaining, fulfilled):
     to_run = []
-
-    print(f'STEPS: {steps}, REMAINING: {remaining}, FULFILLED: {fulfilled}')
     for step_path in remaining:
         step_inputs = steps[step_path]['input_paths']
         if step_inputs is None:
@@ -549,7 +546,6 @@ class Composite(Process):
 
 
     def cycle_step_state(self):
-        print(f'STEP DEPS: {self.step_dependencies}, STEPS REMAINING: {self.steps_remaining}, trigger state: {self.trigger_state}')
         to_run, self.steps_remaining, self.trigger_state = determine_steps(
             self.step_dependencies,
             self.steps_remaining,
