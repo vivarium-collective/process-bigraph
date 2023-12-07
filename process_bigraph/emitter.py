@@ -127,12 +127,14 @@ class DatabaseEmitter(Emitter):
         'emit_limit': 'int',
         'embed_path': {
             '_type': 'tuple',
-            '_default': tuple(),
+            '_default': tuple()
+        },
         'host': {
             '_type': 'string',
             '_default': 'localhost:27017'
         }
     }
+
 
     @classmethod
     def create_indexes(cls, table: Any, columns: List[Any]) -> None:
