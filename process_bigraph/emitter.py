@@ -123,7 +123,10 @@ class DatabaseEmitter(Emitter):
     client_dict: Dict[int, MongoClient] = {}
     config_schema = {
         'ports': 'tree[any]',
-        'experiment_id': 'string',
+        'experiment_id': {
+            '_type': 'string',
+            '_default': 'simulation'
+        },
         'emit_limit': {
             '_type': 'int',
             '_default': 4000000
@@ -233,7 +236,8 @@ class DatabaseEmitter(Emitter):
         return get_history_data_db(self.history, self.experiment_id, query)
 
     def update(self, state):
-        table_id = state['table']
+        print(f'The state: {state}')
+        table_id = state['table'] or self.experiment_id
         print(f'TABLE ID: {table_id}')
         table = self.db.get_collection(table_id)
         time = state['data'].pop('time', None)
