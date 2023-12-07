@@ -42,6 +42,10 @@ SECRETS_PATH = 'secrets.json'
 
 
 class Emitter(Step):
+    """Base emitter class. An `Emitter` implementation instance diverts all querying of data to
+        the primary historical collection whose type pertains to Emitter child, i.e:
+            database-emitter=>`pymongo.Collection`, ram-emitter=>`.RamEmitter.history`(`List`)
+    """
     def query(self, query=None):
         return {}
 
@@ -121,7 +125,9 @@ class DatabaseEmitter(Emitter):
         'ports': 'tree[any]',
         'experiment_id': 'string',
         'emit_limit': 'int',
-        'embed_path': 'tuple',
+        'embed_path': {
+            '_type': 'tuple',
+            '_default': tuple(),
         'host': {
             '_type': 'string',
             '_default': 'localhost:27017'
@@ -152,12 +158,12 @@ class DatabaseEmitter(Emitter):
                 TODO: Automate this process for the user in builder
         """
         super().__init__(config)
-        self.experiment_id = config.get('experiment_id')
+        self.experiment_id = self.config.get('experiment_id')
         # In the worst case, `breakdown_data` can underestimate the size of
         # data by a factor of 4: len(str(0)) == 1 but 0 is a 4-byte int.
         # Use 4 MB as the breakdown limit to stay under MongoDB's 16 MB limit.
-        self.emit_limit = config.get('emit_limit', 4000000)
-        self.embed_path = config.get('embed_path', tuple())
+        self.emit_limit = self.config.get('emit_limit', 4000000)
+        self.embed_path = self.config.get('embed_path', tuple())
 
         # create new MongoClient per OS process
         curr_pid = os.getpid()
