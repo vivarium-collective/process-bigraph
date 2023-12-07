@@ -124,7 +124,10 @@ class DatabaseEmitter(Emitter):
     config_schema = {
         'ports': 'tree[any]',
         'experiment_id': 'string',
-        'emit_limit': 'int',
+        'emit_limit': {
+            '_type': 'int',
+            '_default': 4000000
+        },
         'embed_path': {
             '_type': 'tuple',
             '_default': tuple()
@@ -132,7 +135,11 @@ class DatabaseEmitter(Emitter):
         'host': {
             '_type': 'string',
             '_default': 'localhost:27017'
-        }
+        },
+        'database': {
+            '_type': 'string',
+            '_default': 'simulations'
+        },
     }
 
 
@@ -150,22 +157,15 @@ class DatabaseEmitter(Emitter):
                  'embed_path':,
                  'ports': {}}
 
-
-            PLEASE NOTE: Some command must be evoked to start the MongoDb server prior to the instantiation
-                of this class. For example, the following command must be evoked prior to instantiating this class:
-
-                (on Mac):
-                    `mongod --config /opt/homebrew/etc/mongod.conf --fork`
-
                 TODO: Automate this process for the user in builder
         """
         super().__init__(config)
-        self.experiment_id = self.config.get('experiment_id')
+        self.experiment_id = self.config['experiment_id']
         # In the worst case, `breakdown_data` can underestimate the size of
         # data by a factor of 4: len(str(0)) == 1 but 0 is a 4-byte int.
         # Use 4 MB as the breakdown limit to stay under MongoDB's 16 MB limit.
-        self.emit_limit = self.config.get('emit_limit', 4000000)
-        self.embed_path = self.config.get('embed_path', tuple())
+        self.emit_limit = self.config['emit_limit']
+        self.embed_path = self.config['embed_path']
 
         # create new MongoClient per OS process
         curr_pid = os.getpid()
@@ -175,7 +175,7 @@ class DatabaseEmitter(Emitter):
         self.client: MongoClient = DatabaseEmitter.client_dict[curr_pid]
 
         # extract objects from current mongo client instance
-        self.db: Database = getattr(self.client, config.get('database', 'simulations'))
+        self.db: Database = getattr(self.client, self.config.get('database', 'simulations'))
         self.history: Collection = getattr(self.db, 'history')
         self.configuration: Collection = getattr(self.db, 'configuration')
         self.phylogeny: Collection = getattr(self.db, 'phylogeny')
@@ -580,19 +580,20 @@ def get_query(
 
 
 def get_data_chunks(
-    history_collection: Any,
+    history_collection: Collection,
     experiment_id: str,
     start_time: Union[int, MinKey] = MinKey(),
     end_time: Union[int, MaxKey] = MaxKey(),
     cpus: int = 8
-) -> list:
+) -> List:
     """Helper function to get chunks for parallel queries
 
     Args:
-        history_collection: the MongoDB history collection to query
-        experiment_id: the experiment id which is being retrieved
-        start_time, end_time: first and last simulation time to query
-        cpus: number of chunks to create
+        history_collection:`pymongo.Collection`: the MongoDB history collection to query.
+        experiment_id:`str`: the experiment id which is being retrieved.
+        start_time:`Union[int, MinKey]`: first simulation time to query.
+        end_time:`Union[int, MaxKey]`: last simulation time to query.
+        cpus:`int`: number of chunks to create.
     Returns:
         List of ObjectId tuples that represent chunk boundaries.
         For each tuple, include ``{'_id': {$gte: tuple[0], $lt: tuple[1]}}``
