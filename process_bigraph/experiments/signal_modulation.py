@@ -121,17 +121,15 @@ class RingModulationProcess(Process):
         # create new wave
         new_wave_modulated = apply_modulation(
             input_wave=np.array(state['output_signal']),
-            modulation_function=tremolo,
-            depth=self.config['depth'],
-            rate=self.config['rate']
+            modulation_function=ring_modulation,
+            mod_freq=self.config['mod_freq']
         )
-        print(new_wave_modulated)
 
         # write out the file
         array_to_wav(
             filename=os.path.join(
                 os.getcwd(),
-                'tremolo_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+                'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
             ),
             input_signal=new_wave_modulated
         )
@@ -191,7 +189,7 @@ def ring_modulation(input_wave, mod_freq=30):
     :param mod_freq: float, the frequency of the modulating wave.
     :return: NumPy array, the waveform with ring modulation effect.
     """
-    t = np.linspace(0, 1, len(input_wave), endpoint=True)
+    t = np.linspace(0, 1, len(input_wave/2), endpoint=True)
     modulating_wave = np.sin(2 * np.pi * mod_freq * t)
     return input_wave * modulating_wave
 
@@ -433,7 +431,7 @@ def test_tremolo():
 
 
 def test_ring_mod():
-    stop = 4
+    stop = 10
     frequencies = [262, 294, 330, 349]
 
     def ring_mod_create_instance():
@@ -442,7 +440,7 @@ def test_ring_mod():
                 '_type': 'process',
                 'address': 'local:ring_modulation',
                 'config': {
-                    'mod_freq': 30,
+                    'mod_freq': 2000,
                     'starting_frequency': frequencies[0]
                 },
                 'wires': {  # this should return that which is in the schema
@@ -467,11 +465,11 @@ def test_ring_mod():
             }
         }
 
-    measure = []
-    starting_signal = start_sine_wave(stop, frequencies[0])
     instance = ring_mod_create_instance()
-    result = run_instance(instance)
-    measure.append(result)
+    result = run_instance(instance, num_beats=8)
+    resulting_wave = np.array(result[('emitter',)])
+    print(type(resulting_wave))
+   # array_to_wav(filename=os.path.join(os.getcwd(), 'final_result.wav'), input_signal=resulting_wave)
 
 
 if __name__ == '__main__':
