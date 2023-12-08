@@ -1,5 +1,5 @@
 import numpy as np
-from process_bigraph.composite import Process
+from process_bigraph.composite import Process, Composite
 from process_bigraph.registry import process_registry
 # import matplotlib.pyplot as plt
 
@@ -12,8 +12,8 @@ class MediumDistortionProcess(Process):
     def __init__(self, config=None):
         super().__init__(config)
 
-    def initial_state(self, config=None):
-        return self.config
+    def initial_state(self):
+        return {'output_signal': self.config['input_signal']}
 
     def schema(self):
         return {
@@ -21,7 +21,7 @@ class MediumDistortionProcess(Process):
         }
 
     def update(self, state, interval):
-        new_wave = apply_modulation(state['output_signal'], distortion, gain=5)
+        new_wave = apply_modulation(state['output_signal'], distortion, gain=5).tolist()
         return {
             'output_signal': new_wave
         }
@@ -67,16 +67,16 @@ def tremolo(input_wave, rate=5, depth=0.5):
     return input_wave * modulating_wave
 
 
-# Example usage
+'''# Example usage
 t = np.linspace(0, 1, 500, endpoint=True)
-input_wave = np.sin(2 * np.pi * 5 * t)  # Example sine wave
+input_wave = np.sin(2 * np.pi * 5 * np.linspace(0, 1, 500, endpoint=True))  # Example sine wave
 
 # Apply distortion
 modulated_wave = apply_modulation(input_wave, distortion, gain=5)
 print(modulated_wave)
 # Apply tremolo
 modulated_wave = apply_modulation(modulated_wave, tremolo, rate=5, depth=0.7)
-print(modulated_wave)
+print(modulated_wave)'''
 
 
 '''# Plotting
@@ -101,38 +101,35 @@ plt.tight_layout()
 plt.show()'''
 
 
-instance = {
-        'distortion': {
-            '_type': 'process',
-            'address': 'local:medium_distortion',
-            'config': {
-                'model_filepath': 'smoldyn_process/models/model_files/crowding_model.txt',
-                'animate': False,
-            },
-            'wires': {  # this should return that which is in the schema
-                'species_counts': ['species_counts_store'],
-                'molecules': ['molecules_store'],
-            }
-        },
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'ports': {
-                    'inputs': {
-                        'species_counts': 'tree[any]',
-                        'molecules': 'tree[any]'
-                    },
+def test_medium_distortion():
+    instance = {
+            'distortion': {
+                '_type': 'process',
+                'address': 'local:medium_distortion',
+                'config': {
+                    'input_signal': np.sin(2 * np.pi * 5 * np.linspace(0, 1, 500, endpoint=True)),
+                },
+                'wires': {  # this should return that which is in the schema
+                    'output_signal': ['output_signal_store'],
                 }
             },
-            'wires': {
-                'inputs': {
-                    'species_counts': ['species_counts_store'],
-                    'molecules': ['molecules_store'],
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:ram-emitter',
+                'config': {
+                    'ports': {
+                        'inputs': {
+                            'output_signal': 'list[float]'
+                        },
+                    }
+                },
+                'wires': {
+                    'inputs': {
+                        'output_signal': ['output_signal_store'],
+                    }
                 }
             }
         }
-    }
 
     # make the composite
     workflow = Composite({
@@ -144,4 +141,7 @@ instance = {
 
     # gather results
     results = workflow.gather_results()
-    print(f'RESULTS: {pf(results)}')
+    print(results)
+
+
+test_medium_distortion()
