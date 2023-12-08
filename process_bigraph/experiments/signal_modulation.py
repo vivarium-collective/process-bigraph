@@ -107,7 +107,7 @@ def test_medium_distortion():
                 '_type': 'process',
                 'address': 'local:medium_distortion',
                 'config': {
-                    'input_signal': np.sin(2 * np.pi * 5 * np.linspace(0, 1, 500, endpoint=True)),
+                    'input_signal': np.sin(2 * np.pi * 5 * np.linspace(0, 1, 500, endpoint=True)).tolist(),
                 },
                 'wires': {  # this should return that which is in the schema
                     'output_signal': ['output_signal_store'],
@@ -142,7 +142,7 @@ def test_medium_distortion():
 
     # gather results
     results = workflow.gather_results()
-    print(results)
+
 
 
 test_medium_distortion()
