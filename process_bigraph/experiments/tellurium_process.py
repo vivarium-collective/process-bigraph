@@ -249,7 +249,7 @@ def test_process_with_database_emitter():
                         'experiment_id': 'string',
                         'table': 'string',
                         'floating_species': 'tree[float]',
-                        #'data': 'tree[string]'
+
                     },
                 }
             },
@@ -257,7 +257,7 @@ def test_process_with_database_emitter():
                 'inputs': {
                     'experiment_id': ['experiment_id_store'],
                     'table': ['table_store'],
-                    'data': ['floating_species_store'],
+                    'data': ['data_store', 'floating_species_store'],
                     'floating_species': ['floating_species_store'],
                 }
             }
@@ -327,5 +327,6 @@ def test_step():
 
 
 if __name__ == '__main__':
-    test_process()
+    test_process_with_database_emitter()
+    # test_process()
     # test_step()

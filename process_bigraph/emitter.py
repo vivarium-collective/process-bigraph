@@ -125,7 +125,7 @@ class DatabaseEmitter(Emitter):
         'ports': 'tree[any]',
         'experiment_id': {
             '_type': 'string',
-            '_default': 'simulation'
+            '_default': str(uuid.uuid4())
         },
         'emit_limit': {
             '_type': 'int',
@@ -236,9 +236,9 @@ class DatabaseEmitter(Emitter):
         return get_history_data_db(self.history, self.experiment_id, query)
 
     def update(self, state):
-        print(f'The state: {state}')
-        table_id = state['table'] or self.experiment_id
-        print(f'TABLE ID: {table_id}')
+        if not state.get('table'):
+            state['table'] += self.config['database']
+        table_id = state['table']
         table = self.db.get_collection(table_id)
         time = state['data'].pop('time', None)
         state['data'] = assoc_path({}, self.embed_path, state['data'])
@@ -251,6 +251,7 @@ class DatabaseEmitter(Emitter):
         emit_data.pop('table', None)
         emit_data['experiment_id'] = self.experiment_id
         self.write_emit(table, emit_data)
+        print(emit_data)
         return {}
 
     def schema(self) -> Dict:
