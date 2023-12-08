@@ -1,8 +1,7 @@
-from process_bigraph.composite import Process, Step, Composite
-from process_bigraph.type_system import types
-from process_bigraph.protocols import local_lookup
-from process_bigraph.registry import protocol_registry, process_registry
-from process_bigraph.emitter import ConsoleEmitter, RAMEmitter, DatabaseEmitter
+from process_bigraph.core.composite import Process, Step, Composite
+from process_bigraph.core.protocols import local_lookup
+from process_bigraph.core.registry import protocol_registry, process_registry
+from process_bigraph.emitter.utils import ConsoleEmitter, RAMEmitter, DatabaseEmitter
 
 
 # register protocols

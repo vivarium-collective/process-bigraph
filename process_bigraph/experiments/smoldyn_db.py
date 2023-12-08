@@ -1,5 +1,5 @@
 from smoldyn import Simulation
-from process_bigraph.emitter import DatabaseEmitter
+from process_bigraph.emitter.utils import DatabaseEmitter
 
 
 model_fp = 'process_bigraph/experiments/crowding-model.txt'

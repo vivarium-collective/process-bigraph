@@ -10,8 +10,8 @@ import math
 import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
-from process_bigraph.type_system import types
-from process_bigraph.protocols import local_lookup_module
+from process_bigraph.core.type_system import types
+from process_bigraph.core.protocols import local_lookup_module
 
 
 def hierarchy_depth(hierarchy, path=()):
@@ -464,7 +464,7 @@ class Composite(Process):
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
 
-        # find all processes, steps, and emitters in the state
+        # find all processes, steps, and emitter in the state
         self.process_paths = find_instance_paths(
             state,
             'process_bigraph.composite.Process')
@@ -838,7 +838,7 @@ class Composite(Process):
 
     def gather_results(self, queries=None):
         '''
-        a map of paths to emitters --> queries for the emitter at that path
+        a map of paths to emitter --> queries for the emitter at that path
         '''
 
         if queries is None:

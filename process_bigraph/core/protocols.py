@@ -6,7 +6,7 @@ Protocols for retrieving processes from address
 
 import importlib
 import sys
-from process_bigraph.registry import process_registry
+from process_bigraph.core.registry import process_registry
 
 
 def local_lookup_module(address):

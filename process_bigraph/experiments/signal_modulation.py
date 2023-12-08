@@ -1,6 +1,6 @@
 import numpy as np
-from process_bigraph.composite import Process, Composite
-from process_bigraph.registry import process_registry
+from process_bigraph.core.composite import Process, Composite
+from process_bigraph.core.registry import process_registry
 # import matplotlib.pyplot as plt
 
 

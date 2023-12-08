@@ -5,7 +5,7 @@ Process Types
 """
 
 from bigraph_schema import TypeSystem, get_path, establish_path, set_path
-from process_bigraph.registry import protocol_registry
+from process_bigraph.core.registry import protocol_registry
 
 
 
