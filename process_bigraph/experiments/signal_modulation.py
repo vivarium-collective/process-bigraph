@@ -99,3 +99,49 @@ plt.grid(True)
 
 plt.tight_layout()
 plt.show()'''
+
+
+instance = {
+        'distortion': {
+            '_type': 'process',
+            'address': 'local:medium_distortion',
+            'config': {
+                'model_filepath': 'smoldyn_process/models/model_files/crowding_model.txt',
+                'animate': False,
+            },
+            'wires': {  # this should return that which is in the schema
+                'species_counts': ['species_counts_store'],
+                'molecules': ['molecules_store'],
+            }
+        },
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:ram-emitter',
+            'config': {
+                'ports': {
+                    'inputs': {
+                        'species_counts': 'tree[any]',
+                        'molecules': 'tree[any]'
+                    },
+                }
+            },
+            'wires': {
+                'inputs': {
+                    'species_counts': ['species_counts_store'],
+                    'molecules': ['molecules_store'],
+                }
+            }
+        }
+    }
+
+    # make the composite
+    workflow = Composite({
+        'state': instance
+    })
+
+    # run
+    workflow.run(10)
+
+    # gather results
+    results = workflow.gather_results()
+    print(f'RESULTS: {pf(results)}')
