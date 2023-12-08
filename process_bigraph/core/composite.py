@@ -10,7 +10,7 @@ import math
 import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
-from process_bigraph.core.type_system import types
+from process_bigraph.type_system.utils import types
 from process_bigraph.core.protocols import local_lookup_module
 
 
