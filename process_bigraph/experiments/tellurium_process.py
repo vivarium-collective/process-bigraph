@@ -189,14 +189,67 @@ def test_process():
         },
         'emitter': {
             '_type': 'step',
-            'address': 'local:database-emitter',
+            'address': 'local:ram-emitter',
             'config': {
                 'ports': {
                     'inputs': {
                         'floating_species': 'tree[float]',
+                    },
+                }
+            },
+            'wires': {
+                'inputs': {
+                    'floating_species': ['floating_species_store'],
+                }
+            }
+        }
+    }
+
+    # make the composite
+    workflow = Composite({
+        'state': instance
+    })
+
+    # initial_state = workflow.initial_state()
+
+    # run
+    workflow.run(10)
+
+    # gather results
+    results = workflow.gather_results()
+    print(f'RESULTS: {results}')
+
+
+def test_process_with_database_emitter():
+    # this is the instance for the composite process to run
+    instance = {
+        'tellurium': {
+            '_type': 'process',
+            'address': 'local:tellurium_process',  # using a local toy process
+            'config': {
+                'sbml_model_path': 'process_bigraph/experiments/BIOMD0000000061_url.xml',
+            },
+            'wires': {
+                'time': ['time_store'],
+                'floating_species': ['floating_species_store'],
+                'boundary_species': ['boundary_species_store'],
+                'model_parameters': ['model_parameters_store'],
+                'reactions': ['reactions_store'],
+            }
+        },
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:database-emitter',
+            'config': {
+                'ports': {
+                    'inputs': {
+                        'data': {
+                            'floating_species': 'tree[float]',
+                        },
                         'experiment_id': 'string',
                         'table': 'string',
-                        'data': 'tree[string]'
+                        'floating_species': 'tree[float]',
+                        #'data': 'tree[string]'
                     },
                 }
             },
@@ -204,7 +257,7 @@ def test_process():
                 'inputs': {
                     'experiment_id': ['experiment_id_store'],
                     'table': ['table_store'],
-                    'data': ['data_store'],
+                    'data': ['floating_species_store'],
                     'floating_species': ['floating_species_store'],
                 }
             }
