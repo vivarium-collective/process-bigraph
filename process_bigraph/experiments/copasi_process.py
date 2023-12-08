@@ -1,9 +1,18 @@
 """
-Processes for the demo_processes
+Demo process for Copasi/Basico
 """
+
+
 from process_bigraph import Process, Composite, process_registry, pf
 from basico import (
-    load_model, get_species, get_parameters, get_reactions, set_species, run_time_course, get_compartments, model_info
+    load_model,
+    get_species,
+    get_parameters,
+    get_reactions,
+    set_species,
+    run_time_course,
+    get_compartments,
+    model_info
 )
 
 
@@ -112,7 +121,7 @@ def test_process():
             '_type': 'process',
             'address': 'local:copasi',  # using a local toy process
             'config': {
-                'model_file': 'demo_processes/Caravagna2010.xml'  #
+                'model_file': 'process_bigraph/experiments/model_files/Caravagna2010.xml'  #
             },
             'wires': {
                 'time': ['time_store'],
