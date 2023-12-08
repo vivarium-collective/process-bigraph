@@ -11,7 +11,7 @@ import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
 from process_bigraph.type_system.utils import types
-from process_bigraph.core.protocols import local_lookup_module
+from process_bigraph.protocols import local_lookup_module
 
 
 def hierarchy_depth(hierarchy, path=()):
