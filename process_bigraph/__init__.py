@@ -1,3 +1,4 @@
+import pprint
 from process_bigraph.protocols import local_lookup
 from process_bigraph.registry import protocol_registry, process_registry
 from process_bigraph.emitter import ConsoleEmitter, RAMEmitter, DatabaseEmitter
@@ -10,9 +11,25 @@ __all__ = [
     'Step',
     'Composite',
     'types',
+    'pp',
+    'pf',
     'protocol_registry',
     'process_registry'
 ]
+
+
+pretty = pprint.PrettyPrinter(indent=2)
+
+
+def pp(x):
+    """Print ``x`` in a pretty format."""
+    pretty.pprint(x)
+
+
+def pf(x):
+    """Format ``x`` for display."""
+    return pretty.pformat(x)
+
 
 # register protocols
 protocol_registry.register('local', local_lookup)
