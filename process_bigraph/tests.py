@@ -4,9 +4,8 @@ Tests for Process Bigraph
 
 import random
 
-from process_bigraph.core.composite import Process, Step, Composite
-from process_bigraph.core.composite import merge_collections
-from process_bigraph.type_system.utils import types
+from process_bigraph.composite import Process, Step, Composite, merge_collections
+from process_bigraph.type_system import types
 
 
 class IncreaseProcess(Process):

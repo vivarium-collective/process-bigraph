@@ -1,6 +1,6 @@
 from process_bigraph.protocols import local_lookup
-from process_bigraph.core.registry import protocol_registry, process_registry
-from process_bigraph.emitter.utils import ConsoleEmitter, RAMEmitter, DatabaseEmitter
+from process_bigraph.registry import protocol_registry, process_registry
+from process_bigraph.emitter import ConsoleEmitter, RAMEmitter, DatabaseEmitter
 
 
 # register protocols
