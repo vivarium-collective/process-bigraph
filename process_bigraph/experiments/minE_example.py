@@ -324,7 +324,7 @@ def test_process():
             '_type': 'process',
             'address': 'local:smoldyn_process',
             'config': {
-                'model_filepath': 'smoldyn_process/models/model_files/minE_model.txt',
+                'model_filepath': 'process_bigraph/experiments/model_files/minE_model.txt',
                 'animate': False,
             },
             'wires': {  # this should return that which is in the schema
