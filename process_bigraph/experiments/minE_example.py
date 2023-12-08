@@ -394,8 +394,8 @@ def test_smoldyn_manually(stop_time: int, process: SmoldynProcess, historical: b
             return result if not historical else runs
 
 
-if __name__ == '__main__':
-    test_process()
+#if __name__ == '__main__':
+#     test_process()
     # test_smoldyn_manually()
 
 

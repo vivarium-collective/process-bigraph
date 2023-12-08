@@ -6,9 +6,10 @@ Note: This Process is primarily for testing multi-timestepping.
 variables and parameters are hard-coded. Do not use this as a
 general stochastic transcription.
 """
-import numpy as np
 
-from process_bigraph.core.composite import Step, Process, Composite
+
+import numpy as np
+from process_bigraph import Step, Process, Composite
 
 
 class GillespieInterval(Step):
