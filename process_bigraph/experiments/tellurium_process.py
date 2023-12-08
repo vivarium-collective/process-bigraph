@@ -327,6 +327,6 @@ def test_step():
 
 
 if __name__ == '__main__':
-    # test_process_with_database_emitter()
-    test_process()
+    test_process_with_database_emitter()
+    # test_process()
     # test_step()
