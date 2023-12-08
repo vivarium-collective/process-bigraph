@@ -379,34 +379,23 @@ def manually_test_process():
 
     stop = 1
 
-    result = run(stop, process)
-    write_results(result, 'manual_results.json')
+    result = test_smoldyn_manually(stop, process, historical=True)
 
 
-def run(stop, process: SmoldynProcess):
+def test_smoldyn_manually(stop_time: int, process: SmoldynProcess, historical: bool = False):
     current_state = process.initial_state()
     runs = []
-    for t, _ in enumerate(list(range(stop)), 1):
+    for t, _ in enumerate(list(range(stop_time)), 1):
         result = process.update(current_state, t)
         runs.append(result)
         for species_id, delta in result['species_counts'].items():
             current_state['species_counts'][species_id] += delta
-        if t == stop:
-            return result
-            # return runs
-
-
-def write_results(result, fn: str):
-    import json
-    results_path = os.path.join(os.getcwd(), fn)
-    if not os.path.exists(results_path):
-        with open(results_path, 'w') as f:
-            pp('writing results...')
-            json.dump(result, f, indent=4)
+        if t == stop_time:
+            return result if not historical else runs
 
 
 if __name__ == '__main__':
     test_process()
-    # manually_test_process()
+    # test_smoldyn_manually()
 
 
