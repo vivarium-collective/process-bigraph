@@ -177,7 +177,7 @@ def test_process():
             '_type': 'process',
             'address': 'local:tellurium_process',  # using a local toy process
             'config': {
-                'sbml_model_path': 'process_bigraph/experiments/BIOMD0000000061_url.xml',
+                'sbml_model_path': 'process_bigraph/experiments/model_files/BIOMD0000000061_url.xml',
             },
             'wires': {
                 'time': ['time_store'],
@@ -227,7 +227,7 @@ def test_process_with_database_emitter():
             '_type': 'process',
             'address': 'local:tellurium_process',  # using a local toy process
             'config': {
-                'sbml_model_path': 'process_bigraph/experiments/BIOMD0000000061_url.xml',
+                'sbml_model_path': 'process_bigraph/experiments/model_files/BIOMD0000000061_url.xml',
             },
             'wires': {
                 'time': ['time_store'],
@@ -290,7 +290,7 @@ def test_step():
             '_type': 'step',
             'address': 'local:tellurium_step',  # using a local toy process
             'config': {
-                'sbml_model_path': 'process_bigraph/experiments/BIOMD0000000061_url.xml',
+                'sbml_model_path': 'process_bigraph/experiments/model_files/BIOMD0000000061_url.xml',
             },
             'wires': {
                 'inputs': {
