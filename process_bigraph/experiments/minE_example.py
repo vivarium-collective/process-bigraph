@@ -52,7 +52,7 @@ from typing import *
 from uuid import uuid4
 import smoldyn as sm
 from smoldyn._smoldyn import MolecState
-from process_bigraph import Process, Composite, process_registry, types, pf
+from process_bigraph import Process, Composite, process_registry, pf, pp
 
 
 class SmoldynProcess(Process):
@@ -74,26 +74,15 @@ class SmoldynProcess(Process):
 
         The current implementation of this class assumes 3 key conditions:
             1. that a smoldyn model file is present and working
-            2. that output commands are not listed in the Smoldyn
-                model file. If they are, simply comment them out before using this.
-            3. that no actual parameter values are passed in the `config_schema`, but rather a path to a smoldyn
-                model file. TODO: Expand this statement.
+            2. output commands from the aforementioned model file that are left un-commented (disabled) will yield a
+                smoldyn model output file whose data could potentially reflect something other than what is returned by
+                this Process' `schema()`.
+                # TODO: Expand the config_schema to allow model_filepath to be None.
 
-    # TODO: Figure this out:
-    To start, we have:
-        - modelfile
 
-    We can also either:
-        - keep output commands in modelfile to get output file
-        - pass the model output file along with the model file
-
-    ...for the purpose of telling the process what output to expect?
-
-    Attributes:
+    Config Attributes:
         model_filepath:`str`: filepath to the smoldyn model you want to reference in this Process
         animate:`bool`: Displays graphical simulation output from smoldyn if set to `True`. Defaults to `False`.
-
-
     """
 
     # TODO: Add the ability to pass model parameters and not just a model file.
@@ -382,7 +371,7 @@ def test_process():
 
 def manually_test_process():
     config = {
-        'model_filepath': 'smoldyn_process/models/model_files/minE_model.txt',
+        'model_filepath': 'process_bigraph/experiments/model_files/minE_model.txt',
         'animate': False
     }
     process = SmoldynProcess(config)
@@ -412,13 +401,12 @@ def write_results(result, fn: str):
     results_path = os.path.join(os.getcwd(), fn)
     if not os.path.exists(results_path):
         with open(results_path, 'w') as f:
-            print('json is dumping')
+            pp('writing results...')
             json.dump(result, f, indent=4)
-            print('json dumped')
 
 
 if __name__ == '__main__':
     test_process()
-    #manually_test_process()
+    # manually_test_process()
 
 
