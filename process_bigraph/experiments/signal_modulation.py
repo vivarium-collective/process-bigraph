@@ -1,4 +1,8 @@
 import numpy as np
+import os
+import uuid
+import datetime
+from scipy.io.wavfile import write
 from process_bigraph.composite import Process, Composite
 from process_bigraph.registry import process_registry
 # import matplotlib.pyplot as plt
@@ -7,13 +11,19 @@ from process_bigraph.registry import process_registry
 class MediumDistortionProcess(Process):
     config_schema = {
         'input_signal': 'list[float]',
+        'starting_frequency': {
+            '_type': 'int',
+            '_default': 262
+        },
+        'duration': 'int'
     }
 
     def __init__(self, config=None):
         super().__init__(config)
 
     def initial_state(self):
-        return {'output_signal': self.config['input_signal']}
+        starting_pitch = start_sine_wave(self.config['duration'], self.config['starting_frequency'])
+        return {'output_signal': starting_pitch}
 
     def schema(self):
         return {
@@ -21,13 +31,70 @@ class MediumDistortionProcess(Process):
         }
 
     def update(self, state, interval):
-        new_wave = apply_modulation(state['output_signal'], distortion, gain=5).tolist()
+        new_wave = apply_modulation(np.array(state['output_signal']), distortion, gain=5)
+        array_to_wav(
+            filename=os.path.join(
+                os.getcwd(),
+                'distortion_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+            ),
+            input_signal=new_wave
+        )
         return {
-            'output_signal': new_wave
+            'output_signal': new_wave.tolist()
+        }
+
+
+class TremoloProcess(Process):
+    config_schema = {
+        'duration': {
+            '_type': 'int',
+            '_default': 10
+        },
+        #'input_signal': 'list[float]',
+        'rate': 'int',
+        'depth': 'float',
+        'starting_frequency': 'int'
+    }
+
+    def __init__(self, config=None):
+        super().__init__(config)
+        self.starting_frequency = self.config['starting_frequency']
+
+    def initial_state(self):
+        starting_pitch = start_sine_wave(self.config['duration'], self.starting_frequency)
+        return {'output_signal': starting_pitch}
+
+    def schema(self):
+        return {
+            'output_signal': 'list[float]',
+        }
+
+    def update(self, state, interval):
+        # create new wave
+        new_wave_modulated = apply_modulation(
+            input_wave=np.array(state['output_signal']),
+            modulation_function=tremolo,
+            depth=self.config['depth'],
+            rate=self.config['rate']
+        )
+        print(new_wave_modulated)
+
+        # write out the file
+        array_to_wav(
+            filename=os.path.join(
+                os.getcwd(),
+                'tremolo_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+            ),
+            input_signal=new_wave_modulated
+        )
+
+        return {
+            'output_signal': new_wave_modulated.tolist()
         }
 
 
 process_registry.register('medium_distortion', MediumDistortionProcess)
+process_registry.register('tremolo', TremoloProcess)
 
 
 def apply_modulation(input_wave, modulation_function, **kwargs):
@@ -53,7 +120,7 @@ def distortion(input_wave, gain=1):
     return np.clip(input_wave * gain, -1, 1)
 
 
-def tremolo(input_wave, rate=5, depth=0.5):
+def tremolo(input_wave, rate=5, depth=0.75):
     """
     Apply a tremolo effect to the waveform.
 
@@ -65,6 +132,37 @@ def tremolo(input_wave, rate=5, depth=0.5):
     t = np.linspace(0, 1, len(input_wave), endpoint=True)
     modulating_wave = (1 - depth) + depth * np.sin(2 * np.pi * rate * t)
     return input_wave * modulating_wave
+
+
+def array_to_wav(filename, input_signal, sample_rate=44100):
+    """
+    Writes a NumPy array to a WAV file.
+
+    Parameters:
+    input_signal (numpy.ndarray): The input signal (audio data).
+    sample_rate (int): The sample rate of the audio (in Hz).
+    filename (str): The name of the output WAV file.
+    """
+    # Normalize the signal to 16-bit integer range
+    input_signal = np.array(input_signal)
+    max_val = np.iinfo(np.int16).max
+    normalized_signal = np.int16(input_signal / np.max(np.abs(input_signal)) * max_val)
+
+    # Write to WAV file
+    write(filename, sample_rate, normalized_signal)
+
+
+def start_sine_wave(duration: int, pitch_frequency: int = 440):
+    sample_rate = 44100  # Sample rate in Hz
+    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    return 0.5 * np.sin(2 * np.pi * pitch_frequency * t)  # Example sine wave at 440 Hz
+
+
+def adjust_pitch(starting_frequency, n_semitones):
+    return starting_frequency * 2 ** (n_semitones / 12)
+
+
+# array_to_wav(input_signal, sample_rate, 'output.wav')
 
 
 '''# Example usage
@@ -102,12 +200,13 @@ plt.show()'''
 
 
 def test_medium_distortion():
+    initial_signal = start_sine_wave(10).tolist()
     instance = {
             'distortion': {
                 '_type': 'process',
                 'address': 'local:medium_distortion',
                 'config': {
-                    'input_signal': np.sin(2 * np.pi * 5 * np.linspace(0, 1, 500, endpoint=True)).tolist(),
+                    'input_signal': initial_signal,
                 },
                 'wires': {  # this should return that which is in the schema
                     'output_signal': ['output_signal_store'],
@@ -136,13 +235,116 @@ def test_medium_distortion():
         'state': instance
     })
 
-    num_beats = 2
+    num_beats = 3
     # run
     workflow.run(num_beats)
 
     # gather results
     results = workflow.gather_results()
+    #print(results)
+    #array_to_wav(os.path.join(os.getcwd(), 'result.wav'))
 
 
+def test_tremolo():
+    stop = 4
+    frequencies = [262, 294, 330, 349]
 
-test_medium_distortion()
+    def tremolo_create_instance(starting_signal):
+        return {
+            'tremolo': {
+                '_type': 'process',
+                'address': 'local:tremolo',
+                'config': {
+                    'depth': 0.9,
+                    'rate': 9,
+                    'starting_frequency': 300
+                },
+                'wires': {  # this should return that which is in the schema
+                    'output_signal': ['output_signal_store'],
+                }
+            },
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:ram-emitter',
+                'config': {
+                    'ports': {
+                        'inputs': {
+                            'output_signal': 'list[float]'
+                        },
+                    }
+                },
+                'wires': {
+                    'inputs': {
+                        'output_signal': ['output_signal_store'],
+                    }
+                }
+            }
+        }
+
+    def run_instance(instance, num_beats=stop):
+        # make the composite
+        workflow = Composite({
+            'state': instance
+        })
+
+        num_beats = 3
+        # run
+        workflow.run(num_beats)
+
+        # gather results
+        return workflow.gather_results()
+
+    measure = []
+    for f in frequencies:
+        starting_signal = start_sine_wave(stop, f)
+        instance = tremolo_create_instance(starting_signal)
+        result = run_instance(instance)
+        measure.append(result)
+
+    '''instance = {
+            'distortion': {
+                '_type': 'process',
+                'address': 'local:tremolo',
+                'config': {
+                    'input_signal': initial_signal,
+                },
+                'wires': {  # this should return that which is in the schema
+                    'output_signal': ['output_signal_store'],
+                }
+            },
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:ram-emitter',
+                'config': {
+                    'ports': {
+                        'inputs': {
+                            'output_signal': 'list[float]'
+                        },
+                    }
+                },
+                'wires': {
+                    'inputs': {
+                        'output_signal': ['output_signal_store'],
+                    }
+                }
+            }
+        }'''
+
+    '''# make the composite
+    workflow = Composite({
+        'state': instance
+    })
+
+    num_beats = 3
+    # run
+    workflow.run(num_beats)
+
+    # gather results
+    results = workflow.gather_results()
+    print(results)
+    #array_to_wav(os.path.join(os.getcwd(), 'result.wav'))'''
+
+
+if __name__ == '__main__':
+    test_tremolo()
+    # test_medium_distortion()
