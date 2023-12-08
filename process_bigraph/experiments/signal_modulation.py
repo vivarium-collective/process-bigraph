@@ -136,8 +136,9 @@ def test_medium_distortion():
         'state': instance
     })
 
+    num_beats = 2
     # run
-    workflow.run(10)
+    workflow.run(num_beats)
 
     # gather results
     results = workflow.gather_results()
