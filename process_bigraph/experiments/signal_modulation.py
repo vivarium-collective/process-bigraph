@@ -1,5 +1,33 @@
 import numpy as np
+from process_bigraph.composite import Process
+from process_bigraph.registry import process_registry
 # import matplotlib.pyplot as plt
+
+
+class MediumDistortionProcess(Process):
+    config_schema = {
+        'input_signal': 'list[float]',
+    }
+
+    def __init__(self, config=None):
+        super().__init__(config)
+
+    def initial_state(self, config=None):
+        return self.config
+
+    def schema(self):
+        return {
+            'output_signal': 'list[float]',
+        }
+
+    def update(self, state, interval):
+        new_wave = apply_modulation(state['output_signal'], distortion, gain=5)
+        return {
+            'output_signal': new_wave
+        }
+
+
+process_registry.register('medium_distortion', MediumDistortionProcess)
 
 
 def apply_modulation(input_wave, modulation_function, **kwargs):
