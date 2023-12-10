@@ -11,19 +11,13 @@ from process_bigraph.registry import process_registry
 class MediumDistortionProcess(Process):
     config_schema = {
         'input_signal': 'list[float]',
-        'starting_frequency': {
-            '_type': 'int',
-            '_default': 262
-        },
-        'duration': 'int'
     }
 
     def __init__(self, config=None):
         super().__init__(config)
 
     def initial_state(self):
-        starting_pitch = start_sine_wave(self.config['duration'], self.config['starting_frequency'])
-        return {'output_signal': starting_pitch}
+        return {'output_signal': self.config['input_signal']}
 
     def schema(self):
         return {
@@ -46,23 +40,17 @@ class MediumDistortionProcess(Process):
 
 class TremoloProcess(Process):
     config_schema = {
-        'duration': {
-            '_type': 'int',
-            '_default': 10
-        },
-        #'input_signal': 'list[float]',
+        'input_signal': 'list[float]',
         'rate': 'int',
         'depth': 'float',
-        'starting_frequency': 'int'
     }
 
     def __init__(self, config=None):
         super().__init__(config)
-        self.starting_frequency = self.config['starting_frequency']
+        self.input_signal = self.config['input_signal']
 
     def initial_state(self):
-        starting_pitch = start_sine_wave(self.config['duration'], self.starting_frequency)
-        return {'output_signal': starting_pitch}
+        return {'output_signal': self.input_signal}
 
     def schema(self):
         return {
@@ -94,23 +82,18 @@ class TremoloProcess(Process):
 
 
 class RingModulationProcess(Process):
+    """These processes are more of steps, I suppose."""
     config_schema = {
-        'duration': {
-            '_type': 'int',
-            '_default': 10
-        },
-        #'input_signal': 'list[float]',
+        'input_signal': 'list[float]',
         'mod_freq': 'int',
-        'starting_frequency': 'int'
     }
 
     def __init__(self, config=None):
         super().__init__(config)
-        self.starting_frequency = self.config['starting_frequency']
+        self.input_signal = self.config['input_signal']
 
     def initial_state(self):
-        starting_pitch = start_sine_wave(self.config['duration'], self.starting_frequency)
-        return {'output_signal': starting_pitch}
+        return {'output_signal': self.input_signal}
 
     def schema(self):
         return {
@@ -441,7 +424,7 @@ def test_ring_mod():
                 'address': 'local:ring_modulation',
                 'config': {
                     'mod_freq': 2000,
-                    'starting_frequency': frequencies[0]
+                    'input_signal': start_sine_wave(stop)
                 },
                 'wires': {  # this should return that which is in the schema
                     'output_signal': ['output_signal_store'],
