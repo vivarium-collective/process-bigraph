@@ -13,11 +13,13 @@ class SignalModulationProcess(Process):
     """Generic base class for signal modulators"""
 
     config_schema = {
-        'input_signal': 'list[float]'
+        'input_signal': 'list[float]',
+        'duration': 'int'
     }
 
     def __init__(self, config=None):
         super().__init__(config)
+        self.t = initialize_timepoints(self.config['duration'])
 
     def initial_state(self):
         return {'output_signal': self.config['input_signal']}
@@ -106,7 +108,7 @@ class RingModulationProcess(SignalModulationProcess):
         # write out the file
         wav_fp = 'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
         array_to_wav(filename=os.path.join(os.getcwd(), wav_fp), input_signal=new_wave_modulated)
-
+        plot_signal(self.t, new_wave_modulated, 'ring_modulation')
         return {
             'output_signal': new_wave_modulated.tolist()
         }
@@ -223,6 +225,27 @@ def plot_signal(t: np.ndarray, signal: np.ndarray, plot_label: str):
     plt.savefig(plot_label + '.png')
 
 
+def plot_multi_modulation(t, input_wave, distorted_wave, tremolo_wave):
+    plt.figure(figsize=(12, 6))
+
+    plt.subplot(3, 1, 1)
+    plt.plot(t, input_wave, label='Original Wave')
+    plt.legend()
+    plt.grid(True)
+
+    plt.subplot(3, 1, 2)
+    plt.plot(t, distorted_wave, label='Distorted Wave')
+    plt.legend()
+    plt.grid(True)
+
+    plt.subplot(3, 1, 3)
+    plt.plot(t, tremolo_wave, label='Tremolo Wave')
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
 def run_instance(instance, num_beats=4):
     # make the composite
     workflow = Composite({
@@ -232,40 +255,6 @@ def run_instance(instance, num_beats=4):
     workflow.run(num_beats)
     # gather results
     return workflow.gather_results()
-
-
-'''# Example usage
-t = np.linspace(0, 1, 500, endpoint=True)
-input_wave = np.sin(2 * np.pi * 5 * np.linspace(0, 1, 500, endpoint=True))  # Example sine wave
-
-# Apply distortion
-modulated_wave = apply_modulation(input_wave, distortion, gain=5)
-print(modulated_wave)
-# Apply tremolo
-modulated_wave = apply_modulation(modulated_wave, tremolo, rate=5, depth=0.7)
-print(modulated_wave)'''
-
-
-'''# Plotting
-plt.figure(figsize=(12, 6))
-
-plt.subplot(3, 1, 1)
-plt.plot(t, input_wave, label='Original Wave')
-plt.legend()
-plt.grid(True)
-
-plt.subplot(3, 1, 2)
-plt.plot(t, distorted_wave, label='Distorted Wave')
-plt.legend()
-plt.grid(True)
-
-plt.subplot(3, 1, 3)
-plt.plot(t, tremolo_wave, label='Tremolo Wave')
-plt.legend()
-plt.grid(True)
-
-plt.tight_layout()
-plt.show()'''
 
 
 def test_medium_distortion():
@@ -310,8 +299,6 @@ def test_medium_distortion():
 
     # gather results
     results = workflow.gather_results()
-    #print(results)
-    #array_to_wav(os.path.join(os.getcwd(), 'result.wav'))
 
 
 def test_tremolo():
@@ -369,49 +356,6 @@ def test_tremolo():
         instance = tremolo_create_instance(starting_signal)
         result = run_instance(instance)
         measure.append(result)
-
-    '''instance = {
-            'distortion': {
-                '_type': 'process',
-                'address': 'local:tremolo',
-                'config': {
-                    'input_signal': initial_signal,
-                },
-                'wires': {  # this should return that which is in the schema
-                    'output_signal': ['output_signal_store'],
-                }
-            },
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'config': {
-                    'ports': {
-                        'inputs': {
-                            'output_signal': 'list[float]'
-                        },
-                    }
-                },
-                'wires': {
-                    'inputs': {
-                        'output_signal': ['output_signal_store'],
-                    }
-                }
-            }
-        }'''
-
-    '''# make the composite
-    workflow = Composite({
-        'state': instance
-    })
-
-    num_beats = 3
-    # run
-    workflow.run(num_beats)
-
-    # gather results
-    results = workflow.gather_results()
-    print(results)
-    #array_to_wav(os.path.join(os.getcwd(), 'result.wav'))'''
 
 
 def test_ring_mod():
