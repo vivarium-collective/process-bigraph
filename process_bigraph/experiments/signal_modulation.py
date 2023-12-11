@@ -642,8 +642,9 @@ def test_delay():
     #resulting_wave = np.array(result[('emitter',)])
     print(len(result), type(result))
     for r in result:
-        print(type(r))
-    #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
+        print(r.keys())
+    final_result = result[-1]['output_signal']
+    plot_signal(duration, final_result, 'final_ring_mod_wave', fp='final_ring_mod_result')
 
 
 if __name__ == '__main__':
