@@ -2,15 +2,18 @@ import numpy as np
 import os
 import uuid
 import datetime
+import matplotlib.pyplot as plt
 from scipy.io.wavfile import write
 from process_bigraph.composite import Process, Composite
 from process_bigraph.registry import process_registry
 # import matplotlib.pyplot as plt
 
 
-class MediumDistortionProcess(Process):
+class SignalModulationProcess(Process):
+    """Generic base class for signal modulators"""
+
     config_schema = {
-        'input_signal': 'list[float]',
+        'input_signal': 'list[float]'
     }
 
     def __init__(self, config=None):
@@ -20,9 +23,19 @@ class MediumDistortionProcess(Process):
         return {'output_signal': self.config['input_signal']}
 
     def schema(self):
-        return {
-            'output_signal': 'list[float]',
-        }
+        return {'output_signal': 'list[float]'}
+
+    def update(self, state, interval):
+        return {}
+
+
+class MediumDistortionProcess(SignalModulationProcess):
+    config_schema = {
+        'input_signal': 'list[float]',
+    }
+
+    def __init__(self, config=None):
+        super().__init__(config)
 
     def update(self, state, interval):
         new_wave = apply_modulation(np.array(state['output_signal']), distortion, gain=5)
@@ -38,7 +51,7 @@ class MediumDistortionProcess(Process):
         }
 
 
-class TremoloProcess(Process):
+class TremoloProcess(SignalModulationProcess):
     config_schema = {
         'input_signal': 'list[float]',
         'rate': 'int',
@@ -47,15 +60,6 @@ class TremoloProcess(Process):
 
     def __init__(self, config=None):
         super().__init__(config)
-        self.input_signal = self.config['input_signal']
-
-    def initial_state(self):
-        return {'output_signal': self.input_signal}
-
-    def schema(self):
-        return {
-            'output_signal': 'list[float]',
-        }
 
     def update(self, state, interval):
         # create new wave
@@ -81,7 +85,7 @@ class TremoloProcess(Process):
         }
 
 
-class RingModulationProcess(Process):
+class RingModulationProcess(SignalModulationProcess):
     """These processes are more of steps, I suppose."""
     config_schema = {
         'input_signal': 'list[float]',
@@ -90,15 +94,6 @@ class RingModulationProcess(Process):
 
     def __init__(self, config=None):
         super().__init__(config)
-        self.input_signal = self.config['input_signal']
-
-    def initial_state(self):
-        return {'output_signal': self.input_signal}
-
-    def schema(self):
-        return {
-            'output_signal': 'list[float]',
-        }
 
     def update(self, state, interval):
         # create new wave
@@ -109,13 +104,8 @@ class RingModulationProcess(Process):
         )
 
         # write out the file
-        array_to_wav(
-            filename=os.path.join(
-                os.getcwd(),
-                'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-            ),
-            input_signal=new_wave_modulated
-        )
+        wav_fp = 'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+        array_to_wav(filename=os.path.join(os.getcwd(), wav_fp), input_signal=new_wave_modulated)
 
         return {
             'output_signal': new_wave_modulated.tolist()
@@ -210,18 +200,27 @@ def array_to_wav(filename, input_signal, sample_rate=44100):
     write(filename, sample_rate, normalized_signal)
 
 
-def initialize_timepoints(duration: int, num_points: int) -> np.ndarray:
-    return np.linspace(start=0, stop=duration, num=num_points, endpoint=True)
+def initialize_timepoints(duration: int, sample_rate=44100) -> np.ndarray:
+    return np.linspace(start=0, stop=duration, num=int(sample_rate * duration), endpoint=True)
 
 
-def start_sine_wave(duration: int, pitch_frequency: int = 440) -> np.ndarray:
-    sample_rate = 44100  # Sample rate in Hz
-    t = initialize_timepoints(duration, int(sample_rate * duration))
+def start_sine_wave(t: np.ndarray, pitch_frequency: int = 440) -> np.ndarray:
     return 0.5 * np.sin(2 * np.pi * pitch_frequency * t)  # Example sine wave at 440 Hz
 
 
 def adjust_pitch_frequency(starting_frequency, n_semitones) -> float:
     return starting_frequency * 2 ** (n_semitones / 12)
+
+
+def plot_signal(t: np.ndarray, signal: np.ndarray, plot_label: str):
+    plt.figure(figsize=(12, 6))
+    # plt.subplot(3, 1, 1)
+    plt.plot(t, signal, label=plot_label)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+    plt.savefig(plot_label + '.png')
 
 
 def run_instance(instance, num_beats=4):
@@ -416,8 +415,10 @@ def test_tremolo():
 
 
 def test_ring_mod():
-    stop = 10
-    frequencies = [262, 294, 330, 349]
+    duration = 12
+    t = initialize_timepoints(duration)
+    pitch_frequency = 440
+    initial_signal = start_sine_wave(t, pitch_frequency)
 
     def ring_mod_create_instance():
         return {
@@ -426,7 +427,7 @@ def test_ring_mod():
                 'address': 'local:ring_modulation',
                 'config': {
                     'mod_freq': 2000,
-                    'input_signal': start_sine_wave(stop)
+                    'input_signal': initial_signal
                 },
                 'wires': {  # this should return that which is in the schema
                     'output_signal': ['output_signal_store'],
@@ -453,8 +454,6 @@ def test_ring_mod():
     instance = ring_mod_create_instance()
     result = run_instance(instance, num_beats=8)
     resulting_wave = np.array(result[('emitter',)])
-    print(type(resulting_wave))
-   # array_to_wav(filename=os.path.join(os.getcwd(), 'final_result.wav'), input_signal=resulting_wave)
 
 
 if __name__ == '__main__':
