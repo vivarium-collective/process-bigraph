@@ -119,9 +119,41 @@ class RingModulationProcess(SignalModulationProcess):
         }
 
 
+class PhaserProcess(SignalModulationProcess):
+    config_schema = {
+        'input_signal': 'list[float]',
+        'rate': 'int',
+        'depth': 'int'
+    }
+
+    def __init__(self, config=None):
+        super().__init__(config)
+
+    def update(self, state, interval):
+        # create new wave
+        new_wave_modulated = apply_modulation(
+            input_wave=np.array(state['output_signal']),
+            modulation_function=phaser,
+            rate=self.config['rate'],
+            depth=self.config['depth']
+        )
+
+        # write out the file
+        results_dir = os.path.join(os.getcwd(), 'phaser_results')
+        if not os.path.exists(results_dir):
+            os.mkdir(results_dir)
+        wav_fp = 'phaser_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
+        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
+        return {
+            'output_signal': new_wave_modulated.tolist()
+        }
+
+
 process_registry.register('medium_distortion', MediumDistortionProcess)
 process_registry.register('tremolo', TremoloProcess)
 process_registry.register('ring_modulation', RingModulationProcess)
+process_registry.register('phaser', PhaserProcess)
 
 
 def apply_modulation(input_wave: np.ndarray, modulation_function, **kwargs) -> np.ndarray:
@@ -189,6 +221,69 @@ def bit_crusher(input_wave: np.ndarray, bit_depth=8):
     step = 2 ** bit_depth
     crushed_wave = np.round(input_wave_normalized * step) / step
     return crushed_wave * max_val
+
+
+def delay(input_wave, delay_time=0.2, decay=0.5, max_delay=1.0, fs=500):
+    """
+    Apply a simple delay (echo) effect to the waveform.
+
+    :param input_wave: NumPy array, the input waveform.
+    :param delay_time: float, the delay time in seconds.
+    :param decay: float, the decay factor for the echoes.
+    :param max_delay: float, the maximum delay time in seconds.
+    :param fs: int, the sampling rate (samples per second).
+    :return: NumPy array, the waveform with delay effect.
+    """
+    delay_samples = int(delay_time * fs)
+    max_delay_samples = int(max_delay * fs)
+    output_wave = np.zeros(len(input_wave) + max_delay_samples)
+    for i in range(len(input_wave)):
+        output_wave[i] += input_wave[i]
+        if i + delay_samples < len(output_wave):
+            output_wave[i + delay_samples] += input_wave[i] * decay
+    return output_wave[:len(input_wave)]
+
+
+def chorus(input_wave, depth=0.5, rate=2, mix=0.5, fs=500):
+    """
+    Apply a chorus effect to the waveform.
+
+    :param input_wave: NumPy array, the input waveform.
+    :param depth: float, the depth of the chorus modulation.
+    :param rate: float, the rate of the chorus modulation.
+    :param mix: float, the mix of the original and modulated signal.
+    :param fs: int, the sampling rate (samples per second).
+    :return: NumPy array, the waveform with chorus effect.
+    """
+    modulating_wave = depth * np.sin(2 * np.pi * rate * np.linspace(0, 1, len(input_wave)))
+    output_wave = np.zeros_like(input_wave)
+    for i in range(len(input_wave)):
+        delay_samples = int(modulating_wave[i] * fs)
+        if i + delay_samples < len(input_wave):
+            output_wave[i] = (1 - mix) * input_wave[i] + mix * input_wave[i + delay_samples]
+        else:
+            output_wave[i] = input_wave[i]
+    return output_wave
+
+
+def phaser(input_wave, rate=1, depth=0.5, freq=0.5, fs=500):
+    """
+    Apply a phaser effect to the waveform.
+
+    :param input_wave: NumPy array, the input waveform.
+    :param rate: float, the rate of the phaser effect.
+    :param depth: float, the depth of the phaser effect.
+    :param freq: float, the frequency of the phaser effect.
+    :param fs: int, the sampling rate (samples per second).
+    :return: NumPy array, the waveform with phaser effect.
+    """
+    output_wave = np.copy(input_wave)
+    phase = 0
+    for i in range(len(input_wave)):
+        phase += depth * np.sin(2 * np.pi * rate * i / fs)
+        filter_freq = freq + freq * phase
+        output_wave[i] = input_wave[i] * np.sin(2 * np.pi * filter_freq * i / fs)
+    return output_wave
 
 
 def array_to_wav(filename, input_signal, sample_rate=44100):
@@ -419,7 +514,57 @@ def test_ring_mod():
     #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
 
 
+def test_phaser():
+    duration = 4
+    pitch_frequency = 800
+    rate = 3
+    depth = 0.75
+    initial_signal = start_sine_wave(duration, pitch_frequency)
+
+    def phaser_create_instance():
+        return {
+            'phaser': {
+                '_type': 'process',
+                'address': 'local:phaser',
+                'config': {
+                    'input_signal': initial_signal,
+                    'rate': rate,
+                    'depth': depth
+                },
+                'wires': {  # this should return that which is in the schema
+                    'output_signal': ['output_signal_store'],
+                }
+            },
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:ram-emitter',
+                'config': {
+                    'ports': {
+                        'inputs': {
+                            'output_signal': 'list[float]'
+                        },
+                    }
+                },
+                'wires': {
+                    'inputs': {
+                        'output_signal': ['output_signal_store'],
+                    }
+                }
+            }
+        }
+
+    instance = phaser_create_instance()
+    result = run_instance(instance, num_beats=8)[('emitter',)]
+    array_to_wav(os.path.join('phaser_results', 'input_signal.wav'), input_signal=initial_signal)
+    #resulting_wave = np.array(result[('emitter',)])
+    print(len(result), type(result))
+    for r in result:
+        print(type(r))
+    #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
+
+
 if __name__ == '__main__':
-    test_ring_mod()
-    #test_tremolo()
+    test_phaser()
+    # test_ring_mod()
+    # test_tremolo()
     # test_medium_distortion()
