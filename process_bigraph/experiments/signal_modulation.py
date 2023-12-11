@@ -164,7 +164,7 @@ class DelayProcess(SignalModulationProcess):
         # create new wave
         new_wave_modulated = apply_modulation(
             input_wave=np.array(state['output_signal']),
-            modulation_function=phaser,
+            modulation_function=delay,
             delay_time=self.config['delay_time'],
             decay=self.config['decay']
         )
