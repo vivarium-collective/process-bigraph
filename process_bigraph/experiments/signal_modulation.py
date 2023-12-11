@@ -647,7 +647,8 @@ def test_delay():
 
 
 if __name__ == '__main__':
-    test_phaser()
+    test_delay()
+    # test_phaser()
     # test_ring_mod()
     # test_tremolo()
     # test_medium_distortion()
