@@ -498,9 +498,8 @@ def test_tremolo():
     result = run_instance(instance)
 
 
-
 def test_ring_mod():
-    duration = 4
+    duration = 8
     pitch_frequency = 800
     initial_signal = start_sine_wave(duration, pitch_frequency)
 
@@ -547,7 +546,7 @@ def test_ring_mod():
 
 
 def test_phaser():
-    duration = 4
+    duration = 8
     pitch_frequency = 800
     rate = 3
     depth = 0.75
@@ -597,7 +596,7 @@ def test_phaser():
 
 
 def test_delay():
-    duration = 4
+    duration = 8
     pitch_frequency = 800
     delay_time = 0.6
     decay = 0.4
@@ -649,7 +648,7 @@ def test_delay():
 
 if __name__ == '__main__':
     test_delay()
-    # test_phaser()
-    # test_ring_mod()
+    test_phaser()
+    test_ring_mod()
     # test_tremolo()
     # test_medium_distortion()
