@@ -607,7 +607,7 @@ def test_delay():
         return {
             'phaser': {
                 '_type': 'process',
-                'address': 'local:phaser',
+                'address': 'local:delay',
                 'config': {
                     'input_signal': initial_signal,
                     'delay_time': delay_time,
