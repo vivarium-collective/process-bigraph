@@ -10,7 +10,7 @@ from process_bigraph.registry import process_registry
 
 
 class SignalModulationProcess(Process):
-    """Generic base class for signal modulators"""
+    """Generic base class for signal modulators."""
 
     config_schema = {
         'input_signal': 'list[float]',
@@ -18,7 +18,10 @@ class SignalModulationProcess(Process):
     }
 
     def __init__(self, config=None):
+        """These processes are more of steps, I suppose."""
         super().__init__(config)
+
+        # set global time based on the specified duration
         self.t = initialize_timepoints(self.config['duration'])
 
     def initial_state(self):
@@ -41,10 +44,11 @@ class MediumDistortionProcess(SignalModulationProcess):
 
     def update(self, state, interval):
         new_wave = apply_modulation(np.array(state['output_signal']), distortion, gain=5)
+        wav_fp = 'distortion_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
         array_to_wav(
             filename=os.path.join(
                 os.getcwd(),
-                'distortion_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+                wav_fp
             ),
             input_signal=new_wave
         )
@@ -69,15 +73,17 @@ class TremoloProcess(SignalModulationProcess):
             input_wave=np.array(state['output_signal']),
             modulation_function=tremolo,
             depth=self.config['depth'],
-            rate=self.config['rate']
+            rate=self.config['rate'],
+            t=self.t
         )
         print(new_wave_modulated)
 
         # write out the file
+        wav_fp = 'tremolo_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
         array_to_wav(
             filename=os.path.join(
                 os.getcwd(),
-                'tremolo_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+                wav_fp
             ),
             input_signal=new_wave_modulated
         )
@@ -88,7 +94,6 @@ class TremoloProcess(SignalModulationProcess):
 
 
 class RingModulationProcess(SignalModulationProcess):
-    """These processes are more of steps, I suppose."""
     config_schema = {
         'input_signal': 'list[float]',
         'mod_freq': 'int',
@@ -102,7 +107,8 @@ class RingModulationProcess(SignalModulationProcess):
         new_wave_modulated = apply_modulation(
             input_wave=np.array(state['output_signal']),
             modulation_function=ring_modulation,
-            mod_freq=self.config['mod_freq']
+            mod_freq=self.config['mod_freq'],
+            t=self.t
         )
 
         # write out the file
@@ -119,7 +125,7 @@ process_registry.register('tremolo', TremoloProcess)
 process_registry.register('ring_modulation', RingModulationProcess)
 
 
-def apply_modulation(input_wave, modulation_function, **kwargs):
+def apply_modulation(input_wave: np.ndarray, modulation_function, **kwargs) -> np.ndarray:
     """
     Apply a modulation effect to an input wave.
 
@@ -131,7 +137,7 @@ def apply_modulation(input_wave, modulation_function, **kwargs):
     return modulation_function(input_wave, **kwargs)
 
 
-def distortion(input_wave, gain=1):
+def distortion(input_wave: np.ndarray, gain=1):
     """
     Apply a simple distortion effect to the waveform.
 
@@ -142,34 +148,34 @@ def distortion(input_wave, gain=1):
     return np.clip(input_wave * gain, -1, 1)
 
 
-def tremolo(input_wave, rate=5, depth=0.75):
+def tremolo(input_wave: np.ndarray, t: np.ndarray, rate=5, depth=0.75):
     """
     Apply a tremolo effect to the waveform.
 
     :param input_wave: NumPy array, the input waveform.
+    :param t: NumPy array, the time series
     :param rate: float, the rate of the tremolo effect.
     :param depth: float, the depth of the tremolo effect.
     :return: NumPy array, the waveform with tremolo effect.
     """
-    t = np.linspace(0, 1, len(input_wave), endpoint=True)
     modulating_wave = (1 - depth) + depth * np.sin(2 * np.pi * rate * t)
     return input_wave * modulating_wave
 
 
-def ring_modulation(input_wave, mod_freq=30):
+def ring_modulation(input_wave: np.ndarray, t: np.ndarray, mod_freq=30):
     """
     Apply a ring modulation effect to the waveform.
 
     :param input_wave: NumPy array, the input waveform.
+    :param t: NumPy array, the time series
     :param mod_freq: float, the frequency of the modulating wave.
     :return: NumPy array, the waveform with ring modulation effect.
     """
-    t = np.linspace(0, 1, len(input_wave/2), endpoint=True)
     modulating_wave = np.sin(2 * np.pi * mod_freq * t)
     return input_wave * modulating_wave
 
 
-def bit_crusher(input_wave, bit_depth=8):
+def bit_crusher(input_wave: np.ndarray, bit_depth=8):
     """
     Apply a bit crusher effect to the waveform.
 
@@ -244,6 +250,9 @@ def plot_multi_modulation(t, input_wave, distorted_wave, tremolo_wave):
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
+
+# TODO: matmul for types?
 
 
 def run_instance(instance, num_beats=4):
