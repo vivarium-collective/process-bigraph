@@ -21,9 +21,6 @@ class SignalModulationProcess(Process):
         """These processes are more of steps, I suppose."""
         super().__init__(config)
 
-        # set global time based on the specified duration
-        self.t = initialize_timepoints(self.config['duration'])
-
     def initial_state(self):
         return {'output_signal': self.config['input_signal']}
 
@@ -60,7 +57,6 @@ class MediumDistortionProcess(SignalModulationProcess):
 
 class TremoloProcess(SignalModulationProcess):
     config_schema = {
-        'input_signal': 'list[float]',
         'rate': 'int',
         'depth': 'float',
     }
@@ -75,7 +71,6 @@ class TremoloProcess(SignalModulationProcess):
             modulation_function=tremolo,
             depth=self.config['depth'],
             rate=self.config['rate'],
-            t=self.t
         )
         print(new_wave_modulated)
 
@@ -88,7 +83,7 @@ class TremoloProcess(SignalModulationProcess):
             ),
             input_signal=new_wave_modulated
         )
-        plot_signal(t=self.t, signal=new_wave_modulated, plot_label=wav_fp)
+        plot_signal(self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp)
 
         return {
             'output_signal': new_wave_modulated.tolist()
@@ -110,13 +105,12 @@ class RingModulationProcess(SignalModulationProcess):
             input_wave=np.array(state['output_signal']),
             modulation_function=ring_modulation,
             mod_freq=self.config['mod_freq'],
-            t=self.t
         )
 
         # write out the file
         wav_fp = 'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
         array_to_wav(filename=os.path.join(os.getcwd(), wav_fp), input_signal=new_wave_modulated)
-        plot_signal(t=self.t, signal=new_wave_modulated, plot_label=wav_fp)
+        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp)
         return {
             'output_signal': new_wave_modulated.tolist()
         }
@@ -150,21 +144,21 @@ def distortion(input_wave: np.ndarray, gain=1):
     return np.clip(input_wave * gain, -1, 1)
 
 
-def tremolo(input_wave: np.ndarray, t: np.ndarray, rate=5, depth=0.75):
+def tremolo(input_wave, rate=5, depth=0.5):
     """
     Apply a tremolo effect to the waveform.
 
     :param input_wave: NumPy array, the input waveform.
-    :param t: NumPy array, the time series
     :param rate: float, the rate of the tremolo effect.
     :param depth: float, the depth of the tremolo effect.
     :return: NumPy array, the waveform with tremolo effect.
     """
+    t = np.linspace(0, 1, len(input_wave), endpoint=True)
     modulating_wave = (1 - depth) + depth * np.sin(2 * np.pi * rate * t)
     return input_wave * modulating_wave
 
 
-def ring_modulation(input_wave: np.ndarray, t: np.ndarray, mod_freq=30):
+def ring_modulation(input_wave: np.ndarray, mod_freq=30):
     """
     Apply a ring modulation effect to the waveform.
 
@@ -173,6 +167,8 @@ def ring_modulation(input_wave: np.ndarray, t: np.ndarray, mod_freq=30):
     :param mod_freq: float, the frequency of the modulating wave.
     :return: NumPy array, the waveform with ring modulation effect.
     """
+    sample_rate = 44100
+    t = np.linspace(0, 1, len(input_wave), endpoint=True)
     modulating_wave = np.sin(2 * np.pi * mod_freq * t)
     return input_wave * modulating_wave
 
@@ -214,7 +210,9 @@ def initialize_timepoints(duration: int, sample_rate=44100) -> np.ndarray:
     return np.linspace(start=0, stop=duration, num=int(sample_rate * duration), endpoint=True)
 
 
-def start_sine_wave(t: np.ndarray, pitch_frequency: int = 440) -> np.ndarray:
+def start_sine_wave(duration: int, pitch_frequency: int = 440) -> np.ndarray:
+    sample_rate = 44100
+    t = np.linspace(start=0, stop=1, num=int(sample_rate * duration), endpoint=True)
     return 0.5 * np.sin(2 * np.pi * pitch_frequency * t)  # Example sine wave at 440 Hz
 
 
@@ -222,14 +220,17 @@ def adjust_pitch_frequency(starting_frequency, n_semitones) -> float:
     return starting_frequency * 2 ** (n_semitones / 12)
 
 
-def plot_signal(t: np.ndarray, signal: np.ndarray, plot_label: str):
+def plot_signal(duration: int, signal: np.ndarray, plot_label: str, show=False):
     plt.figure(figsize=(12, 6))
     # plt.subplot(3, 1, 1)
+    sample_rate = 44100
+    t = np.linspace(start=0, stop=duration, num=len(signal), endpoint=True)
     plt.plot(t, signal, label=plot_label)
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    if show:
+        plt.show()
     plt.savefig(plot_label + '.png')
 
 
@@ -313,8 +314,9 @@ def test_medium_distortion():
 
 
 def test_tremolo():
-    stop = 4
+    stop = 32
     frequencies = [262, 294, 330, 349]
+    starting_signal = start_sine_wave(stop)
 
     def tremolo_create_instance(starting_signal):
         return {
@@ -324,7 +326,8 @@ def test_tremolo():
                 'config': {
                     'depth': 0.9,
                     'rate': 9,
-                    'starting_frequency': 300
+                    'duration': stop,
+                    'input_signal': starting_signal
                 },
                 'wires': {  # this should return that which is in the schema
                     'output_signal': ['output_signal_store'],
@@ -361,19 +364,15 @@ def test_tremolo():
         # gather results
         return workflow.gather_results()
 
-    measure = []
-    for f in frequencies:
-        starting_signal = start_sine_wave(stop, f)
-        instance = tremolo_create_instance(starting_signal)
-        result = run_instance(instance)
-        measure.append(result)
+    instance = tremolo_create_instance(starting_signal)
+    result = run_instance(instance)
+
 
 
 def test_ring_mod():
     duration = 12
-    t = initialize_timepoints(duration)
     pitch_frequency = 440
-    initial_signal = start_sine_wave(t, pitch_frequency)
+    initial_signal = start_sine_wave(duration, pitch_frequency)
 
     def ring_mod_create_instance():
         return {
@@ -382,7 +381,8 @@ def test_ring_mod():
                 'address': 'local:ring_modulation',
                 'config': {
                     'mod_freq': 2000,
-                    'input_signal': initial_signal
+                    'input_signal': initial_signal,
+                    'duration': duration
                 },
                 'wires': {  # this should return that which is in the schema
                     'output_signal': ['output_signal_store'],
@@ -413,5 +413,5 @@ def test_ring_mod():
 
 if __name__ == '__main__':
     test_ring_mod()
-    # test_tremolo()
+    #test_tremolo()
     # test_medium_distortion()
