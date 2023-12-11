@@ -108,9 +108,12 @@ class RingModulationProcess(SignalModulationProcess):
         )
 
         # write out the file
+        results_dir = os.path.join(os.getcwd(), 'ring_mod_results')
+        if not os.path.exists(results_dir):
+            os.mkdir(results_dir)
         wav_fp = 'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-        array_to_wav(filename=os.path.join(os.getcwd(), wav_fp), input_signal=new_wave_modulated)
-        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp)
+        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
+        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
             'output_signal': new_wave_modulated.tolist()
         }
@@ -220,7 +223,7 @@ def adjust_pitch_frequency(starting_frequency, n_semitones) -> float:
     return starting_frequency * 2 ** (n_semitones / 12)
 
 
-def plot_signal(duration: int, signal: np.ndarray, plot_label: str, show=False):
+def plot_signal(duration: int, signal: np.ndarray, plot_label: str, fp: str, show=False):
     plt.figure(figsize=(12, 6))
     # plt.subplot(3, 1, 1)
     sample_rate = 44100
@@ -231,7 +234,7 @@ def plot_signal(duration: int, signal: np.ndarray, plot_label: str, show=False):
     plt.tight_layout()
     if show:
         plt.show()
-    plt.savefig(plot_label + '.png')
+    plt.savefig(fp)
 
 
 def plot_multi_modulation(t, input_wave, distorted_wave, tremolo_wave):
@@ -371,7 +374,7 @@ def test_tremolo():
 
 def test_ring_mod():
     duration = 12
-    pitch_frequency = 440
+    pitch_frequency = 800
     initial_signal = start_sine_wave(duration, pitch_frequency)
 
     def ring_mod_create_instance():
@@ -407,8 +410,10 @@ def test_ring_mod():
         }
 
     instance = ring_mod_create_instance()
-    result = run_instance(instance, num_beats=8)
-    resulting_wave = np.array(result[('emitter',)])
+    result = run_instance(instance, num_beats=8)[('emitter',)]
+    #resulting_wave = np.array(result[('emitter',)])
+    print(len(result), type(result))
+    #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
 
 
 if __name__ == '__main__':
