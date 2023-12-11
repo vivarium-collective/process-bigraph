@@ -373,7 +373,7 @@ def test_tremolo():
 
 
 def test_ring_mod():
-    duration = 12
+    duration = 4
     pitch_frequency = 800
     initial_signal = start_sine_wave(duration, pitch_frequency)
 
@@ -411,8 +411,11 @@ def test_ring_mod():
 
     instance = ring_mod_create_instance()
     result = run_instance(instance, num_beats=8)[('emitter',)]
+    array_to_wav(os.path.join('ring_mod_results', 'input_signal.wav'), input_signal=initial_signal)
     #resulting_wave = np.array(result[('emitter',)])
     print(len(result), type(result))
+    for r in result:
+        print(type(r))
     #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
 
 
