@@ -150,10 +150,42 @@ class PhaserProcess(SignalModulationProcess):
         }
 
 
+class DelayProcess(SignalModulationProcess):
+    config_schema = {
+        'input_signal': 'list[float]',
+        'delay_time': 'float',
+        'decay': 'float'
+    }
+
+    def __init__(self, config=None):
+        super().__init__(config)
+
+    def update(self, state, interval):
+        # create new wave
+        new_wave_modulated = apply_modulation(
+            input_wave=np.array(state['output_signal']),
+            modulation_function=phaser,
+            delay_time=self.config['delay_time'],
+            decay=self.config['decay']
+        )
+
+        # write out the file
+        results_dir = os.path.join(os.getcwd(), 'delay_results')
+        if not os.path.exists(results_dir):
+            os.mkdir(results_dir)
+        wav_fp = 'delay_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
+        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
+        return {
+            'output_signal': new_wave_modulated.tolist()
+        }
+
+
 process_registry.register('medium_distortion', MediumDistortionProcess)
 process_registry.register('tremolo', TremoloProcess)
 process_registry.register('ring_modulation', RingModulationProcess)
 process_registry.register('phaser', PhaserProcess)
+process_registry.register('delay', DelayProcess)
 
 
 def apply_modulation(input_wave: np.ndarray, modulation_function, **kwargs) -> np.ndarray:
@@ -529,7 +561,8 @@ def test_phaser():
                 'config': {
                     'input_signal': initial_signal,
                     'rate': rate,
-                    'depth': depth
+                    'depth': depth,
+                    'duration': duration
                 },
                 'wires': {  # this should return that which is in the schema
                     'output_signal': ['output_signal_store'],
@@ -556,6 +589,56 @@ def test_phaser():
     instance = phaser_create_instance()
     result = run_instance(instance, num_beats=8)[('emitter',)]
     array_to_wav(os.path.join('phaser_results', 'input_signal.wav'), input_signal=initial_signal)
+    #resulting_wave = np.array(result[('emitter',)])
+    print(len(result), type(result))
+    for r in result:
+        print(type(r))
+    #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
+
+
+def test_delay():
+    duration = 4
+    pitch_frequency = 800
+    delay_time = 0.6
+    decay = 0.4
+    initial_signal = start_sine_wave(duration, pitch_frequency)
+
+    def delay_create_instance():
+        return {
+            'phaser': {
+                '_type': 'process',
+                'address': 'local:phaser',
+                'config': {
+                    'input_signal': initial_signal,
+                    'delay_time': delay_time,
+                    'decay': decay,
+                    'duration': duration
+                },
+                'wires': {  # this should return that which is in the schema
+                    'output_signal': ['output_signal_store'],
+                }
+            },
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:ram-emitter',
+                'config': {
+                    'ports': {
+                        'inputs': {
+                            'output_signal': 'list[float]'
+                        },
+                    }
+                },
+                'wires': {
+                    'inputs': {
+                        'output_signal': ['output_signal_store'],
+                    }
+                }
+            }
+        }
+
+    instance = delay_create_instance()
+    result = run_instance(instance, num_beats=8)[('emitter',)]
+    array_to_wav(os.path.join('delay_results', 'input_signal.wav'), input_signal=initial_signal)
     #resulting_wave = np.array(result[('emitter',)])
     print(len(result), type(result))
     for r in result:
