@@ -52,6 +52,7 @@ class MediumDistortionProcess(SignalModulationProcess):
             ),
             input_signal=new_wave
         )
+        plot_signal(t=self.t, signal=new_wave_modulated, plot_label=wav_fp)
         return {
             'output_signal': new_wave.tolist()
         }
@@ -87,6 +88,7 @@ class TremoloProcess(SignalModulationProcess):
             ),
             input_signal=new_wave_modulated
         )
+        plot_signal(t=self.t, signal=new_wave_modulated, plot_label=wav_fp)
 
         return {
             'output_signal': new_wave_modulated.tolist()
@@ -114,7 +116,7 @@ class RingModulationProcess(SignalModulationProcess):
         # write out the file
         wav_fp = 'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
         array_to_wav(filename=os.path.join(os.getcwd(), wav_fp), input_signal=new_wave_modulated)
-        plot_signal(self.t, new_wave_modulated, 'ring_modulation')
+        plot_signal(t=self.t, signal=new_wave_modulated, plot_label=wav_fp)
         return {
             'output_signal': new_wave_modulated.tolist()
         }
