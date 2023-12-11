@@ -210,13 +210,17 @@ def array_to_wav(filename, input_signal, sample_rate=44100):
     write(filename, sample_rate, normalized_signal)
 
 
-def start_sine_wave(duration: int, pitch_frequency: int = 440):
+def initialize_timepoints(duration: int, num_points: int) -> np.ndarray:
+    return np.linspace(start=0, stop=duration, num=num_points, endpoint=True)
+
+
+def start_sine_wave(duration: int, pitch_frequency: int = 440) -> np.ndarray:
     sample_rate = 44100  # Sample rate in Hz
-    t = np.linspace(0, duration, int(sample_rate * duration), endpoint=False)
+    t = initialize_timepoints(duration, int(sample_rate * duration))
     return 0.5 * np.sin(2 * np.pi * pitch_frequency * t)  # Example sine wave at 440 Hz
 
 
-def adjust_pitch(starting_frequency, n_semitones):
+def adjust_pitch_frequency(starting_frequency, n_semitones) -> float:
     return starting_frequency * 2 ** (n_semitones / 12)
 
 
@@ -225,10 +229,8 @@ def run_instance(instance, num_beats=4):
     workflow = Composite({
         'state': instance
     })
-
     # run
     workflow.run(num_beats)
-
     # gather results
     return workflow.gather_results()
 
