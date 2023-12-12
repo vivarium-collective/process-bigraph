@@ -346,7 +346,7 @@ def start_sine_wave(duration: int, pitch_frequency: int = 440) -> np.ndarray:
     return 0.5 * np.sin(2 * np.pi * pitch_frequency * t)  # Example sine wave at 440 Hz
 
 
-def adjust_pitch_frequency(starting_frequency, n_semitones) -> float:
+def adjust_pitch_frequency(starting_frequency: float, n_semitones: float) -> float:
     return starting_frequency * 2 ** (n_semitones / 12)
 
 
@@ -597,10 +597,10 @@ def test_phaser():
 
 def test_delay():
     duration = 8
-    pitch_frequency = 800
+    b_flat = adjust_pitch_frequency(440.0, 1.0)
     delay_time = 0.6
     decay = 0.4
-    initial_signal = start_sine_wave(duration, pitch_frequency)
+    initial_signal = start_sine_wave(duration, b_flat)
 
     def delay_create_instance():
         return {
@@ -635,20 +635,85 @@ def test_delay():
             }
         }
 
-    instance = delay_create_instance()
+
+def test_pedalboard():
+    duration = 8
+    b_flat = adjust_pitch_frequency(440.0, 1.0)
+    delay_time = 0.6
+    decay = 0.4
+    tremolo_rate = 3
+    tremolo_depth = 0.75
+    ring_mod_freq = 1000
+    initial_signal = start_sine_wave(duration, b_flat)
+
+    instance = {
+        'tremolo': {
+            '_type': 'process',
+            'address': 'local:tremolo',
+            'config': {
+                'input_signal': initial_signal,
+                'rate': tremolo_rate,
+                'depth': tremolo_depth,
+                'duration': duration
+            },
+            'wires': {
+                'output_signal': ['output_signal_store'],
+            }
+        },
+        'ring_modulation': {
+            '_type': 'process',
+            'address': 'local:ring_modulation',
+            'config': {
+                'input_signal': 'output_signal_store',
+                'mod_freq': ring_mod_freq,
+                'duration': duration
+            },
+            'wires': {  # this should return that which is in the schema
+                'output_signal': ['output_signal_store'],
+            }
+        },
+        'delay': {
+            '_type': 'process',
+            'address': 'local:delay',
+            'config': {
+                'input_signal': 'output_signal_store',
+                'delay_time': delay_time,
+                'decay': decay,
+                'duration': duration
+            },
+            'wires': {  # this should return that which is in the schema
+                'output_signal': ['output_signal_store'],
+            }
+        },
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:ram-emitter',
+            'config': {
+                'ports': {
+                    'inputs': {
+                        'output_signal': 'list[float]'
+                    },
+                }
+            },
+            'wires': {
+                'inputs': {
+                    'output_signal': ['output_signal_store'],
+                }
+            }
+        }
+    }
+
     result = run_instance(instance, num_beats=8)[('emitter',)]
-    array_to_wav(os.path.join('delay_results', 'input_signal.wav'), input_signal=initial_signal)
+    array_to_wav('input_signal.wav', input_signal=initial_signal)
     #resulting_wave = np.array(result[('emitter',)])
-    print(len(result), type(result))
-    for r in result:
-        print(r.keys())
     final_result = result[-1]['output_signal']
-    plot_signal(duration, final_result, 'final_ring_mod_wave', fp='final_ring_mod_result')
+    plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')
 
 
 if __name__ == '__main__':
-    test_delay()
-    test_phaser()
-    test_ring_mod()
+    test_pedalboard()
+    # test_delay()
+    # test_phaser()
+    # test_ring_mod()
     # test_tremolo()
     # test_medium_distortion()
