@@ -194,6 +194,8 @@ class PedalBoardProcess(SignalModulationProcess):
     def update(self, state, interval):
         # create new wave
         output_signal = []
+
+        # TODO: sort this according to the desired pedal order in the chain
         for pedal_type, pedal_config in self.config['pedals'].items():
             modulated_signal = modulate_signal(
                 instance_type=pedal_type,
@@ -742,55 +744,61 @@ def modulate_signal(instance_type: str, duration: int, **instance_config):
 
 
 def test_pedalboard():
+    # set global parameters
     duration = 8
     b_flat = adjust_pitch_frequency(440.0, 1.0)
+    initial_signal = start_sine_wave(duration, b_flat)
+
+    # pedal-specific parameters
     delay_time = 0.6
     decay = 0.4
     tremolo_rate = 3
     tremolo_depth = 0.75
     ring_mod_freq = 1000
-    initial_signal = start_sine_wave(duration, b_flat)
+
+    # define pedal spec (must correspond to the process instance types)
+    pedals = {
+        'delay': {
+            'delay_time': delay_time,
+            'decay': decay
+        },
+        'tremolo': {
+            'rate': tremolo_rate,
+            'depth': tremolo_depth
+        },
+        'ring_modulation': {
+            'mod_freq': ring_mod_freq
+        }
+    }
+
 
     instance = {
-        'tremolo': {
+        'pedalboard': {
             '_type': 'process',
-            'address': 'local:tremolo',
+            'address': 'local:pedalboard',
             'config': {
-                'input_signal': initial_signal,
-                'rate': tremolo_rate,
-                'depth': tremolo_depth,
-                'duration': duration
+                'pedals': pedals,
             },
             'wires': {
                 'output_signal': ['output_signal_store'],
             }
         },
-        'ring_modulation': {
-            '_type': 'process',
-            'address': 'local:ring_modulation',
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:ram-emitter',
             'config': {
-                'input_signal': 'output_signal_store',
-                'mod_freq': ring_mod_freq,
-                'duration': duration
+                'ports': {
+                    'inputs': {
+                        'output_signal': 'list[float]'
+                    },
+                }
             },
-            'wires': {  # this should return that which is in the schema
-                'output_signal': ['output_signal_store'],
+            'wires': {
+                'inputs': {
+                    'output_signal': ['output_signal_store'],
+                }
             }
-        },
-        'delay': {
-            '_type': 'process',
-            'address': 'local:delay',
-            'config': {
-                'input_signal': 'output_signal_store',
-                'delay_time': delay_time,
-                'decay': decay,
-                'duration': duration
-            },
-            'wires': {  # this should return that which is in the schema
-                'output_signal': ['output_signal_store'],
-            }
-        },
-
+        }
     }
 
     result = run_instance(instance, num_beats=8)[('emitter',)]
