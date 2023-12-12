@@ -1,5 +1,6 @@
 import numpy as np
 import os
+from typing import *
 import uuid
 import datetime
 import matplotlib.pyplot as plt
@@ -181,11 +182,44 @@ class DelayProcess(SignalModulationProcess):
         }
 
 
+class PedalBoardProcess(SignalModulationProcess):
+    config_schema = {
+        'input_signal': 'list[float]',
+        'pedals': 'tree[any]'
+    }
+
+    def __init__(self, config=None):
+        super().__init__(config)
+
+    def update(self, state, interval):
+        # create new wave
+        output_signal = []
+        for pedal_type, pedal_config in self.config['pedals'].items():
+            modulated_signal = modulate_signal(
+                instance_type=pedal_type,
+                duration=self.config['duration'],
+                instance_config=pedal_config
+            )
+            output_signal += modulated_signal
+
+        # write out the file
+        results_dir = os.path.join(os.getcwd(), 'ring_mod_results')
+        if not os.path.exists(results_dir):
+            os.mkdir(results_dir)
+        wav_fp = 'pedalboard_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
+        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=output_signal)
+        plot_signal(duration=self.config['duration'], signal=output_signal, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
+        return {
+            'output_signal': output_signal
+        }
+
+
 process_registry.register('medium_distortion', MediumDistortionProcess)
 process_registry.register('tremolo', TremoloProcess)
 process_registry.register('ring_modulation', RingModulationProcess)
 process_registry.register('phaser', PhaserProcess)
 process_registry.register('delay', DelayProcess)
+process_registry.register('pedalboard', PedalBoardProcess)
 
 
 def apply_modulation(input_wave: np.ndarray, modulation_function, **kwargs) -> np.ndarray:
@@ -351,6 +385,8 @@ def adjust_pitch_frequency(starting_frequency: float, n_semitones: float) -> flo
 
 
 def plot_signal(duration: int, signal: np.ndarray, plot_label: str, fp: str, show=False):
+    if not isinstance(signal, np.ndarray):
+        signal = np.array(signal)
     plt.figure(figsize=(12, 6))
     # plt.subplot(3, 1, 1)
     sample_rate = 44100
@@ -636,6 +672,75 @@ def test_delay():
         }
 
 
+def create_instance(instance_type: str, wires: Dict[str, Any], **instance_config):
+    return {
+        instance_type: {
+            '_type': 'process',
+            'address': f'local:{instance_type}',
+            'config': instance_config,
+            'wires': wires
+        },
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:ram-emitter',
+            'config': {
+                'ports': {
+                    'inputs': {
+                        'output_signal': 'list[float]'
+                    },
+                }
+            },
+            'wires': {
+                'inputs': {
+                    'output_signal': ['output_signal_store'],
+                }
+            }
+        }
+    }
+
+
+def create_modulation_instance(instance_type: str, **instance_config):
+    """Types to be expected are modeled in a meta-instance below:
+    ```
+         instance = {
+            'tremolo': {
+                'config': {
+                    'input_signal': initial_signal,
+                    'rate': tremolo_rate,
+                    'depth': tremolo_depth,
+                    'duration': duration
+                },
+            },
+            'ring_modulation': {
+                'config': {
+                    'input_signal': 'output_signal_store',
+                    'mod_freq': ring_mod_freq,
+                    'duration': duration
+                }
+            },
+            'delay': {
+                'config': {
+                    'input_signal': 'output_signal_store',
+                    'delay_time': delay_time,
+                    'decay': decay,
+                    'duration': duration
+                },
+            },
+    ```
+    """
+    wires = {'output_signal': ['output_signal_store']}
+    return create_instance(instance_type, wires, **instance_config)
+
+
+def modulate_signal(instance_type: str, duration: int, **instance_config):
+    instance = create_modulation_instance(instance_type, **instance_config)
+    result = run_instance(instance, duration)[('emitter',)]
+    return result[-1]['output_signal']
+
+
+
+
+
 def test_pedalboard():
     duration = 8
     b_flat = adjust_pitch_frequency(440.0, 1.0)
@@ -685,22 +790,7 @@ def test_pedalboard():
                 'output_signal': ['output_signal_store'],
             }
         },
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'ports': {
-                    'inputs': {
-                        'output_signal': 'list[float]'
-                    },
-                }
-            },
-            'wires': {
-                'inputs': {
-                    'output_signal': ['output_signal_store'],
-                }
-            }
-        }
+
     }
 
     result = run_instance(instance, num_beats=8)[('emitter',)]
