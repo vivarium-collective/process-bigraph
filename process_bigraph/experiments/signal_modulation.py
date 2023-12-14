@@ -23,10 +23,16 @@ class SignalModulationProcess(Process):
         super().__init__(config)
 
     def initial_state(self):
-        return {'output_signal': self.config['input_signal']}
+        return {
+            'input_signal': self.config['input_signal'],
+            'output_signal': []
+        }
 
     def schema(self):
-        return {'output_signal': 'list[float]'}
+        return {
+            'input_signal': 'list[float]',
+            'output_signal': 'list[float]'
+        }
 
     def update(self, state, interval):
         return {}
@@ -66,9 +72,10 @@ class TremoloProcess(SignalModulationProcess):
         super().__init__(config)
 
     def update(self, state, interval):
+        input_signal = np.array(state['input_signal'])
         # create new wave
         new_wave_modulated = apply_modulation(
-            input_wave=np.array(state['output_signal']),
+            input_wave=input_signal,
             modulation_function=tremolo,
             depth=self.config['depth'],
             rate=self.config['rate'],
@@ -87,6 +94,7 @@ class TremoloProcess(SignalModulationProcess):
         plot_signal(self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp)
 
         return {
+            'input_signal': input_signal,
             'output_signal': new_wave_modulated.tolist()
         }
 
@@ -101,6 +109,7 @@ class RingModulationProcess(SignalModulationProcess):
         super().__init__(config)
 
     def update(self, state, interval):
+        input_signal = np.array(state['input_signal'])
         # create new wave
         new_wave_modulated = apply_modulation(
             input_wave=np.array(state['output_signal']),
@@ -116,6 +125,7 @@ class RingModulationProcess(SignalModulationProcess):
         array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
         plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
+            'input_signal': input_signal,
             'output_signal': new_wave_modulated.tolist()
         }
 
@@ -743,7 +753,7 @@ def modulate_signal(instance_type: str, duration: int, **instance_config):
 
 
 
-def test_pedalboard():
+def test_pedalboard_process():
     # set global parameters
     duration = 8
     b_flat = adjust_pitch_frequency(440.0, 1.0)
@@ -806,6 +816,62 @@ def test_pedalboard():
     #resulting_wave = np.array(result[('emitter',)])
     final_result = result[-1]['output_signal']
     plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')
+
+
+def test_pedalboard():
+    # set global parameters
+    duration = 8
+    b_flat = adjust_pitch_frequency(440.0, 1.0)
+    initial_signal = start_sine_wave(duration, b_flat)
+
+    # pedal-specific parameters
+    delay_time = 0.6
+    decay = 0.4
+    tremolo_rate = 3
+    tremolo_depth = 0.75
+    ring_mod_freq = 1000
+
+    instance = {
+        'tremolo': {
+            'config': {
+                'input_signal': initial_signal,
+                'rate': tremolo_rate,
+                'depth': tremolo_depth,
+                'duration': duration
+            },
+        },
+        'ring_modulation': {
+            'config': {
+                'input_signal': 'output_signal_store',
+                'mod_freq': ring_mod_freq,
+                'duration': duration
+            }
+        },
+        'delay': {
+            'config': {
+                'input_signal': 'output_signal_store',
+                'delay_time': delay_time,
+                'decay': decay,
+                'duration': duration
+            },
+        },
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:ram-emitter',
+            'config': {
+                'ports': {
+                    'inputs': {
+                        'output_signal': 'list[float]'
+                    },
+                }
+            },
+            'wires': {
+                'inputs': {
+                    'output_signal': ['output_signal_store'],
+                }
+            }
+        }
+    }
 
 
 if __name__ == '__main__':
