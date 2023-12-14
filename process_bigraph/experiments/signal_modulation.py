@@ -1,6 +1,7 @@
 import numpy as np
 import os
 from typing import *
+from abc import ABC, abstractmethod
 import uuid
 import datetime
 import matplotlib.pyplot as plt
@@ -14,7 +15,10 @@ class SignalModulationProcess(Process):
     """Generic base class for signal modulators."""
 
     config_schema = {
-        'input_signal': 'list[float]',
+        'input_signal': {
+            '_type': 'list[float]',
+            '_default': []
+        },
         'duration': 'int'
     }
 
@@ -23,6 +27,7 @@ class SignalModulationProcess(Process):
         super().__init__(config)
 
     def initial_state(self):
+
         return {
             'input_signal': self.config['input_signal'],
             'output_signal': []
@@ -838,28 +843,31 @@ def test_pedalboard():
     ring_mod_freq = 1000
 
     instance = {
-        'tremolo': {
+        'ring_modulation': {
+            '_type': 'process',
+            'address': 'local:ring_modulation',
             'config': {
+                'mod_freq': 2000,
                 'input_signal': initial_signal,
-                'rate': tremolo_rate,
-                'depth': tremolo_depth,
                 'duration': duration
             },
-        },
-        'ring_modulation': {
-            'config': {
-                'input_signal': 'output_signal_store',
-                'mod_freq': ring_mod_freq,
-                'duration': duration
+            'wires': {  # this should return that which is in the schema
+                'input_signal': ['input_signal_store'],
+                'output_signal': ['output_signal_store'],
             }
         },
-        'delay': {
+        'tremolo': {
+            '_type': 'process',
+            'address': 'local:tremolo',
             'config': {
-                'input_signal': 'output_signal_store',
-                'delay_time': delay_time,
-                'decay': decay,
-                'duration': duration
+                'depth': 0.9,
+                'rate': 9,
+                'duration': duration,
             },
+            'wires': {  # this should return that which is in the schema
+                'input_signal': 'input_signal_store',
+                'output_signal': ['output_signal_store'],
+            }
         },
         'emitter': {
             '_type': 'step',
@@ -867,17 +875,19 @@ def test_pedalboard():
             'config': {
                 'ports': {
                     'inputs': {
+                        'input_signal': 'list[float]',
                         'output_signal': 'list[float]'
                     },
                 }
             },
             'wires': {
                 'inputs': {
+                    'input_signal': ['input_signal_store'],
                     'output_signal': ['output_signal_store'],
                 }
             }
         }
-    }
+        }
 
 
 if __name__ == '__main__':
