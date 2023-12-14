@@ -27,11 +27,12 @@ class SignalModulationProcess(Process):
         super().__init__(config)
 
     def initial_state(self):
+        return {}
 
-        return {
+        '''return {
             'input_signal': self.config['input_signal'],
             'output_signal': []
-        }
+        }'''
 
     def schema(self):
         return {
@@ -79,7 +80,7 @@ class TremoloProcess(SignalModulationProcess):
         super().__init__(config)
 
     def update(self, state, interval):
-        input_signal = np.array(state['input_signal'])
+        input_signal = np.array(state['output_signal'])
         # create new wave
         new_wave_modulated = apply_modulation(
             input_wave=input_signal,
@@ -91,14 +92,14 @@ class TremoloProcess(SignalModulationProcess):
 
         # write out the file
         wav_fp = 'tremolo_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-        array_to_wav(
+        '''array_to_wav(
             filename=os.path.join(
                 os.getcwd(),
                 wav_fp
             ),
             input_signal=new_wave_modulated
         )
-        plot_signal(self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp)
+        plot_signal(self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp)'''
 
         return {
             'input_signal': input_signal.tolist(),
@@ -116,7 +117,7 @@ class RingModulationProcess(SignalModulationProcess):
         super().__init__(config)
 
     def update(self, state, interval):
-        input_signal = np.array(state['input_signal'])
+        input_signal = np.array(state['output_signal'])
         # create new wave
         new_wave_modulated = apply_modulation(
             input_wave=np.array(state['output_signal']),
@@ -129,8 +130,8 @@ class RingModulationProcess(SignalModulationProcess):
         if not os.path.exists(results_dir):
             os.mkdir(results_dir)
         wav_fp = 'ring_mod_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
-        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
+        '''array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
+        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))'''
         return {
             'input_signal': input_signal.tolist(),
             'output_signal': new_wave_modulated.tolist()
