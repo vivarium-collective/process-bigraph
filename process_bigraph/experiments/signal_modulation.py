@@ -887,7 +887,10 @@ def test_pedalboard():
                 }
             }
         }
-        }
+    }
+
+    result = run_instance(instance, duration)
+    print(f'RESULT: {result}')
 
 
 if __name__ == '__main__':
