@@ -47,6 +47,7 @@ class MediumDistortionProcess(SignalModulationProcess):
         super().__init__(config)
 
     def update(self, state, interval):
+        input_signal = np.array(state['input_signal'])
         new_wave = apply_modulation(np.array(state['output_signal']), distortion, gain=5)
         wav_fp = 'distortion_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
         array_to_wav(
@@ -56,8 +57,9 @@ class MediumDistortionProcess(SignalModulationProcess):
             ),
             input_signal=new_wave
         )
-        plot_signal(t=self.t, signal=new_wave_modulated, plot_label=wav_fp)
+        plot_signal(duration=self.config['duration'], signal=new_wave, plot_label=wav_fp, fp=wav_fp.replace('.wav', '.png'))
         return {
+            'input_signal': input_signal.tolist(),
             'output_signal': new_wave.tolist()
         }
 
@@ -94,7 +96,7 @@ class TremoloProcess(SignalModulationProcess):
         plot_signal(self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp)
 
         return {
-            'input_signal': input_signal,
+            'input_signal': input_signal.tolist(),
             'output_signal': new_wave_modulated.tolist()
         }
 
@@ -125,7 +127,7 @@ class RingModulationProcess(SignalModulationProcess):
         array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
         plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
-            'input_signal': input_signal,
+            'input_signal': input_signal.tolist(),
             'output_signal': new_wave_modulated.tolist()
         }
 
@@ -142,6 +144,7 @@ class PhaserProcess(SignalModulationProcess):
 
     def update(self, state, interval):
         # create new wave
+        input_signal = np.array(state['input_signal'])
         new_wave_modulated = apply_modulation(
             input_wave=np.array(state['output_signal']),
             modulation_function=phaser,
@@ -157,6 +160,7 @@ class PhaserProcess(SignalModulationProcess):
         array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
         plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
+            'input_signal': input_signal.tolist(),
             'output_signal': new_wave_modulated.tolist()
         }
 
@@ -173,6 +177,7 @@ class DelayProcess(SignalModulationProcess):
 
     def update(self, state, interval):
         # create new wave
+        input_signal = np.array(state['input_signal'])
         new_wave_modulated = apply_modulation(
             input_wave=np.array(state['output_signal']),
             modulation_function=delay,
@@ -188,6 +193,7 @@ class DelayProcess(SignalModulationProcess):
         array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
         plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
+            'input_signal': input_signal.tolist(),
             'output_signal': new_wave_modulated.tolist()
         }
 
