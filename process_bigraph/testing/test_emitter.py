@@ -1,6 +1,6 @@
 """Test the database emitter class with an instance used to emit and query simulation data."""
 
-from process_bigraph.emitter.utils import DatabaseEmitter
+from process_bigraph.emitter import DatabaseEmitter
 
 
 def run_simulation(time):
