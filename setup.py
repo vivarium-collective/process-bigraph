@@ -48,6 +48,13 @@ setup(
         "numpy",
         "pytest>=6.2.5",
         "pymongo",
-        "orjson"
+        "orjson",
+        "pprint"
     ],
+    extras_require={
+        "smoldyn": ["smoldyn", "simulariumio"],
+        "tellurium": ["tellurium"],
+        "copasi": ["copasi-basico"],
+        "cobra": ["cobra"]
+    }
 )
