@@ -10,6 +10,7 @@ import math
 import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
+from bigraph_schema.type_system import Edge
 from process_bigraph.type_system import types
 from process_bigraph.protocols import local_lookup_module
 
@@ -42,18 +43,12 @@ class SyncUpdate():
         return self.update
 
 
-# TODO: create base class for Step and Process
-#   maybe it comes from bigraph-schema?
-class Edge:
-    def __init__(self):
-        pass
-
-
 class Step(Edge):
     """Step base class."""
     # TODO: support trigger every time
     #   as well as dependency trigger
     config_schema = {}
+
 
     def __init__(self, config=None, local_types=None):
         self.types = local_types or types
@@ -65,37 +60,35 @@ class Step(Edge):
             self.config_schema,
             config)
 
+
     def schema(self):
         return {}
 
+
     def initial_state(self):
         return {}
-        # initial = {}
-        # return types.fill(
-        #     self.schema(),
-        #     initial)
 
 
-    def project_state(self, ports, wires, path, state):
-        inputs = {}
-        if 'inputs' in ports and 'inputs' in wires:
-            inputs = self.types.project(
-                ports['inputs'],
-                wires['inputs'],
-                path,
-                state)
+    # def project_state(self, ports, wires, path, state):
+    #     inputs = {}
+    #     if 'inputs' in ports and 'inputs' in wires:
+    #         inputs = self.types.project(
+    #             ports['inputs'],
+    #             wires['inputs'],
+    #             path,
+    #             state)
 
-        outputs = {}
-        if 'outputs' in ports and 'outputs' in wires:
-            outputs = self.types.project(
-                ports['outputs'],
-                wires['outputs'],
-                path,
-                state)
+    #     outputs = {}
+    #     if 'outputs' in ports and 'outputs' in wires:
+    #         outputs = self.types.project(
+    #             ports['outputs'],
+    #             wires['outputs'],
+    #             path,
+    #             state)
 
-        result = deep_merge(inputs, outputs)
+    #     result = deep_merge(inputs, outputs)
         
-        return result
+    #     return result
 
 
     def invoke(self, state, _=None):
@@ -103,12 +96,13 @@ class Step(Edge):
         sync = SyncUpdate(update)
         return sync
 
+
     @abc.abstractmethod
     def update(self, state):
         return {}
 
 
-class Process(Edge):
+class Process(Step):
     """Process parent class.
 
       All :term:`process` classes must inherit from this class. Each
@@ -142,26 +136,12 @@ class Process(Edge):
         return {}
 
 
-    def initial_state(self):
-        return {}
-        # initial = {}
-        # return types.fill(
-        #     self.schema(),
-        #     initial)
-
-
-    def project_state(self, ports, wires, path, state):
-        return self.types.project(
-            ports,
-            wires,
-            path,
-            state)
-
-
-    def invoke(self, state, interval):
-        update = self.update(state, interval)
-        sync = SyncUpdate(update)
-        return sync
+    # def project_state(self, ports, wires, path, state):
+    #     return self.types.project(
+    #         ports,
+    #         wires,
+    #         path,
+    #         state)
 
 
     @abc.abstractmethod
@@ -214,8 +194,6 @@ class Defer:
             self.defer.get(),
             self.args)
 
-# TODO maybe keep wires as tuples/paths to distinguish them from schemas?
-
 
 def find_instances(state, instance_type='process_bigraph.composite.Process'):
     process_class = local_lookup_module(instance_type)
@@ -245,7 +223,7 @@ def find_step_triggers(path, step):
     prefix = tuple(path[:-1])
     triggers = {}
     wire_paths = find_leaves(
-        step['wires']['inputs'])
+        step['inputs'])
 
     for wire in wire_paths:
         trigger_path = tuple(prefix) + tuple(wire)
@@ -324,18 +302,18 @@ def build_step_network(steps):
                 continue
 
             schema = step['instance'].schema()
-            wires = step['wires']
+            # wires = step['wires']
             other_schema = other_step['instance'].schema()
-            other_wires = other_step['wires']
+            # other_wires = other_step['wires']
 
             if ancestors[step_key]['input_paths'] is None:
                 ancestors[step_key]['input_paths'] = find_leaves(
-                    wires['inputs'])
+                    step['inputs'])
             input_paths = ancestors[step_key]['input_paths']
 
             if ancestors[step_key]['output_paths'] is None:
                 ancestors[step_key]['output_paths'] = find_leaves(
-                    wires.get('outputs', {}))
+                    step.get('outputs', {}))
             output_paths = ancestors[step_key]['output_paths']
 
             for input in input_paths:
@@ -423,8 +401,12 @@ class Composite(Process):
         # TODO: add schema type
         'composition': 'tree[any]',
         'state': 'tree[any]',
-        'schema': 'tree[any]',
-        'bridge': 'wires',
+        'schema': {
+            'inputs': 'tree[any]',
+            'outputs': 'tree[any]'},
+        'bridge': {
+            'inputs': 'wires',
+            'outputs': 'wires'},
         'global_time_precision': 'maybe[float]'}
 
 
@@ -683,7 +665,8 @@ class Composite(Process):
                     self.process_schema,
                     self.bridge,
                     (),
-                    update)
+                    update,
+                    ports_key='outputs')
 
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
@@ -852,9 +835,10 @@ class Composite(Process):
 
         projection = types.project(
             self.schema(),
-            self.bridge,
+            self.bridge['inputs'],
             [],
-            state)
+            state,
+            ports_key='inputs')
 
         self.state = types.set(
             self.composition,

@@ -15,12 +15,18 @@ class IncreaseProcess(Process):
             '_type': 'float',
             '_default': '0.1'}}
 
+
     def __init__(self, config=None):
         super().__init__(config)
 
+
     def schema(self):
         return {
-            'level': 'float'}
+            'inputs': {
+                'level': 'float'},
+            'outputs': {
+                'level': 'float'}}
+
 
     def update(self, state, interval):
         return {
@@ -44,9 +50,13 @@ def test_merge_collections():
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
-    state = types.fill(schema)
+    state = types.fill(schema['inputs'])
+    state = types.fill(schema['outputs'])
     update = process.update({'level': 5.5}, 1.0)
-    new_state = types.apply(schema, state, update)
+
+    import ipdb; ipdb.set_trace()
+
+    new_state = types.apply(schema['outputs'], state, update)
 
     assert new_state['level'] == 1.1
 
@@ -60,18 +70,25 @@ def test_composite():
 
     composite = Composite({
         'composition': {
-            'increase': 'process[level:float]',
+            'increase': 'process[level:float,level:float]',
             'value': 'float'},
         'schema': {
-            'exchange': 'float'},
+            'inputs': {
+                'exchange': 'float'},
+            'outputs': {
+                'exchange': 'float'}},
         'bridge': {
-            'exchange': ['value']},
+            'inputs': {
+                'exchange': ['value']},
+            'outputs': {
+                'exchange': ['value']}},
         'state': {
             'increase': {
                 'address': 'local:!process_bigraph.tests.IncreaseProcess',
                 'config': {'rate': 0.3},
                 'interval': 1.0,
-                'wires': {'level': ['value']}},
+                'inputs': {'level': ['value']},
+                'outputs': {'level': ['value']}},
             'value': 11.11}})
 
     initial_state = {'exchange': 3.33}

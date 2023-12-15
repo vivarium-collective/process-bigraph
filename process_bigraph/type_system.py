@@ -4,7 +4,7 @@ Process Types
 =============
 """
 
-from bigraph_schema import TypeSystem, get_path, establish_path, set_path
+from bigraph_schema import Edge, TypeSystem, get_path, establish_path, set_path
 from process_bigraph.registry import protocol_registry
 
 
@@ -23,6 +23,12 @@ def apply_process(current, update, bindings=None, types=None):
         process_schema,
         current,
         update)
+
+
+def check_process(state, bindings, types):
+    return 'instance' in state and isinstance(
+        state['instance'],
+        Edge)
 
 
 def divide_process(value, bindings=None, types=None):
@@ -106,14 +112,12 @@ process_types = {
     'protocol': {
         '_super': 'string'},
 
-    # TODO: step wires are directional ie, we make a distinction
-    #   between inputs and outputs, and the same wire cannot be both
-    #   an input and output at the same time
     'step': {
         '_super': ['edge'],
         '_apply': 'apply_process',
         '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_step',
+        '_check': 'check_process',
         '_divide': 'divide_process',
         '_description': '',
         # TODO: support reference to type parameters from other states
@@ -121,16 +125,16 @@ process_types = {
         'config': 'tree[any]'},
 
     'process': {
-        '_super': ['edge'],
+        '_super': ['step'],
         '_apply': 'apply_process',
         '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_process',
+        '_check': 'check_process',
         '_divide': 'divide_process',
         '_description': '',
         # TODO: support reference to type parameters from other states
-        'interval': process_interval_schema,
-        'address': 'protocol',
-        'config': 'tree[any]'},
+        'interval': process_interval_schema
+    }
 }
 
 
@@ -139,6 +143,7 @@ def register_process_types(types):
     types.serialize_registry.register('serialize_process', serialize_process)
     types.deserialize_registry.register('deserialize_process', deserialize_process)
     types.divide_registry.register('divide_process', divide_process)
+    types.check_registry.register('check_process', check_process)
 
     types.deserialize_registry.register('deserialize_step', deserialize_step)
 
@@ -152,54 +157,6 @@ class ProcessTypes(TypeSystem):
     def __init__(self):
         super().__init__()
         register_process_types(self)
-
-
-    # def serialize(self, schema, state):
-    #     return ''
-
-
-    # def deserialize(self, schema, encoded):
-    #     return {}
-
-
-    def infer_wires(self, ports, state, wires, top_schema=None, path=None):
-        top_schema = top_schema or {}
-        path = path or ()
-
-        for port_key, port_wires in wires.items():
-            if isinstance(ports, str):
-                import ipdb; ipdb.set_trace()
-            port_schema = ports.get(port_key, {})
-            # port_wires = wires.get(port_key, ())
-            if isinstance(port_wires, dict):
-                top_schema = self.infer_wires(
-                    ports,
-                    state.get(port_key),
-                    port_wires,
-                    top_schema,
-                    path + (port_key,))
-            else:
-                peer = get_path(
-                    top_schema,
-                    path[:-1])
-
-                destination = establish_path(
-                    peer,
-                    port_wires[:-1],
-                    top=top_schema,
-                    cursor=path[:-1])
-
-                if len(port_wires) == 0:
-                    raise Exception(f'no wires at port "{port_key}" in ports {ports} with state {state}')
-
-                destination_key = port_wires[-1]
-                if destination_key in destination:
-                    # TODO: validate the schema/state
-                    pass
-                else:
-                    destination[destination_key] = port_schema
-
-        return top_schema
 
 
     def infer_schema(self, schema, state, top_state=None, path=None):
@@ -243,32 +200,24 @@ class ProcessTypes(TypeSystem):
                         path + ('_ports',),
                         port_schema)
 
-                    subwires = hydrated_state['wires']
-                    if state_type == 'step':
-                        input_subwires = subwires.get('inputs', {})
-                        input_port_schema = port_schema.get('inputs', {})
-                        schema = self.infer_wires(
-                            input_port_schema,
-                            hydrated_state,
-                            input_subwires,
-                            top_schema=schema,
-                            path=path[:-1])
+                    inputs = hydrated_state.get('inputs', {})
+                    input_port_schema = port_schema.get('inputs', {})
+                    schema = self.infer_wires(
+                        input_port_schema,
+                        hydrated_state,
+                        inputs,
+                        top_schema=schema,
+                        path=path[:-1])
 
-                        output_subwires = subwires.get('outputs', {})
-                        output_port_schema = port_schema.get('outputs', {})
-                        schema = self.infer_wires(
-                            output_port_schema,
-                            hydrated_state,
-                            output_subwires,
-                            top_schema=schema,
-                            path=path[:-1])
-                    else:
-                        schema = self.infer_wires(
-                            port_schema,
-                            hydrated_state,
-                            subwires,
-                            top_schema=schema,
-                            path=path[:-1])
+                    outputs = hydrated_state.get('outputs', {})
+                    output_port_schema = port_schema.get('outputs', {})
+                    schema = self.infer_wires(
+                        output_port_schema,
+                        hydrated_state,
+                        outputs,
+                        top_schema=schema,
+                        path=path[:-1])
+
             elif '_type' in schema:
                 hydrated_state = self.deserialize(schema, state)
                 top_state = set_path(
@@ -331,9 +280,9 @@ class ProcessTypes(TypeSystem):
         initial_state = edge['instance'].initial_state()
         ports = get_path(schema, path + ('_ports',))
 
-        return edge['instance'].project_state(
+        return self.project_edge(
             ports,
-            edge['wires'],
+            edge,
             path[:-1],
             initial_state)
         
