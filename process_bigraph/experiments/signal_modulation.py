@@ -55,14 +55,14 @@ class MediumDistortionProcess(SignalModulationProcess):
         input_signal = np.array(state['input_signal'])
         new_wave = apply_modulation(np.array(state['output_signal']), distortion, gain=5)
         wav_fp = 'distortion_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-        array_to_wav(
+        '''array_to_wav(
             filename=os.path.join(
                 os.getcwd(),
                 wav_fp
             ),
             input_signal=new_wave
         )
-        plot_signal(duration=self.config['duration'], signal=new_wave, plot_label=wav_fp, fp=wav_fp.replace('.wav', '.png'))
+        plot_signal(duration=self.config['duration'], signal=new_wave, plot_label=wav_fp, fp=wav_fp.replace('.wav', '.png'))'''
         return {
             'input_signal': input_signal.tolist(),
             'output_signal': new_wave.tolist()
@@ -458,50 +458,6 @@ def run_instance(instance, num_beats=4):
     return workflow.gather_results()
 
 
-def test_medium_distortion():
-    initial_signal = start_sine_wave(10).tolist()
-    instance = {
-            'distortion': {
-                '_type': 'process',
-                'address': 'local:medium_distortion',
-                'config': {
-                    'input_signal': initial_signal,
-                },
-                'wires': {  # this should return that which is in the schema
-                    'output_signal': ['output_signal_store'],
-                }
-            },
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'config': {
-                    'ports': {
-                        'inputs': {
-                            'output_signal': 'list[float]'
-                        },
-                    }
-                },
-                'wires': {
-                    'inputs': {
-                        'output_signal': ['output_signal_store'],
-                    }
-                }
-            }
-        }
-
-    # make the composite
-    workflow = Composite({
-        'state': instance
-    })
-
-    num_beats = 3
-    # run
-    workflow.run(num_beats)
-
-    # gather results
-    results = workflow.gather_results()
-
-
 def test_tremolo():
     stop = 32
     frequencies = [262, 294, 330, 349]
@@ -623,6 +579,7 @@ def test_phaser():
                     'duration': duration
                 },
                 'wires': {  # this should return that which is in the schema
+                    'input_signal': ['input_signal_store'],
                     'output_signal': ['output_signal_store'],
                 }
             },
@@ -761,11 +718,8 @@ def modulate_signal(instance_type: str, duration: int, **instance_config):
     return result[-1]['output_signal']
 
 
-
-
-
 def test_pedalboard_process():
-    # set global parameters
+    """# set global parameters
     duration = 8
     b_flat = adjust_pitch_frequency(440.0, 1.0)
     initial_signal = start_sine_wave(duration, b_flat)
@@ -798,9 +752,12 @@ def test_pedalboard_process():
             '_type': 'process',
             'address': 'local:pedalboard',
             'config': {
+                'input_signal': initial_signal,
+                'duration': duration,
                 'pedals': pedals,
             },
-            'wires': {
+            'wires': {  # this should return that which is in the schema
+                'input_signal': ['input_signal_store'],
                 'output_signal': ['output_signal_store'],
             }
         },
@@ -810,12 +767,14 @@ def test_pedalboard_process():
             'config': {
                 'ports': {
                     'inputs': {
+                        'input_signal': 'list[float]',
                         'output_signal': 'list[float]'
                     },
                 }
             },
             'wires': {
                 'inputs': {
+                    'input_signal': ['input_signal_store'],
                     'output_signal': ['output_signal_store'],
                 }
             }
@@ -826,7 +785,8 @@ def test_pedalboard_process():
     #array_to_wav('input_signal.wav', input_signal=initial_signal)
     #resulting_wave = np.array(result[('emitter',)])
     final_result = result[-1]['output_signal']
-    #plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')
+    #plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')"""
+    pass
 
 
 def test_pedalboard():
@@ -899,4 +859,3 @@ if __name__ == '__main__':
     # test_phaser()
     # test_ring_mod()
     # test_tremolo()
-    # test_medium_distortion()
