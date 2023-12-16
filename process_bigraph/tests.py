@@ -68,10 +68,10 @@ def test_composite():
         'state': {
             'increase': {
                 'address': 'local:!process_bigraph.tests.IncreaseProcess',
-                'config': {'rate': '0.3'},
-                'interval': '1.0',
+                'config': {'rate': 0.3},
+                'interval': 1.0,
                 'wires': {'level': ['value']}},
-            'value': '11.11'}})
+            'value': 11.11}})
 
     initial_state = {'exchange': 3.33}
 
