@@ -163,8 +163,8 @@ class PhaserProcess(SignalModulationProcess):
         if not os.path.exists(results_dir):
             os.mkdir(results_dir)
         wav_fp = 'phaser_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
-        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
+        #array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
+        #plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
             'input_signal': input_signal.tolist(),
             'output_signal': new_wave_modulated.tolist()
@@ -196,8 +196,8 @@ class DelayProcess(SignalModulationProcess):
         if not os.path.exists(results_dir):
             os.mkdir(results_dir)
         wav_fp = 'delay_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
-        plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
+        #array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=new_wave_modulated)
+        #plot_signal(duration=self.config['duration'], signal=new_wave_modulated, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
             'input_signal': input_signal.tolist(),
             'output_signal': new_wave_modulated.tolist()
@@ -231,8 +231,8 @@ class PedalBoardProcess(SignalModulationProcess):
         if not os.path.exists(results_dir):
             os.mkdir(results_dir)
         wav_fp = 'pedalboard_' + str(datetime.datetime.utcnow()).replace(':', '').replace(' ', '').replace('.', '') + '.wav'
-        array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=output_signal)
-        plot_signal(duration=self.config['duration'], signal=output_signal, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
+        #array_to_wav(filename=os.path.join(results_dir, wav_fp), input_signal=output_signal)
+        #plot_signal(duration=self.config['duration'], signal=output_signal, plot_label=wav_fp, fp=os.path.join(results_dir, wav_fp.replace('.wav', '.png')))
         return {
             'output_signal': output_signal
         }
@@ -376,7 +376,7 @@ def phaser(input_wave, rate=1, depth=0.5, freq=0.5, fs=500):
     return output_wave
 
 
-def array_to_wav(filename, input_signal, sample_rate=44100):
+'''def array_to_wav(filename, input_signal, sample_rate=44100):
     """
     Writes a NumPy array to a WAV file.
 
@@ -391,7 +391,7 @@ def array_to_wav(filename, input_signal, sample_rate=44100):
     normalized_signal = np.int16(input_signal / np.max(np.abs(input_signal)) * max_val)
 
     # Write to WAV file
-    write(filename, sample_rate, normalized_signal)
+    write(filename, sample_rate, normalized_signal)'''
 
 
 def initialize_timepoints(duration: int, sample_rate=44100) -> np.ndarray:
@@ -408,7 +408,7 @@ def adjust_pitch_frequency(starting_frequency: float, n_semitones: float) -> flo
     return starting_frequency * 2 ** (n_semitones / 12)
 
 
-def plot_signal(duration: int, signal: np.ndarray, plot_label: str, fp: str, show=False):
+'''def plot_signal(duration: int, signal: np.ndarray, plot_label: str, fp: str, show=False):
     if not isinstance(signal, np.ndarray):
         signal = np.array(signal)
     plt.figure(figsize=(12, 6))
@@ -442,7 +442,7 @@ def plot_multi_modulation(t, input_wave, distorted_wave, tremolo_wave):
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.show()
+    plt.show()'''
 
 
 # TODO: matmul for types?
@@ -597,7 +597,7 @@ def test_ring_mod():
 
     instance = ring_mod_create_instance()
     result = run_instance(instance, num_beats=8)[('emitter',)]
-    array_to_wav(os.path.join('ring_mod_results', 'input_signal.wav'), input_signal=initial_signal)
+    #array_to_wav(os.path.join('ring_mod_results', 'input_signal.wav'), input_signal=initial_signal)
     #resulting_wave = np.array(result[('emitter',)])
     print(len(result), type(result))
     for r in result:
@@ -647,7 +647,7 @@ def test_phaser():
 
     instance = phaser_create_instance()
     result = run_instance(instance, num_beats=8)[('emitter',)]
-    array_to_wav(os.path.join('phaser_results', 'input_signal.wav'), input_signal=initial_signal)
+    #array_to_wav(os.path.join('phaser_results', 'input_signal.wav'), input_signal=initial_signal)
     #resulting_wave = np.array(result[('emitter',)])
     print(len(result), type(result))
     for r in result:
@@ -824,10 +824,10 @@ def test_pedalboard_process():
     }
 
     result = run_instance(instance, num_beats=8)[('emitter',)]
-    array_to_wav('input_signal.wav', input_signal=initial_signal)
+    #array_to_wav('input_signal.wav', input_signal=initial_signal)
     #resulting_wave = np.array(result[('emitter',)])
     final_result = result[-1]['output_signal']
-    plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')
+    #plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')
 
 
 def test_pedalboard():
