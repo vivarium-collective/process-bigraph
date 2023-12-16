@@ -211,16 +211,14 @@ def test_gillespie_composite():
 
             'emitter': {
                 '_type': 'step',
-                'address': 'local:database-emitter',
+                'address': 'local:ram-emitter',
                 'config': {
                     'ports': {
                         'inputs': {
-                            'table': 'string',
                             'mRNA': 'tree[float]',
                             'interval': 'float'}}},
                 'wires': {
                     'inputs': {
-                        'table': ['table_store'],
                         'mRNA': ['mRNA'],
                         'interval': ['event', 'interval']}}}}}
 
