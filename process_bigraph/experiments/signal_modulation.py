@@ -4,11 +4,10 @@ from typing import *
 from abc import ABC, abstractmethod
 import uuid
 import datetime
-import matplotlib.pyplot as plt
-from scipy.io.wavfile import write
+#import matplotlib.pyplot as plt
+#from scipy.io.wavfile import write
 from process_bigraph.composite import Process, Composite
 from process_bigraph.registry import process_registry
-# import matplotlib.pyplot as plt
 
 
 class SignalModulationProcess(Process):
