@@ -3,24 +3,8 @@ Demo process for Copasi/Basico
 """
 
 
-from process_bigraph import Process, Composite, process_registry, pf
+from process_bigraph.composite import Process
 
-try:
-    from basico import (
-        load_model,
-        get_species,
-        get_parameters,
-        get_reactions,
-        set_species,
-        run_time_course,
-        get_compartments,
-        model_info
-    )
-except:
-    raise ImportError('''
-        You must install core-processes with the [copasi] optional requirement. 
-        See the README for more information.
-    ''')
 
 class CopasiProcess(Process):
     config_schema = {'model_file': 'string'}
@@ -28,6 +12,22 @@ class CopasiProcess(Process):
     def __init__(self, config=None):
         super().__init__(config)
 
+        try:
+            from basico import (
+                load_model,
+                get_species,
+                get_parameters,
+                get_reactions,
+                set_species,
+                run_time_course,
+                get_compartments,
+                model_info
+            )
+        except:
+            raise ImportError('''
+                You must install core-processes with the [copasi] optional requirement. 
+                See the README for more information.
+            ''')
 
         # Load the single cell model into Basico
         self.copasi_model_object = load_model(self.config['model_file'])

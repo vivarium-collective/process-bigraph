@@ -52,17 +52,7 @@
 import os
 from typing import *
 from uuid import uuid4
-from process_bigraph import Process, Composite, process_registry, pf, pp
-
-
-try:
-    import smoldyn as sm
-    from smoldyn._smoldyn import MolecState
-except:
-    raise ImportError('''
-        You must install core-processes with the [smoldyn] optional requirement. 
-        See the README for more information.
-    ''')
+from process_bigraph.composite import Process
 
 
 class SmoldynProcess(Process):
@@ -113,6 +103,15 @@ class SmoldynProcess(Process):
             # TODO: It would be nice to have classes associated with this.
         """
         super().__init__(config)
+
+        try:
+            import smoldyn as sm
+            from smoldyn._smoldyn import MolecState
+        except:
+            raise ImportError('''
+                You must install core-processes with the [smoldyn] optional requirement. 
+                See the README for more information.
+            ''')
 
         # specify the model fp for clarity
         self.model_filepath = self.config.get('model_filepath')

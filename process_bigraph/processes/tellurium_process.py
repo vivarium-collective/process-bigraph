@@ -3,14 +3,8 @@ Tellurium Process
 """
 
 
-from process_bigraph import Process, Step, Composite, process_registry, types
 import numpy as np
-
-
-try:
-    import tellurium as te
-except:
-    raise ImportError('You must install core-processes with the optional [tellurium] requirement.')
+from process_bigraph.composite import Process, Step
 
 
 class TelluriumStep(Step):
@@ -21,6 +15,11 @@ class TelluriumStep(Step):
 
     def __init__(self, config=None):
         super().__init__(config)
+
+        try:
+            import tellurium as te
+        except:
+            raise ImportError('You must install core-processes with the optional [tellurium] requirement.')
 
         # initialize a tellurium(roadrunner) simulation object. Load the model in using either sbml(default) or antimony
         if self.config.get('antimony_string') and not self.config.get('sbml_model_path'):
