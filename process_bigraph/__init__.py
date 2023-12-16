@@ -1,8 +1,8 @@
 import pprint
-from process_bigraph.processes.cobra_process import CobraProcess
-from process_bigraph.processes.copasi_process import CopasiProcess
-from process_bigraph.processes.smoldyn_process import SmoldynProcess
-from process_bigraph.processes.tellurium_process import TelluriumProcess, TelluriumStep
+from core_processes.cobra_process import CobraProcess
+from core_processes.copasi_process import CopasiProcess
+from core_processes.smoldyn_process import SmoldynProcess
+from core_processes.tellurium_process import TelluriumProcess, TelluriumStep
 from process_bigraph.protocols import local_lookup
 from process_bigraph.registry import protocol_registry, process_registry
 from process_bigraph.emitter import ConsoleEmitter, RAMEmitter, DatabaseEmitter
@@ -42,10 +42,3 @@ protocol_registry.register('local', local_lookup)
 process_registry.register('console-emitter', ConsoleEmitter)
 process_registry.register('ram-emitter', RAMEmitter)
 process_registry.register('database-emitter', DatabaseEmitter)
-
-# register processes
-process_registry.register('cobra', CobraProcess)
-process_registry.register('copasi', CopasiProcess)
-process_registry.register('smoldyn_process', SmoldynProcess)
-process_registry.register('tellurium_step', TelluriumStep)
-process_registry.register('tellurium_process', TelluriumProcess)

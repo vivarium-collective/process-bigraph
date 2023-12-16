@@ -47,7 +47,8 @@ setup(
         "numpy",
         "pytest>=6.2.5",
         "pymongo",
-        "orjson"
+        "orjson",
+        "core-processes"
     ],
     extras_require={
         "smoldyn": ["smoldyn", "simulariumio"],
