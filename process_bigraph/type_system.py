@@ -1,12 +1,5 @@
-"""
-=============
-Process Types
-=============
-"""
-
 from bigraph_schema import TypeSystem, get_path, establish_path, set_path
 from process_bigraph.registry import protocol_registry
-
 
 
 process_interval_schema = {
@@ -153,14 +146,11 @@ class ProcessTypes(TypeSystem):
         super().__init__()
         register_process_types(self)
 
-
     # def serialize(self, schema, state):
     #     return ''
 
-
     # def deserialize(self, schema, encoded):
     #     return {}
-
 
     def infer_wires(self, ports, state, wires, top_schema=None, path=None):
         top_schema = top_schema or {}
@@ -168,7 +158,8 @@ class ProcessTypes(TypeSystem):
 
         for port_key, port_wires in wires.items():
             if isinstance(ports, str):
-                import ipdb; ipdb.set_trace()
+                import ipdb;
+                ipdb.set_trace()
             port_schema = ports.get(port_key, {})
             # port_wires = wires.get(port_key, ())
             if isinstance(port_wires, dict):
@@ -200,7 +191,6 @@ class ProcessTypes(TypeSystem):
                     destination[destination_key] = port_schema
 
         return top_schema
-
 
     def infer_schema(self, schema, state, top_state=None, path=None):
         '''
@@ -278,7 +268,8 @@ class ProcessTypes(TypeSystem):
             else:
                 for key, value in state.items():
                     inner_path = path + (key,)
-                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None or (isinstance(value, dict) and '_type' in value):
+                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None or (
+                            isinstance(value, dict) and '_type' in value):
                         schema, top_state = self.infer_schema(
                             schema,
                             value,
@@ -306,14 +297,14 @@ class ProcessTypes(TypeSystem):
                 destination[path_key] = type_schema
 
         return schema, top_state
-        
 
     def infer_edge(self, schema, wires):
         schema = schema or {}
         edge = {}
 
         if isinstance(wires, str):
-            import ipdb; ipdb.set_trace()
+            import ipdb;
+            ipdb.set_trace()
 
         for port_key, wire in wires.items():
             if isinstance(wire, dict):
@@ -326,7 +317,6 @@ class ProcessTypes(TypeSystem):
 
         return edge
 
-
     def initialize_edge_state(self, schema, path, edge):
         initial_state = edge['instance'].initial_state()
         ports = get_path(schema, path + ('_ports',))
@@ -336,7 +326,6 @@ class ProcessTypes(TypeSystem):
             edge['wires'],
             path[:-1],
             initial_state)
-        
 
     def hydrate_state(self, schema, state):
         if isinstance(state, str) or '_deserialize' in schema:
@@ -362,16 +351,13 @@ class ProcessTypes(TypeSystem):
 
         return result
 
-
     def hydrate(self, schema, state):
         # TODO: support partial hydration (!)
         hydrated = self.hydrate_state(schema, state)
         return self.fill(schema, hydrated)
 
-
     def dehydrate(self, schema):
         return {}
-
 
     def lookup_address(self, address):
         protocol, config = address.split(':')

@@ -224,7 +224,6 @@ def find_instances(state, instance_type='process_bigraph.composite.Process'):
     for key, inner in state.items():
         if isinstance(inner, dict) and isinstance(inner.get('instance'), process_class):
             found[key] = inner
-
     return found
 
 
@@ -383,20 +382,24 @@ def find_downstream(steps, nodes, upstream):
         down = set([])
         for step_path in downstream:
             if step_path not in visited:
-                for output in steps[step_path]['output_paths']:
+                step_outputs = steps[step_path]['output_paths']
+                if step_outputs is None:
+                    step_outputs = []  # Ensure step_outputs is always an iterable
+                for output in step_outputs:
                     for dependent in nodes[output]['after']:
                         down.add(dependent)
                 visited.add(step_path)
-        downstream ^= down
+        downstream |= down
 
     return downstream
 
 
 def determine_steps(steps, remaining, fulfilled):
     to_run = []
-
     for step_path in remaining:
         step_inputs = steps[step_path]['input_paths']
+        if step_inputs is None:
+            step_inputs = []
         all_fulfilled = True
         for input in step_inputs:
             if len(fulfilled[input]) > 0:
@@ -407,6 +410,8 @@ def determine_steps(steps, remaining, fulfilled):
     for step_path in to_run:
         remaining.remove(step_path)
         step_outputs = steps[step_path]['output_paths']
+        if step_outputs is None:
+            step_outputs = []
         for output in step_outputs:
             fulfilled[output].remove(step_path)
 
@@ -459,7 +464,7 @@ class Composite(Process):
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
 
-        # find all processes, steps, and emitters in the state
+        # find all processes, steps, and emitter in the state
         self.process_paths = find_instance_paths(
             state,
             'process_bigraph.composite.Process')
@@ -833,7 +838,7 @@ class Composite(Process):
 
     def gather_results(self, queries=None):
         '''
-        a map of paths to emitters --> queries for the emitter at that path
+        a map of paths to emitter --> queries for the emitter at that path
         '''
 
         if queries is None:
