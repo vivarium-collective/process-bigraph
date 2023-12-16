@@ -49,11 +49,5 @@ setup(
         "pymongo",
         "orjson",
         "core-processes"
-    ],
-    extras_require={
-        "smoldyn": ["smoldyn", "simulariumio"],
-        "tellurium": ["tellurium"],
-        "copasi": ["copasi-basico"],
-        "cobra": ["cobra"]
-    }
+    ]
 )
