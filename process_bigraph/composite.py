@@ -69,40 +69,17 @@ class Step(Edge):
         return {}
 
 
-    # def project_state(self, ports, wires, path, state):
-    #     inputs = {}
-    #     if 'inputs' in ports and 'inputs' in wires:
-    #         inputs = self.types.project(
-    #             ports['inputs'],
-    #             wires['inputs'],
-    #             path,
-    #             state)
-
-    #     outputs = {}
-    #     if 'outputs' in ports and 'outputs' in wires:
-    #         outputs = self.types.project(
-    #             ports['outputs'],
-    #             wires['outputs'],
-    #             path,
-    #             state)
-
-    #     result = deep_merge(inputs, outputs)
-        
-    #     return result
-
-
     def invoke(self, state, _=None):
         update = self.update(state)
         sync = SyncUpdate(update)
         return sync
 
 
-    @abc.abstractmethod
     def update(self, state):
         return {}
 
 
-class Process(Step):
+class Process(Edge):
     """Process parent class.
 
       All :term:`process` classes must inherit from this class. Each
@@ -131,20 +108,20 @@ class Process(Step):
             config)
 
 
-    @abc.abstractmethod
     def schema(self):
         return {}
 
 
-    # def project_state(self, ports, wires, path, state):
-    #     return self.types.project(
-    #         ports,
-    #         wires,
-    #         path,
-    #         state)
+    def initial_state(self):
+        return {}
 
 
-    @abc.abstractmethod
+    def invoke(self, state, interval):
+        update = self.update(state, interval)
+        sync = SyncUpdate(update)
+        return sync
+
+
     def update(self, state, interval):
         return {}
 
@@ -483,11 +460,13 @@ class Composite(Process):
             self.composition,
             state)
 
-        self.process_schema = types.infer_edge(
-            self.composition,
-            self.bridge)
+        for port in ['inputs', 'outputs']:
+            self.process_schema = types.infer_edge(
+                self.composition,
+                self.bridge[port])
 
-        self.global_time_precision = self.config['global_time_precision']
+        self.global_time_precision = self.config[
+            'global_time_precision']
 
         self.step_triggers = {}
 
@@ -541,8 +520,8 @@ class Composite(Process):
             process,
             states,
             interval,
-            ports_key=None,
-    ):
+            ports_key='outputs'):
+
         """Start generating a process's update.
 
         This function is similar to :py:meth:`_invoke_process` except in
@@ -586,6 +565,7 @@ class Composite(Process):
     def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
             self.front[path] = empty_front(self.state['global_time'])
+
         process_time = self.front[path]['time']
         if process_time <= self.state['global_time']:
             if self.front[path].get('future'):
@@ -663,10 +643,9 @@ class Composite(Process):
 
                 bridge_update = types.view(
                     self.process_schema,
-                    self.bridge,
+                    self.bridge['outputs'],
                     (),
-                    update,
-                    ports_key='outputs')
+                    update)
 
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
@@ -837,8 +816,7 @@ class Composite(Process):
             self.schema(),
             self.bridge['inputs'],
             [],
-            state,
-            ports_key='inputs')
+            state)
 
         self.state = types.set(
             self.composition,

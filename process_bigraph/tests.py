@@ -54,8 +54,6 @@ def test_process():
     state = types.fill(schema['outputs'])
     update = process.update({'level': 5.5}, 1.0)
 
-    import ipdb; ipdb.set_trace()
-
     new_state = types.apply(schema['outputs'], state, update)
 
     assert new_state['level'] == 1.1
@@ -92,6 +90,8 @@ def test_composite():
             'value': 11.11}})
 
     initial_state = {'exchange': 3.33}
+
+    import ipdb; ipdb.set_trace()
 
     updates = composite.update(initial_state, 10.0)
 
