@@ -91,8 +91,6 @@ def test_composite():
 
     initial_state = {'exchange': 3.33}
 
-    import ipdb; ipdb.set_trace()
-
     updates = composite.update(initial_state, 10.0)
 
     final_exchange = sum([
@@ -111,7 +109,8 @@ def test_infer():
                 '_type': 'process',
                 'address': 'local:!process_bigraph.tests.IncreaseProcess',
                 'config': {'rate': '0.3'},
-                'wires': {'level': ['value']}},
+                'inputs': {'level': ['value']},
+                'outputs': {'level': ['value']}},
             'value': '11.11'}})
 
     assert composite.composition['value']['_type'] == 'float'

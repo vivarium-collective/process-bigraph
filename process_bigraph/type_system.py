@@ -195,28 +195,24 @@ class ProcessTypes(TypeSystem):
                 if state_type == 'process' or state_type == 'step':
                     port_schema = hydrated_state['instance'].schema()
 
-                    schema = set_path(
-                        schema,
-                        path + ('_ports',),
-                        port_schema)
+                    for port_key in ['inputs', 'outputs']:
+                        subschema = port_schema.get(
+                            port_key, {})
 
-                    inputs = hydrated_state.get('inputs', {})
-                    input_port_schema = port_schema.get('inputs', {})
-                    schema = self.infer_wires(
-                        input_port_schema,
-                        hydrated_state,
-                        inputs,
-                        top_schema=schema,
-                        path=path[:-1])
+                        schema = set_path(
+                            schema,
+                            path + (f'_{port_key}',),
+                            subschema)
 
-                    outputs = hydrated_state.get('outputs', {})
-                    output_port_schema = port_schema.get('outputs', {})
-                    schema = self.infer_wires(
-                        output_port_schema,
-                        hydrated_state,
-                        outputs,
-                        top_schema=schema,
-                        path=path[:-1])
+                        ports = hydrated_state.get(
+                            port_key, {})
+
+                        schema = self.infer_wires(
+                            subschema,
+                            hydrated_state,
+                            ports,
+                            top_schema=schema,
+                            path=path[:-1])
 
             elif '_type' in schema:
                 hydrated_state = self.deserialize(schema, state)
