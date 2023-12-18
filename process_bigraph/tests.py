@@ -155,24 +155,21 @@ def test_step_initialization():
                 'address': 'local:!process_bigraph.tests.OperatorStep',
                 'config': {
                     'operator': '+'},
-                # TODO: avoid inputs/outputs key in wires?
-                'wires': {
-                    'inputs': {
-                        'a': ['A'],
-                        'b': ['B']},
-                    'outputs': {
-                        'c': ['C']}}},
+                'inputs': {
+                    'a': ['A'],
+                    'b': ['B']},
+                'outputs': {
+                    'c': ['C']}},
             'step2': {
                 '_type': 'step',
                 'address': 'local:!process_bigraph.tests.OperatorStep',
                 'config': {
                     'operator': '*'},
-                'wires': {
-                    'inputs': {
-                        'a': ['B'],
-                        'b': ['C']},
-                    'outputs': {
-                        'c': ['D']}}}}})
+                'inputs': {
+                    'a': ['B'],
+                    'b': ['C']},
+                'outputs': {
+                    'c': ['D']}}}})
 
 
     assert composite.state['D'] == (13 + 21) * 21
@@ -189,56 +186,51 @@ def test_dependencies():
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '+'},
-            'wires': {
-                'inputs': {
-                    'a': ['a'],
-                    'b': ['b']},
-                'outputs': {
-                    'c': ['e']}}},
+            'inputs': {
+                'a': ['a'],
+                'b': ['b']},
+            'outputs': {
+                'c': ['e']}},
         '2.1': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '-'},
-            'wires': {
-                'inputs': {
-                    'a': ['c'],
-                    'b': ['e']},
-                'outputs': {
-                    'c': ['f']}}},
+            'inputs': {
+                'a': ['c'],
+                'b': ['e']},
+            'outputs': {
+                'c': ['f']}},
         '2.2': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '-'},
-            'wires': {
-                'inputs': {
-                    'a': ['d'],
-                    'b': ['e']},
-                'outputs': {
-                    'c': ['g']}}},
+            'inputs': {
+                'a': ['d'],
+                'b': ['e']},
+            'outputs': {
+                'c': ['g']}},
         '3': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '*'},
-            'wires': {
-                'inputs': {
-                    'a': ['f'],
-                    'b': ['g']},
-                'outputs': {
-                    'c': ['h']}}},
+            'inputs': {
+                'a': ['f'],
+                'b': ['g']},
+            'outputs': {
+                'c': ['h']}},
         '4': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '+'},
-            'wires': {
-                'inputs': {
-                    'a': ['e'],
-                    'b': ['h']},
-                'outputs': {
-                    'c': ['i']}}}}
+            'inputs': {
+                'a': ['e'],
+                'b': ['h']},
+            'outputs': {
+                'c': ['i']}}}
 
     composite = Composite({'state': operation})
 
@@ -351,10 +343,16 @@ def test_reaction():
                                 'address': 'local:!process_bigraph.tests.SimpleCompartment',
                                 'config': {'id': '0'},
                                 'inner': {},
-                                'wires': {
+                                'inputs': {
+                                    'outer': ['..', '..'],
+                                    'inner': ['inner']},
+                                'outputs': {
                                     'outer': ['..', '..'],
                                     'inner': ['inner']}}},
-                        'wires': {
+                        'inputs': {
+                            'outer': ['..', '..'],
+                            'inner': ['inner']},
+                        'outputs': {
                             'outer': ['..', '..'],
                             'inner': ['inner']}}}}}}
 
