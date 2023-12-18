@@ -161,6 +161,7 @@ class Defer:
         self.f = f
         self.args = args
 
+
     def get(self):
         """Perform the deferred computation.
 
@@ -266,7 +267,6 @@ def find_leaves(d, path=None):
 def build_step_network(steps):
     ancestors = {
         step_key: {
-            # 'ancestors': [],
             'input_paths': None,
             'output_paths': None}
         for step_key in steps}
@@ -279,9 +279,7 @@ def build_step_network(steps):
                 continue
 
             schema = step['instance'].schema()
-            # wires = step['wires']
             other_schema = other_step['instance'].schema()
-            # other_wires = other_step['wires']
 
             if ancestors[step_key]['input_paths'] is None:
                 ancestors[step_key]['input_paths'] = find_leaves(
@@ -387,7 +385,6 @@ class Composite(Process):
         'global_time_precision': 'maybe[float]'}
 
 
-    # TODO: if processes are serialized, deserialize them first
     def __init__(self, config=None, local_types=None):
         super().__init__(config, local_types)
 
@@ -414,6 +411,7 @@ class Composite(Process):
         composition, state = types.infer_schema(
             initial_composition,
             initial_state)
+
         # TODO: add flag to types.access(copy=True)
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
@@ -581,7 +579,6 @@ class Composite(Process):
                     path)
 
                 process_interval = process['interval']
-                # process_timestep = process['instance'].calculate_timestep(state)
 
             if force_complete:
                 # force the process to complete at end_time
