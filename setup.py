@@ -2,7 +2,7 @@ import re
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.7'
+VERSION = '0.0.8'
 
 
 with open("README.md", "r") as readme:
@@ -43,9 +43,12 @@ setup(
     ],
     python_requires=">=3.6",
     install_requires=[
-        # List your package dependencies here
         "bigraph-schema",
         "numpy",
         "pytest>=6.2.5",
-    ],
+        "pymongo",
+        "orjson",
+        "core-processes",
+        "matplotlib"
+    ]
 )

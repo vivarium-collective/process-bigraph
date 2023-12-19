@@ -8,7 +8,6 @@ from bigraph_schema import Edge, TypeSystem, get_path, establish_path, set_path
 from process_bigraph.registry import protocol_registry
 
 
-
 process_interval_schema = {
     '_type': 'float',
     '_apply': 'set',
@@ -223,7 +222,8 @@ class ProcessTypes(TypeSystem):
             else:
                 for key, value in state.items():
                     inner_path = path + (key,)
-                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None or (isinstance(value, dict) and '_type' in value):
+                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None or (
+                            isinstance(value, dict) and '_type' in value):
                         schema, top_state = self.infer_schema(
                             schema,
                             value,
@@ -251,14 +251,14 @@ class ProcessTypes(TypeSystem):
                 destination[path_key] = type_schema
 
         return schema, top_state
-        
 
     def infer_edge(self, schema, wires):
         schema = schema or {}
         edge = {}
 
         if isinstance(wires, str):
-            import ipdb; ipdb.set_trace()
+            import ipdb;
+            ipdb.set_trace()
 
         for port_key, wire in wires.items():
             if isinstance(wire, dict):
@@ -271,7 +271,6 @@ class ProcessTypes(TypeSystem):
 
         return edge
 
-
     def initialize_edge_state(self, schema, path, edge):
         initial_state = edge['instance'].initial_state()
         ports = get_path(schema, path + ('_ports',))
@@ -281,7 +280,6 @@ class ProcessTypes(TypeSystem):
             edge,
             path[:-1],
             initial_state)
-        
 
     def hydrate_state(self, schema, state):
         if isinstance(state, str) or '_deserialize' in schema:
@@ -307,16 +305,13 @@ class ProcessTypes(TypeSystem):
 
         return result
 
-
     def hydrate(self, schema, state):
         # TODO: support partial hydration (!)
         hydrated = self.hydrate_state(schema, state)
         return self.fill(schema, hydrated)
 
-
     def dehydrate(self, schema):
         return {}
-
 
     def lookup_address(self, address):
         protocol, config = address.split(':')
