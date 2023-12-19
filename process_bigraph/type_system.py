@@ -125,7 +125,7 @@ process_types = {
         'config': 'tree[any]'},
 
     'process': {
-        '_super': ['step'],
+        '_super': ['edge'],
         '_apply': 'apply_process',
         '_serialize': 'serialize_process',
         '_deserialize': 'deserialize_process',
