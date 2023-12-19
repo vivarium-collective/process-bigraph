@@ -10,6 +10,7 @@ import math
 import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
+from bigraph_schema.type_system import Edge
 from process_bigraph.type_system import types
 from process_bigraph.protocols import local_lookup_module
 
@@ -42,18 +43,12 @@ class SyncUpdate():
         return self.update
 
 
-# TODO: create base class for Step and Process
-#   maybe it comes from bigraph-schema?
-class Edge:
-    def __init__(self):
-        pass
-
-
 class Step(Edge):
     """Step base class."""
     # TODO: support trigger every time
     #   as well as dependency trigger
     config_schema = {}
+
 
     def __init__(self, config=None, local_types=None):
         self.types = local_types or types
@@ -65,37 +60,13 @@ class Step(Edge):
             self.config_schema,
             config)
 
+
     def schema(self):
         return {}
 
+
     def initial_state(self):
         return {}
-        # initial = {}
-        # return types.fill(
-        #     self.schema(),
-        #     initial)
-
-
-    def project_state(self, ports, wires, path, state):
-        inputs = {}
-        if 'inputs' in ports and 'inputs' in wires:
-            inputs = self.types.project(
-                ports['inputs'],
-                wires['inputs'],
-                path,
-                state)
-
-        outputs = {}
-        if 'outputs' in ports and 'outputs' in wires:
-            outputs = self.types.project(
-                ports['outputs'],
-                wires['outputs'],
-                path,
-                state)
-
-        result = deep_merge(inputs, outputs)
-        
-        return result
 
 
     def invoke(self, state, _=None):
@@ -103,7 +74,7 @@ class Step(Edge):
         sync = SyncUpdate(update)
         return sync
 
-    @abc.abstractmethod
+
     def update(self, state):
         return {}
 
@@ -137,25 +108,12 @@ class Process(Edge):
             config)
 
 
-    @abc.abstractmethod
     def schema(self):
         return {}
 
 
     def initial_state(self):
         return {}
-        # initial = {}
-        # return types.fill(
-        #     self.schema(),
-        #     initial)
-
-
-    def project_state(self, ports, wires, path, state):
-        return self.types.project(
-            ports,
-            wires,
-            path,
-            state)
 
 
     def invoke(self, state, interval):
@@ -164,7 +122,6 @@ class Process(Edge):
         return sync
 
 
-    @abc.abstractmethod
     def update(self, state, interval):
         return {}
 
@@ -204,6 +161,7 @@ class Defer:
         self.f = f
         self.args = args
 
+
     def get(self):
         """Perform the deferred computation.
 
@@ -213,8 +171,6 @@ class Defer:
         return self.f(
             self.defer.get(),
             self.args)
-
-# TODO maybe keep wires as tuples/paths to distinguish them from schemas?
 
 
 def find_instances(state, instance_type='process_bigraph.composite.Process'):
@@ -244,7 +200,7 @@ def find_step_triggers(path, step):
     prefix = tuple(path[:-1])
     triggers = {}
     wire_paths = find_leaves(
-        step['wires']['inputs'])
+        step['inputs'])
 
     for wire in wire_paths:
         trigger_path = tuple(prefix) + tuple(wire)
@@ -310,7 +266,6 @@ def find_leaves(d, path=None):
 def build_step_network(steps):
     ancestors = {
         step_key: {
-            # 'ancestors': [],
             'input_paths': None,
             'output_paths': None}
         for step_key in steps}
@@ -323,18 +278,16 @@ def build_step_network(steps):
                 continue
 
             schema = step['instance'].schema()
-            wires = step['wires']
             other_schema = other_step['instance'].schema()
-            other_wires = other_step['wires']
 
             if ancestors[step_key]['input_paths'] is None:
                 ancestors[step_key]['input_paths'] = find_leaves(
-                    wires['inputs'])
+                    step['inputs'])
             input_paths = ancestors[step_key]['input_paths']
 
             if ancestors[step_key]['output_paths'] is None:
                 ancestors[step_key]['output_paths'] = find_leaves(
-                    wires.get('outputs', {}))
+                    step.get('outputs', {}))
             output_paths = ancestors[step_key]['output_paths']
 
             for input in input_paths:
@@ -428,12 +381,15 @@ class Composite(Process):
         # TODO: add schema type
         'composition': 'tree[any]',
         'state': 'tree[any]',
-        'schema': 'tree[any]',
-        'bridge': 'wires',
+        'schema': {
+            'inputs': 'tree[any]',
+            'outputs': 'tree[any]'},
+        'bridge': {
+            'inputs': 'wires',
+            'outputs': 'wires'},
         'global_time_precision': 'maybe[float]'}
 
 
-    # TODO: if processes are serialized, deserialize them first
     def __init__(self, config=None, local_types=None):
         super().__init__(config, local_types)
 
@@ -460,6 +416,7 @@ class Composite(Process):
         composition, state = types.infer_schema(
             initial_composition,
             initial_state)
+
         # TODO: add flag to types.access(copy=True)
         composition_schema = types.access(composition)
         self.composition = copy.deepcopy(composition_schema)
@@ -506,11 +463,13 @@ class Composite(Process):
             self.composition,
             state)
 
-        self.process_schema = types.infer_edge(
-            self.composition,
-            self.bridge)
+        for port in ['inputs', 'outputs']:
+            self.process_schema = types.infer_edge(
+                self.composition,
+                self.bridge[port])
 
-        self.global_time_precision = self.config['global_time_precision']
+        self.global_time_precision = self.config[
+            'global_time_precision']
 
         self.step_triggers = {}
 
@@ -564,8 +523,8 @@ class Composite(Process):
             process,
             states,
             interval,
-            ports_key=None,
-    ):
+            ports_key='outputs'):
+
         """Start generating a process's update.
 
         This function is similar to :py:meth:`_invoke_process` except in
@@ -609,6 +568,7 @@ class Composite(Process):
     def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
             self.front[path] = empty_front(self.state['global_time'])
+
         process_time = self.front[path]['time']
         if process_time <= self.state['global_time']:
             if self.front[path].get('future'):
@@ -624,7 +584,6 @@ class Composite(Process):
                     path)
 
                 process_interval = process['interval']
-                # process_timestep = process['instance'].calculate_timestep(state)
 
             if force_complete:
                 # force the process to complete at end_time
@@ -686,7 +645,7 @@ class Composite(Process):
 
                 bridge_update = types.view(
                     self.process_schema,
-                    self.bridge,
+                    self.bridge['outputs'],
                     (),
                     update)
 
@@ -857,7 +816,7 @@ class Composite(Process):
 
         projection = types.project(
             self.schema(),
-            self.bridge,
+            self.bridge['inputs'],
             [],
             state)
 

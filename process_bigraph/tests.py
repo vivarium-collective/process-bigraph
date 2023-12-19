@@ -14,12 +14,18 @@ class IncreaseProcess(Process):
             '_type': 'float',
             '_default': '0.1'}}
 
+
     def __init__(self, config=None):
         super().__init__(config)
 
+
     def schema(self):
         return {
-            'level': 'float'}
+            'inputs': {
+                'level': 'float'},
+            'outputs': {
+                'level': 'float'}}
+
 
     def update(self, state, interval):
         return {
@@ -43,9 +49,11 @@ def test_merge_collections():
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
-    state = types.fill(schema)
+    state = types.fill(schema['inputs'])
+    state = types.fill(schema['outputs'])
     update = process.update({'level': 5.5}, 1.0)
-    new_state = types.apply(schema, state, update)
+
+    new_state = types.apply(schema['outputs'], state, update)
 
     assert new_state['level'] == 1.1
 
@@ -59,18 +67,25 @@ def test_composite():
 
     composite = Composite({
         'composition': {
-            'increase': 'process[level:float]',
+            'increase': 'process[level:float,level:float]',
             'value': 'float'},
         'schema': {
-            'exchange': 'float'},
+            'inputs': {
+                'exchange': 'float'},
+            'outputs': {
+                'exchange': 'float'}},
         'bridge': {
-            'exchange': ['value']},
+            'inputs': {
+                'exchange': ['value']},
+            'outputs': {
+                'exchange': ['value']}},
         'state': {
             'increase': {
                 'address': 'local:!process_bigraph.tests.IncreaseProcess',
                 'config': {'rate': 0.3},
                 'interval': 1.0,
-                'wires': {'level': ['value']}},
+                'inputs': {'level': ['value']},
+                'outputs': {'level': ['value']}},
             'value': 11.11}})
 
     initial_state = {'exchange': 3.33}
@@ -93,7 +108,8 @@ def test_infer():
                 '_type': 'process',
                 'address': 'local:!process_bigraph.tests.IncreaseProcess',
                 'config': {'rate': '0.3'},
-                'wires': {'level': ['value']}},
+                'inputs': {'level': ['value']},
+                'outputs': {'level': ['value']}},
             'value': '11.11'}})
 
     assert composite.composition['value']['_type'] == 'float'
@@ -138,24 +154,21 @@ def test_step_initialization():
                 'address': 'local:!process_bigraph.tests.OperatorStep',
                 'config': {
                     'operator': '+'},
-                # TODO: avoid inputs/outputs key in wires?
-                'wires': {
-                    'inputs': {
-                        'a': ['A'],
-                        'b': ['B']},
-                    'outputs': {
-                        'c': ['C']}}},
+                'inputs': {
+                    'a': ['A'],
+                    'b': ['B']},
+                'outputs': {
+                    'c': ['C']}},
             'step2': {
                 '_type': 'step',
                 'address': 'local:!process_bigraph.tests.OperatorStep',
                 'config': {
                     'operator': '*'},
-                'wires': {
-                    'inputs': {
-                        'a': ['B'],
-                        'b': ['C']},
-                    'outputs': {
-                        'c': ['D']}}}}})
+                'inputs': {
+                    'a': ['B'],
+                    'b': ['C']},
+                'outputs': {
+                    'c': ['D']}}}})
 
 
     assert composite.state['D'] == (13 + 21) * 21
@@ -172,56 +185,51 @@ def test_dependencies():
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '+'},
-            'wires': {
-                'inputs': {
-                    'a': ['a'],
-                    'b': ['b']},
-                'outputs': {
-                    'c': ['e']}}},
+            'inputs': {
+                'a': ['a'],
+                'b': ['b']},
+            'outputs': {
+                'c': ['e']}},
         '2.1': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '-'},
-            'wires': {
-                'inputs': {
-                    'a': ['c'],
-                    'b': ['e']},
-                'outputs': {
-                    'c': ['f']}}},
+            'inputs': {
+                'a': ['c'],
+                'b': ['e']},
+            'outputs': {
+                'c': ['f']}},
         '2.2': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '-'},
-            'wires': {
-                'inputs': {
-                    'a': ['d'],
-                    'b': ['e']},
-                'outputs': {
-                    'c': ['g']}}},
+            'inputs': {
+                'a': ['d'],
+                'b': ['e']},
+            'outputs': {
+                'c': ['g']}},
         '3': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '*'},
-            'wires': {
-                'inputs': {
-                    'a': ['f'],
-                    'b': ['g']},
-                'outputs': {
-                    'c': ['h']}}},
+            'inputs': {
+                'a': ['f'],
+                'b': ['g']},
+            'outputs': {
+                'c': ['h']}},
         '4': {
             '_type': 'step',
             'address': 'local:!process_bigraph.tests.OperatorStep',
             'config': {
                 'operator': '+'},
-            'wires': {
-                'inputs': {
-                    'a': ['e'],
-                    'b': ['h']},
-                'outputs': {
-                    'c': ['i']}}}}
+            'inputs': {
+                'a': ['e'],
+                'b': ['h']},
+            'outputs': {
+                'c': ['i']}}}
 
     composite = Composite({'state': operation})
 
@@ -334,10 +342,16 @@ def test_reaction():
                                 'address': 'local:!process_bigraph.tests.SimpleCompartment',
                                 'config': {'id': '0'},
                                 'inner': {},
-                                'wires': {
+                                'inputs': {
+                                    'outer': ['..', '..'],
+                                    'inner': ['inner']},
+                                'outputs': {
                                     'outer': ['..', '..'],
                                     'inner': ['inner']}}},
-                        'wires': {
+                        'inputs': {
+                            'outer': ['..', '..'],
+                            'inner': ['inner']},
+                        'outputs': {
                             'outer': ['..', '..'],
                             'inner': ['inner']}}}}}}
 
