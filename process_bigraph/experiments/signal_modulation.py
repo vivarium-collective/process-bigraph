@@ -458,403 +458,405 @@ def run_instance(instance, num_beats=4):
     return workflow.gather_results()
 
 
-def test_tremolo():
-    stop = 32
-    frequencies = [262, 294, 330, 349]
-    starting_signal = start_sine_wave(stop)
+# def test_tremolo():
+#     stop = 32
+#     frequencies = [262, 294, 330, 349]
+#     starting_signal = start_sine_wave(stop)
 
-    def tremolo_create_instance(starting_signal):
-        return {
-            'tremolo': {
-                '_type': 'process',
-                'address': 'local:tremolo',
-                'config': {
-                    'depth': 0.9,
-                    'rate': 9,
-                    'duration': stop,
-                    'input_signal': starting_signal
-                },
-                'wires': {  # this should return that which is in the schema
-                    'output_signal': ['output_signal_store'],
-                }
-            },
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'config': {
-                    'ports': {
-                        'inputs': {
-                            'output_signal': 'list[float]'
-                        },
-                    }
-                },
-                'wires': {
-                    'inputs': {
-                        'output_signal': ['output_signal_store'],
-                    }
-                }
-            }
-        }
+#     def tremolo_create_instance(starting_signal):
+#         return {
+#             'tremolo': {
+#                 '_type': 'process',
+#                 'address': 'local:tremolo',
+#                 'config': {
+#                     'depth': 0.9,
+#                     'rate': 9,
+#                     'duration': stop,
+#                     'input_signal': starting_signal
+#                 },
+#                 'wires': {  # this should return that which is in the schema
+#                     'output_signal': ['output_signal_store'],
+#                 }
+#             },
+#             'emitter': {
+#                 '_type': 'step',
+#                 'address': 'local:ram-emitter',
+#                 'config': {
+#                     'ports': {
+#                         'inputs': {
+#                             'output_signal': 'list[float]'
+#                         },
+#                     }
+#                 },
+#                 'wires': {
+#                     'inputs': {
+#                         'output_signal': ['output_signal_store'],
+#                     }
+#                 }
+#             }
+#         }
 
-    def run_instance(instance, num_beats=stop):
-        # make the composite
-        workflow = Composite({
-            'state': instance
-        })
+#     def run_instance(instance, num_beats=stop):
+#         # make the composite
+#         workflow = Composite({
+#             'state': instance
+#         })
 
-        num_beats = 3
-        # run
-        workflow.run(num_beats)
+#         num_beats = 3
+#         # run
+#         workflow.run(num_beats)
 
-        # gather results
-        return workflow.gather_results()
+#         # gather results
+#         return workflow.gather_results()
 
-    instance = tremolo_create_instance(starting_signal)
-    result = run_instance(instance)
-
-
-def test_ring_mod():
-    duration = 8
-    pitch_frequency = 800
-    initial_signal = start_sine_wave(duration, pitch_frequency)
-
-    def ring_mod_create_instance():
-        return {
-            'ring_modulation': {
-                '_type': 'process',
-                'address': 'local:ring_modulation',
-                'config': {
-                    'mod_freq': 2000,
-                    'input_signal': initial_signal,
-                    'duration': duration
-                },
-                'wires': {  # this should return that which is in the schema
-                    'output_signal': ['output_signal_store'],
-                }
-            },
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'config': {
-                    'ports': {
-                        'inputs': {
-                            'output_signal': 'list[float]'
-                        },
-                    }
-                },
-                'wires': {
-                    'inputs': {
-                        'output_signal': ['output_signal_store'],
-                    }
-                }
-            }
-        }
-
-    instance = ring_mod_create_instance()
-    result = run_instance(instance, num_beats=8)[('emitter',)]
-    #array_to_wav(os.path.join('ring_mod_results', 'input_signal.wav'), input_signal=initial_signal)
-    #resulting_wave = np.array(result[('emitter',)])
-    print(len(result), type(result))
-    for r in result:
-        print(type(r))
-    #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
+#     instance = tremolo_create_instance(starting_signal)
+#     result = run_instance(instance)
 
 
-def test_phaser():
-    duration = 8
-    pitch_frequency = 800
-    rate = 3
-    depth = 0.75
-    initial_signal = start_sine_wave(duration, pitch_frequency)
+# def test_ring_mod():
+#     duration = 8
+#     pitch_frequency = 800
+#     initial_signal = start_sine_wave(duration, pitch_frequency)
 
-    def phaser_create_instance():
-        return {
-            'phaser': {
-                '_type': 'process',
-                'address': 'local:phaser',
-                'config': {
-                    'input_signal': initial_signal,
-                    'rate': rate,
-                    'depth': depth,
-                    'duration': duration
-                },
-                'wires': {  # this should return that which is in the schema
-                    'input_signal': ['input_signal_store'],
-                    'output_signal': ['output_signal_store'],
-                }
-            },
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'config': {
-                    'ports': {
-                        'inputs': {
-                            'output_signal': 'list[float]'
-                        },
-                    }
-                },
-                'wires': {
-                    'inputs': {
-                        'output_signal': ['output_signal_store'],
-                    }
-                }
-            }
-        }
+#     def ring_mod_create_instance():
+#         return {
+#             'ring_modulation': {
+#                 '_type': 'process',
+#                 'address': 'local:ring_modulation',
+#                 'config': {
+#                     'mod_freq': 2000,
+#                     'input_signal': initial_signal,
+#                     'duration': duration
+#                 },
+#                 'wires': {  # this should return that which is in the schema
+#                     'output_signal': ['output_signal_store'],
+#                 }
+#             },
+#             'emitter': {
+#                 '_type': 'step',
+#                 'address': 'local:ram-emitter',
+#                 'config': {
+#                     'ports': {
+#                         'inputs': {
+#                             'output_signal': 'list[float]'
+#                         },
+#                     }
+#                 },
+#                 'wires': {
+#                     'inputs': {
+#                         'output_signal': ['output_signal_store'],
+#                     }
+#                 }
+#             }
+#         }
 
-    instance = phaser_create_instance()
-    result = run_instance(instance, num_beats=8)[('emitter',)]
-    #array_to_wav(os.path.join('phaser_results', 'input_signal.wav'), input_signal=initial_signal)
-    #resulting_wave = np.array(result[('emitter',)])
-    print(len(result), type(result))
-    for r in result:
-        print(type(r))
-    #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
+#     instance = ring_mod_create_instance()
+#     result = run_instance(instance, num_beats=8)[('emitter',)]
+#     #array_to_wav(os.path.join('ring_mod_results', 'input_signal.wav'), input_signal=initial_signal)
+#     #resulting_wave = np.array(result[('emitter',)])
+#     print(len(result), type(result))
+#     for r in result:
+#         print(type(r))
+#     #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
 
 
-def test_delay():
-    duration = 8
-    b_flat = adjust_pitch_frequency(440.0, 1.0)
-    delay_time = 0.6
-    decay = 0.4
-    initial_signal = start_sine_wave(duration, b_flat)
+# def test_phaser():
+#     duration = 8
+#     pitch_frequency = 800
+#     rate = 3
+#     depth = 0.75
+#     initial_signal = start_sine_wave(duration, pitch_frequency)
 
-    def delay_create_instance():
-        return {
-            'phaser': {
-                '_type': 'process',
-                'address': 'local:delay',
-                'config': {
-                    'input_signal': initial_signal,
-                    'delay_time': delay_time,
-                    'decay': decay,
-                    'duration': duration
-                },
-                'wires': {  # this should return that which is in the schema
-                    'output_signal': ['output_signal_store'],
-                }
-            },
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'config': {
-                    'ports': {
-                        'inputs': {
-                            'output_signal': 'list[float]'
-                        },
-                    }
-                },
-                'wires': {
-                    'inputs': {
-                        'output_signal': ['output_signal_store'],
-                    }
-                }
-            }
-        }
+#     def phaser_create_instance():
+#         return {
+#             'phaser': {
+#                 '_type': 'process',
+#                 'address': 'local:phaser',
+#                 'config': {
+#                     'input_signal': initial_signal,
+#                     'rate': rate,
+#                     'depth': depth,
+#                     'duration': duration
+#                 },
+#                 'wires': {  # this should return that which is in the schema
+#                     'input_signal': ['input_signal_store'],
+#                     'output_signal': ['output_signal_store'],
+#                 }
+#             },
+#             'emitter': {
+#                 '_type': 'step',
+#                 'address': 'local:ram-emitter',
+#                 'config': {
+#                     'ports': {
+#                         'inputs': {
+#                             'output_signal': 'list[float]'
+#                         },
+#                     }
+#                 },
+#                 'wires': {
+#                     'inputs': {
+#                         'output_signal': ['output_signal_store'],
+#                     }
+#                 }
+#             }
+#         }
 
-
-def create_instance(instance_type: str, wires: Dict[str, Any], **instance_config):
-    return {
-        instance_type: {
-            '_type': 'process',
-            'address': f'local:{instance_type}',
-            'config': instance_config,
-            'wires': wires
-        },
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'ports': {
-                    'inputs': {
-                        'output_signal': 'list[float]'
-                    },
-                }
-            },
-            'wires': {
-                'inputs': {
-                    'output_signal': ['output_signal_store'],
-                }
-            }
-        }
-    }
+#     instance = phaser_create_instance()
+#     result = run_instance(instance, num_beats=8)[('emitter',)]
+#     #array_to_wav(os.path.join('phaser_results', 'input_signal.wav'), input_signal=initial_signal)
+#     #resulting_wave = np.array(result[('emitter',)])
+#     print(len(result), type(result))
+#     for r in result:
+#         print(type(r))
+#     #plot_signal(duration, resulting_wave, 'final_ring_mod_wave', fp='final_ring_mod_result')
 
 
-def create_modulation_instance(instance_type: str, **instance_config):
-    """Types to be expected are modeled in a meta-instance below:
-    ```
-         instance = {
-            'tremolo': {
-                'config': {
-                    'input_signal': initial_signal,
-                    'rate': tremolo_rate,
-                    'depth': tremolo_depth,
-                    'duration': duration
-                },
-            },
-            'ring_modulation': {
-                'config': {
-                    'input_signal': 'output_signal_store',
-                    'mod_freq': ring_mod_freq,
-                    'duration': duration
-                }
-            },
-            'delay': {
-                'config': {
-                    'input_signal': 'output_signal_store',
-                    'delay_time': delay_time,
-                    'decay': decay,
-                    'duration': duration
-                },
-            },
-    ```
-    """
-    wires = {'output_signal': ['output_signal_store']}
-    return create_instance(instance_type, wires, **instance_config)
+# def test_delay():
+#     duration = 8
+#     b_flat = adjust_pitch_frequency(440.0, 1.0)
+#     delay_time = 0.6
+#     decay = 0.4
+#     initial_signal = start_sine_wave(duration, b_flat)
+
+#     def delay_create_instance():
+#         return {
+#             'phaser': {
+#                 '_type': 'process',
+#                 'address': 'local:delay',
+#                 'config': {
+#                     'input_signal': initial_signal,
+#                     'delay_time': delay_time,
+#                     'decay': decay,
+#                     'duration': duration
+#                 },
+#                 'wires': {  # this should return that which is in the schema
+#                     'output_signal': ['output_signal_store'],
+#                 }
+#             },
+#             'emitter': {
+#                 '_type': 'step',
+#                 'address': 'local:ram-emitter',
+#                 'config': {
+#                     'ports': {
+#                         'inputs': {
+#                             'output_signal': 'list[float]'
+#                         },
+#                     }
+#                 },
+#                 'wires': {
+#                     'inputs': {
+#                         'output_signal': ['output_signal_store'],
+#                     }
+#                 }
+#             }
+#         }
 
 
-def modulate_signal(instance_type: str, duration: int, **instance_config):
-    instance = create_modulation_instance(instance_type, **instance_config)
-    result = run_instance(instance, duration)[('emitter',)]
-    return result[-1]['output_signal']
+# def create_instance(instance_type: str, wires: Dict[str, Any], **instance_config):
+#     return {
+#         instance_type: {
+#             '_type': 'process',
+#             'address': f'local:{instance_type}',
+#             'config': instance_config,
+#             'wires': wires
+#         },
+#         'emitter': {
+#             '_type': 'step',
+#             'address': 'local:ram-emitter',
+#             'config': {
+#                 'ports': {
+#                     'inputs': {
+#                         'output_signal': 'list[float]'
+#                     },
+#                 }
+#             },
+#             'wires': {
+#                 'inputs': {
+#                     'output_signal': ['output_signal_store'],
+#                 }
+#             }
+#         }
+#     }
 
 
-def test_pedalboard_process():
-    """# set global parameters
-    duration = 8
-    b_flat = adjust_pitch_frequency(440.0, 1.0)
-    initial_signal = start_sine_wave(duration, b_flat)
-
-    # pedal-specific parameters
-    delay_time = 0.6
-    decay = 0.4
-    tremolo_rate = 3
-    tremolo_depth = 0.75
-    ring_mod_freq = 1000
-
-    # define pedal spec (must correspond to the process instance types)
-    pedals = {
-        'delay': {
-            'delay_time': delay_time,
-            'decay': decay
-        },
-        'tremolo': {
-            'rate': tremolo_rate,
-            'depth': tremolo_depth
-        },
-        'ring_modulation': {
-            'mod_freq': ring_mod_freq
-        }
-    }
-
-
-    instance = {
-        'pedalboard': {
-            '_type': 'process',
-            'address': 'local:pedalboard',
-            'config': {
-                'input_signal': initial_signal,
-                'duration': duration,
-                'pedals': pedals,
-            },
-            'wires': {  # this should return that which is in the schema
-                'input_signal': ['input_signal_store'],
-                'output_signal': ['output_signal_store'],
-            }
-        },
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'ports': {
-                    'inputs': {
-                        'input_signal': 'list[float]',
-                        'output_signal': 'list[float]'
-                    },
-                }
-            },
-            'wires': {
-                'inputs': {
-                    'input_signal': ['input_signal_store'],
-                    'output_signal': ['output_signal_store'],
-                }
-            }
-        }
-    }
-
-    result = run_instance(instance, num_beats=8)[('emitter',)]
-    #array_to_wav('input_signal.wav', input_signal=initial_signal)
-    #resulting_wave = np.array(result[('emitter',)])
-    final_result = result[-1]['output_signal']
-    #plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')"""
-    pass
+# def create_modulation_instance(instance_type: str, **instance_config):
+#     """Types to be expected are modeled in a meta-instance below:
+#     ```
+#          instance = {
+#             'tremolo': {
+#                 'config': {
+#                     'input_signal': initial_signal,
+#                     'rate': tremolo_rate,
+#                     'depth': tremolo_depth,
+#                     'duration': duration
+#                 },
+#             },
+#             'ring_modulation': {
+#                 'config': {
+#                     'input_signal': 'output_signal_store',
+#                     'mod_freq': ring_mod_freq,
+#                     'duration': duration
+#                 }
+#             },
+#             'delay': {
+#                 'config': {
+#                     'input_signal': 'output_signal_store',
+#                     'delay_time': delay_time,
+#                     'decay': decay,
+#                     'duration': duration
+#                 },
+#             },
+#     ```
+#     """
+#     wires = {'output_signal': ['output_signal_store']}
+#     return create_instance(instance_type, wires, **instance_config)
 
 
-def test_pedalboard():
-    # set global parameters
-    duration = 8
-    b_flat = adjust_pitch_frequency(440.0, 1.0)
-    initial_signal = start_sine_wave(duration, b_flat)
+# def modulate_signal(instance_type: str, duration: int, **instance_config):
+#     instance = create_modulation_instance(instance_type, **instance_config)
+#     result = run_instance(instance, duration)[('emitter',)]
+#     return result[-1]['output_signal']
 
-    # pedal-specific parameters
-    delay_time = 0.6
-    decay = 0.4
-    tremolo_rate = 3
-    tremolo_depth = 0.75
-    ring_mod_freq = 1000
 
-    instance = {
-        'ring_modulation': {
-            '_type': 'process',
-            'address': 'local:ring_modulation',
-            'config': {
-                'mod_freq': 2000,
-                'input_signal': initial_signal,
-                'duration': duration
-            },
-            'wires': {  # this should return that which is in the schema
-                'input_signal': ['input_signal_store'],
-                'output_signal': ['output_signal_store'],
-            }
-        },
-        'tremolo': {
-            '_type': 'process',
-            'address': 'local:tremolo',
-            'config': {
-                'depth': 0.9,
-                'rate': 9,
-                'duration': duration,
-            },
-            'wires': {  # this should return that which is in the schema
-                'input_signal': 'input_signal_store',
-                'output_signal': ['output_signal_store'],
-            }
-        },
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'ports': {
-                    'inputs': {
-                        'input_signal': 'list[float]',
-                        'output_signal': 'list[float]'
-                    },
-                }
-            },
-            'wires': {
-                'inputs': {
-                    'input_signal': ['input_signal_store'],
-                    'output_signal': ['output_signal_store'],
-                }
-            }
-        }
-    }
+# def test_pedalboard_process():
+#     """# set global parameters
+#     duration = 8
+#     b_flat = adjust_pitch_frequency(440.0, 1.0)
+#     initial_signal = start_sine_wave(duration, b_flat)
 
-    result = run_instance(instance, duration)
-    print(f'RESULT: {result}')
+#     # pedal-specific parameters
+#     delay_time = 0.6
+#     decay = 0.4
+#     tremolo_rate = 3
+#     tremolo_depth = 0.75
+#     ring_mod_freq = 1000
+
+#     # define pedal spec (must correspond to the process instance types)
+#     pedals = {
+#         'delay': {
+#             'delay_time': delay_time,
+#             'decay': decay
+#         },
+#         'tremolo': {
+#             'rate': tremolo_rate,
+#             'depth': tremolo_depth
+#         },
+#         'ring_modulation': {
+#             'mod_freq': ring_mod_freq
+#         }
+#     }
+
+
+#     instance = {
+#         'pedalboard': {
+#             '_type': 'process',
+#             'address': 'local:pedalboard',
+#             'config': {
+#                 'input_signal': initial_signal,
+#                 'duration': duration,
+#                 'pedals': pedals,
+#             },
+#             'wires': {  # this should return that which is in the schema
+#                 'input_signal': ['input_signal_store'],
+#                 'output_signal': ['output_signal_store'],
+#             }
+#         },
+#         'emitter': {
+#             '_type': 'step',
+#             'address': 'local:ram-emitter',
+#             'config': {
+#                 'ports': {
+#                     'inputs': {
+#                         'input_signal': 'list[float]',
+#                         'output_signal': 'list[float]'
+#                     },
+#                 }
+#             },
+#             'wires': {
+#                 'inputs': {
+#                     'input_signal': ['input_signal_store'],
+#                     'output_signal': ['output_signal_store'],
+#                 }
+#             }
+#         }
+#     }
+
+#     result = run_instance(instance, num_beats=8)[('emitter',)]
+#     #array_to_wav('input_signal.wav', input_signal=initial_signal)
+#     #resulting_wave = np.array(result[('emitter',)])
+#     final_result = result[-1]['output_signal']
+#     #plot_signal(duration, final_result, 'final_wave', fp='final_composite_wave')"""
+#     pass
+
+
+# def test_pedalboard():
+#     # set global parameters
+#     duration = 8
+#     b_flat = adjust_pitch_frequency(440.0, 1.0)
+#     initial_signal = start_sine_wave(duration, b_flat)
+
+#     # pedal-specific parameters
+#     delay_time = 0.6
+#     decay = 0.4
+#     tremolo_rate = 3
+#     tremolo_depth = 0.75
+#     ring_mod_freq = 1000
+
+#     instance = {
+#         'ring_modulation': {
+#             '_type': 'process',
+#             'address': 'local:ring_modulation',
+#             'config': {
+#                 'mod_freq': 2000,
+#                 'input_signal': initial_signal,
+#                 'duration': duration
+#             },
+#             'wires': {  # this should return that which is in the schema
+#                 'input_signal': ['input_signal_store'],
+#                 'output_signal': ['output_signal_store'],
+#             }
+#         },
+#         'tremolo': {
+#             '_type': 'process',
+#             'address': 'local:tremolo',
+#             'config': {
+#                 'depth': 0.9,
+#                 'rate': 9,
+#                 'duration': duration,
+#             },
+#             'wires': {  # this should return that which is in the schema
+#                 'input_signal': 'input_signal_store',
+#                 'output_signal': ['output_signal_store'],
+#             }
+#         },
+#         'emitter': {
+#             '_type': 'step',
+#             'address': 'local:ram-emitter',
+#             'config': {
+#                 'ports': {
+#                     'inputs': {
+#                         'input_signal': 'list[float]',
+#                         'output_signal': 'list[float]'
+#                     },
+#                 }
+#             },
+#             'wires': {
+#                 'inputs': {
+#                     'input_signal': ['input_signal_store'],
+#                     'output_signal': ['output_signal_store'],
+#                 }
+#             }
+#         }
+#     }
+
+#     result = run_instance(instance, duration)
+#     print(f'RESULT: {result}')
 
 
 if __name__ == '__main__':
-    test_pedalboard()
+    pass
+
+    # test_pedalboard()
     # test_delay()
     # test_phaser()
     # test_ring_mod()
