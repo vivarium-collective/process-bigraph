@@ -86,7 +86,7 @@ def test_composite():
                 'interval': 1.0,
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': 11.11}})
+            'value': '11.11'}})
 
     initial_state = {'exchange': 3.33}
 

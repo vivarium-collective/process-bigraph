@@ -393,33 +393,43 @@ class Composite(Process):
     def __init__(self, config=None, local_types=None):
         super().__init__(config, local_types)
 
+        # insert global_time into schema if not present
         initial_composition = self.config.get('composition', {})
         if 'global_time' not in initial_composition:
             initial_composition['global_time'] = 'float'
-        initial_composition = types.access(
-            initial_composition)
 
+        # insert global_time into state if not present
         initial_state = self.config.get('state', {})
         if 'global_time' not in initial_state:
             initial_state['global_time'] = 0.0
 
-        initial_state = types.hydrate(
+        composition, state = types.complete(
             initial_composition,
             initial_state)
+
+        # # first access of schema
+        # initial_composition = types.access(
+        #     initial_composition)
+
+        # # hydrate the state given the initial composition
+        # initial_state = types.hydrate(
+        #     initial_composition,
+        #     initial_state)
+
+        # fill in the parts of the composition schema
+        # # determined by the state
+        # composition, state = types.infer_schema(
+        #     initial_composition,
+        #     initial_state)
+
+        # # TODO: add flag to types.access(copy=True)
+        # composition_schema = types.access(composition)
+
+        self.composition = copy.deepcopy(composition)
 
         initial_schema = types.access(
             self.config.get('schema', {})) or {}
         self.bridge = self.config.get('bridge', {})
-
-        # fill in the parts of the composition schema
-        # determined by the state
-        composition, state = types.infer_schema(
-            initial_composition,
-            initial_state)
-
-        # TODO: add flag to types.access(copy=True)
-        composition_schema = types.access(composition)
-        self.composition = copy.deepcopy(composition_schema)
 
         # find all processes, steps, and emitter in the state
         self.process_paths = find_instance_paths(
