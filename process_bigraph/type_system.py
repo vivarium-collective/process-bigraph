@@ -36,7 +36,9 @@ def divide_process(value, bindings=None, types=None):
 
 def serialize_process(value, bindings=None, types=None):
     # TODO -- need to get back the protocol: address and the config
-    return value
+    process = value.copy()
+    del process['instance']
+    return process
 
 
 DEFAULT_INTERVAL = 1.0

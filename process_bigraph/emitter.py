@@ -7,7 +7,7 @@ import itertools
 from functools import partial
 from warnings import warn
 from typing import Any, Dict, List, Optional, Tuple, Callable, Union
-from types import NoneType
+# from types import NoneType
 from concurrent.futures import ProcessPoolExecutor
 import numpy as np
 from pymongo import ASCENDING
@@ -252,11 +252,11 @@ class DatabaseEmitter(Emitter):
         return self.config['ports']
 
 
-def format_data(table_id: str, time: Optional[Union[int, str, NoneType]] = None, **values: Any) -> Dict[str, Any]:
+def format_data(table_id: str, time: Optional[Union[int, str]] = None, **values: Any) -> Dict[str, Any]:
     """Format the given data for mongo db emission.
         Args:
             table_id:`str`: id of the table of insertion. Usually, this value is some sort of simulation run id.
-            time:`Optional[Union[int, str, NoneType]]`: Timestamp by which the table will be indexed and data retrieved.
+            time:`Optional[Union[int, str]]`: Timestamp by which the table will be indexed and data retrieved.
                 Defaults to `None`.
             **values: Data values to insert into the db. Kwargs will be related only to the data being stored.
         Returns:
