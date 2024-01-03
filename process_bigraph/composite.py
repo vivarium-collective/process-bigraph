@@ -103,6 +103,12 @@ class Process(Edge):
         if config is None:
             config = {}
 
+        # check that all keywords in config are in config_schema
+        for key in config.keys():
+            if key not in self.config_schema:
+                raise Exception(f'config key {key} not in config_schema for {self.__class__.__name__}')
+
+        # fill in defaults for config
         self.config = self.types.fill(
             self.config_schema,
             config)
