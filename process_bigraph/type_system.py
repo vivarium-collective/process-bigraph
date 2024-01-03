@@ -35,6 +35,7 @@ def divide_process(value, bindings=None, types=None):
 
 
 def serialize_process(value, bindings=None, types=None):
+    """Serialize a process to a JSON-safe representation."""
     # TODO -- need to get back the protocol: address and the config
     process = value.copy()
     del process['instance']
@@ -49,6 +50,16 @@ TYPE_SCHEMAS = {
 
 
 def deserialize_process(serialized, bindings=None, types=None):
+    """Deserialize a process from a serialized state.
+
+    This function is used by the type system to deserialize a process.
+
+    :param serialized: A JSON-safe representation of the process.
+    :param bindings: The bindings to use for deserialization.
+    :param types: The type system to use for deserialization.
+
+    :returns: The deserialized state with an instantiated process.
+    """
     deserialized = serialized.copy()
     protocol, address = serialized['address'].split(':', 1)
 
@@ -161,11 +172,11 @@ class ProcessTypes(TypeSystem):
 
 
     def infer_schema(self, schema, state, top_state=None, path=None):
-        '''
+        """
         Given a schema fragment and an existing state with _type keys,
         return the full schema required to describe that state,
         and whatever state was hydrated (processes/steps) during this process
-        '''
+        """
 
         schema = schema or {}
         # TODO: deal with this

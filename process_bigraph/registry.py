@@ -25,3 +25,19 @@ process_registry = Registry()
 #: Maps process names to :term:`protocol methods`
 protocol_registry = Registry()
 
+# decorator to register processes
+def register_process(name):
+    """Register a process with the process registry.
+    
+    :param name: The name of the process.
+    
+    :Example:
+        @register_process('my_process')
+        class MyProcess(Process):
+            ...
+    """
+    def decorator(func):
+        process_registry.register(name, func)
+        return func
+
+    return decorator
