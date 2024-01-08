@@ -48,7 +48,6 @@ setup(
         "pytest>=6.2.5",
         "pymongo",
         "orjson",
-        "biosimulator-processes",
         "matplotlib"
     ]
 )
