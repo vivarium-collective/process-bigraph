@@ -26,7 +26,7 @@ process_registry = Registry()
 protocol_registry = Registry()
 
 # decorator to register processes
-def register_process(name):
+def register_process(name, registry=process_registry):
     """Register a process with the process registry.
     
     :param name: The name of the process.
@@ -37,7 +37,7 @@ def register_process(name):
             ...
     """
     def decorator(func):
-        process_registry.register(name, func)
+        registry.register(name, func)
         return func
 
     return decorator
