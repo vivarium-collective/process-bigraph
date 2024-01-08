@@ -2,7 +2,7 @@ import re
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.9'
+VERSION = '0.0.10'
 
 
 with open("README.md", "r") as readme:
@@ -48,7 +48,6 @@ setup(
         "pytest>=6.2.5",
         "pymongo",
         "orjson",
-        "core-processes",
         "matplotlib"
     ]
 )
