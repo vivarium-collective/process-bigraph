@@ -4,7 +4,7 @@ Process Types
 =============
 """
 
-from bigraph_schema import Edge, TypeSystem, get_path, establish_path, set_path
+from bigraph_schema import Edge, TypeSystem, get_path, establish_path, set_path, deep_merge
 from process_bigraph.registry import protocol_registry
 
 
@@ -290,12 +290,24 @@ class ProcessTypes(TypeSystem):
         output_ports = get_path(schema, path + ('_outputs',))
         ports = {'inputs': input_ports, 'outputs': output_ports}
 
-        projected_state = self.project_edge(
+        input_state = self.project_edge(
             ports,
             edge,
             path[:-1],
-            initial_state)
-        return projected_state
+            initial_state,
+            ports_key='input')
+
+        output_state = self.project_edge(
+            ports,
+            edge,
+            path[:-1],
+            initial_state,
+            ports_key='output')
+
+        state = deep_merge(input_state, output_state)
+
+        return state
+
 
     def dehydrate(self, schema):
         return {}

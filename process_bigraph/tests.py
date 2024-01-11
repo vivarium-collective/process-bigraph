@@ -27,6 +27,12 @@ class IncreaseProcess(Process):
                 'level': 'float'}}
 
 
+    def initial_state(self):
+        return {
+            'inputs': {
+                'level': 11.0}}
+
+
     def update(self, state, interval):
         return {
             'level': state['level'] * self.config['rate']}
