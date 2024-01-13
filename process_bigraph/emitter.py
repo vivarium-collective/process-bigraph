@@ -126,9 +126,7 @@ class DatabaseEmitter(Emitter):
             '_default': 4000000
         },
         'embed_path': {
-            '_type': 'tuple',
-            '_default': tuple(),
-            '_deserialize': 'deserialize_string'
+            '_type': 'list[string]',
         },
         'host': {
             '_type': 'string',

@@ -11,7 +11,7 @@ import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
 from bigraph_schema.type_system import Edge
-from process_bigraph.type_system import types
+from process_bigraph.type_system import core
 from process_bigraph.protocols import local_lookup_module
 
 
@@ -51,12 +51,12 @@ class Step(Edge):
 
 
     def __init__(self, config=None, local_types=None):
-        self.types = local_types or types
+        self.core = local_types or core
 
         if config is None:
             config = {}
 
-        self.config = self.types.fill(
+        self.config = self.core.fill(
             self.config_schema,
             config)
 
@@ -99,7 +99,7 @@ class Process(Edge):
     config_schema = {}
 
     def __init__(self, config=None, local_types=None):
-        self.types = local_types or types
+        self.core = local_types or core
         if config is None:
             config = {}
 
@@ -109,7 +109,7 @@ class Process(Edge):
                 raise Exception(f'config key {key} not in config_schema for {self.__class__.__name__}')
 
         # fill in defaults for config
-        self.config = self.types.fill(
+        self.config = self.core.fill(
             self.config_schema,
             config)
 
@@ -409,31 +409,14 @@ class Composite(Process):
         if 'global_time' not in initial_state:
             initial_state['global_time'] = 0.0
 
-        composition, state = types.complete(
+        composition, state = self.core.complete(
             initial_composition,
             initial_state)
 
-        # # first access of schema
-        # initial_composition = types.access(
-        #     initial_composition)
-
-        # # hydrate the state given the initial composition
-        # initial_state = types.hydrate(
-        #     initial_composition,
-        #     initial_state)
-
-        # fill in the parts of the composition schema
-        # # determined by the state
-        # composition, state = types.infer_schema(
-        #     initial_composition,
-        #     initial_state)
-
-        # # TODO: add flag to types.access(copy=True)
-        # composition_schema = types.access(composition)
-
         self.composition = copy.deepcopy(composition)
 
-        initial_schema = types.access(
+        # TODO: add flag to self.core.access(copy=True)
+        initial_schema = self.core.access(
             self.config.get('schema', {})) or {}
         self.bridge = self.config.get('bridge', {})
 
@@ -460,7 +443,7 @@ class Composite(Process):
         # that conflict/have different values at the same path)
         edge_state = {}
         for path, edge in self.edge_paths.items():
-            initial = types.initialize_edge_state(
+            initial = self.core.initialize_edge_state(
                 self.composition,
                 path,
                 edge)
@@ -475,12 +458,12 @@ class Composite(Process):
 
         # calling hydrate here assumes all processes have already been
         # deserialized in the call to infer_schema above.
-        self.state = types.hydrate(
+        self.state = self.core.hydrate(
             self.composition,
             state)
 
         for port in ['inputs', 'outputs']:
-            self.process_schema = types.infer_edge(
+            self.process_schema = self.core.infer_edge(
                 self.composition,
                 self.bridge[port])
 
@@ -564,7 +547,7 @@ class Composite(Process):
 
         def defer_project(update, args):
             schema, state, path = args
-            return types.project_edge(
+            return self.core.project_edge(
                 schema,
                 state,
                 path,
@@ -594,7 +577,7 @@ class Composite(Process):
                 state = future_front['state']
                 del self.front[path]['future']
             else:
-                state = types.view_edge(
+                state = self.core.view_edge(
                     self.composition,
                     self.state,
                     path)
@@ -654,12 +637,12 @@ class Composite(Process):
                 paths = hierarchy_depth(update)
                 update_paths.extend(paths.keys())
 
-                self.state = types.apply_update(
+                self.state = self.core.apply_update(
                     self.composition,
                     self.state,
                     update)
 
-                bridge_update = types.view(
+                bridge_update = self.core.view(
                     self.process_schema,
                     self.bridge['outputs'],
                     (),
@@ -765,7 +748,7 @@ class Composite(Process):
                     self.state,
                     step_path)
 
-                state = types.view_edge(
+                state = self.core.view_edge(
                     self.composition,
                     self.state,
                     step_path,
@@ -830,13 +813,13 @@ class Composite(Process):
     def update(self, state, interval):
         # do everything
 
-        projection = types.project(
+        projection = self.core.project(
             self.schema(),
             self.bridge['inputs'],
             [],
             state)
 
-        self.state = types.set(
+        self.state = self.core.set(
             self.composition,
             self.state,
             projection)

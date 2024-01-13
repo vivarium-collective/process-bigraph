@@ -151,16 +151,8 @@ process_types = {
 
 
 def register_process_types(core):
-    core.apply_registry.register('apply_process', apply_process)
-    core.serialize_registry.register('serialize_process', serialize_process)
-    core.deserialize_registry.register('deserialize_process', deserialize_process)
-    core.divide_registry.register('divide_process', divide_process)
-    core.check_registry.register('check_process', check_process)
-
-    core.deserialize_registry.register('deserialize_step', deserialize_step)
-
     for process_key, process_type in process_types.items():
-        core.type_registry.register(process_key, process_type)
+        core.register(process_key, process_type)
 
     return core
 
@@ -295,14 +287,14 @@ class ProcessTypes(TypeSystem):
             edge,
             path[:-1],
             initial_state,
-            ports_key='input')
+            ports_key='inputs')
 
         output_state = self.project_edge(
             ports,
             edge,
             path[:-1],
             initial_state,
-            ports_key='output')
+            ports_key='outputs')
 
         state = deep_merge(input_state, output_state)
 

@@ -5,7 +5,7 @@ Tests for Process Bigraph
 import random
 
 from process_bigraph.composite import Process, Step, Composite, merge_collections
-from process_bigraph.type_system import types
+from process_bigraph.type_system import core
 
 
 class IncreaseProcess(Process):
@@ -55,11 +55,11 @@ def test_merge_collections():
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
     schema = process.schema()
-    state = types.fill(schema['inputs'])
-    state = types.fill(schema['outputs'])
+    state = core.fill(schema['inputs'])
+    state = core.fill(schema['outputs'])
     update = process.update({'level': 5.5}, 1.0)
 
-    new_state = types.apply(schema['outputs'], state, update)
+    new_state = core.apply(schema['outputs'], state, update)
 
     assert new_state['level'] == 1.1
 
@@ -266,7 +266,7 @@ class SimpleCompartment(Process):
         inner = state['inner']
 
         # TODO: implement divide_state(_)
-        divisions = self.types.divide_state(
+        divisions = self.core.divide_state(
             self.schema(),
             inner)
 
