@@ -15,26 +15,26 @@ process_interval_schema = {
 
 
 # TODO: implement these
-def apply_process(current, update, bindings=None, types=None):
-    process_schema = dict(types.access('process'))
+def apply_process(current, update, bindings=None, core=None):
+    process_schema = dict(core.access('process'))
     process_schema.pop('_apply')
-    return types.apply(
+    return core.apply(
         process_schema,
         current,
         update)
 
 
-def check_process(state, bindings, types):
+def check_process(state, bindings, core):
     return 'instance' in state and isinstance(
         state['instance'],
         Edge)
 
 
-def divide_process(value, bindings=None, types=None):
+def divide_process(value, bindings=None, core=None):
     return value
 
 
-def serialize_process(value, bindings=None, types=None):
+def serialize_process(value, bindings=None, core=None):
     """Serialize a process to a JSON-safe representation."""
     # TODO -- need to get back the protocol: address and the config
     process = value.copy()
@@ -49,14 +49,14 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
-def deserialize_process(serialized, bindings=None, types=None):
+def deserialize_process(serialized, bindings=None, core=None):
     """Deserialize a process from a serialized state.
 
     This function is used by the type system to deserialize a process.
 
     :param serialized: A JSON-safe representation of the process.
     :param bindings: The bindings to use for deserialization.
-    :param types: The type system to use for deserialization.
+    :param core: The type system to use for deserialization.
 
     :returns: The deserialized state with an instantiated process.
     """
@@ -74,11 +74,11 @@ def deserialize_process(serialized, bindings=None, types=None):
         if not instantiate:
             raise Exception(f'process "{address}" not found')
 
-    config = types.hydrate_state(
+    config = core.hydrate_state(
         instantiate.config_schema,
         serialized.get('config', {}))
 
-    interval = types.deserialize(
+    interval = core.deserialize(
         process_interval_schema,
         serialized.get('interval'))
 
@@ -92,7 +92,7 @@ def deserialize_process(serialized, bindings=None, types=None):
     return deserialized
 
 
-def deserialize_step(serialized, bindings=None, types=None):
+def deserialize_step(serialized, bindings=None, core=None):
     deserialized = serialized.copy()
     protocol, address = serialized['address'].split(':', 1)
 
@@ -107,7 +107,7 @@ def deserialize_step(serialized, bindings=None, types=None):
         if not instantiate:
             raise Exception(f'process "{address}" not found')
 
-    config = types.hydrate_state(
+    config = core.hydrate_state(
         instantiate.config_schema,
         serialized.get('config', {}))
 
@@ -126,11 +126,11 @@ process_types = {
 
     'step': {
         '_super': ['edge'],
-        '_apply': 'apply_process',
-        '_serialize': 'serialize_process',
-        '_deserialize': 'deserialize_step',
-        '_check': 'check_process',
-        '_divide': 'divide_process',
+        '_apply': apply_process,
+        '_serialize': serialize_process,
+        '_deserialize': deserialize_step,
+        '_check': check_process,
+        '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
         'address': 'protocol',
@@ -138,11 +138,11 @@ process_types = {
 
     'process': {
         '_super': ['edge'],
-        '_apply': 'apply_process',
-        '_serialize': 'serialize_process',
-        '_deserialize': 'deserialize_process',
-        '_check': 'check_process',
-        '_divide': 'divide_process',
+        '_apply': apply_process,
+        '_serialize': serialize_process,
+        '_deserialize': deserialize_process,
+        '_check': check_process,
+        '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
         'interval': process_interval_schema
@@ -150,19 +150,19 @@ process_types = {
 }
 
 
-def register_process_types(types):
-    types.apply_registry.register('apply_process', apply_process)
-    types.serialize_registry.register('serialize_process', serialize_process)
-    types.deserialize_registry.register('deserialize_process', deserialize_process)
-    types.divide_registry.register('divide_process', divide_process)
-    types.check_registry.register('check_process', check_process)
+def register_process_types(core):
+    core.apply_registry.register('apply_process', apply_process)
+    core.serialize_registry.register('serialize_process', serialize_process)
+    core.deserialize_registry.register('deserialize_process', deserialize_process)
+    core.divide_registry.register('divide_process', divide_process)
+    core.check_registry.register('check_process', check_process)
 
-    types.deserialize_registry.register('deserialize_step', deserialize_step)
+    core.deserialize_registry.register('deserialize_step', deserialize_step)
 
     for process_key, process_type in process_types.items():
-        types.type_registry.register(process_key, process_type)
+        core.type_registry.register(process_key, process_type)
 
-    return types
+    return core
 
 
 class ProcessTypes(TypeSystem):
@@ -203,7 +203,7 @@ class ProcessTypes(TypeSystem):
                     {'_type': state_type})
 
                 # TODO: fix is_descendant
-                # if types.type_registry.is_descendant('process', state_schema) or types.registry.is_descendant('step', state_schema):
+                # if core.type_registry.is_descendant('process', state_schema) or core.registry.is_descendant('step', state_schema):
                 if state_type == 'process' or state_type == 'step':
                     port_schema = hydrated_state['instance'].schema()
 
@@ -304,4 +304,4 @@ class ProcessTypes(TypeSystem):
             self.lookup_local(config)
 
 
-types = ProcessTypes()
+core = ProcessTypes()

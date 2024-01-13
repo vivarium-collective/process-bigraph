@@ -7,19 +7,7 @@ Protocols for retrieving processes from address
 import importlib
 import sys
 from process_bigraph.registry import process_registry
-
-
-def local_lookup_module(address):
-    """Local Module Protocol
-
-    Retrieves local module
-    """
-    if '.' in address:
-        module_name, class_name = address.rsplit('.', 1)
-        module = importlib.import_module(module_name)
-        return getattr(module, class_name)
-    else:
-        return getattr(sys.modules[__name__], address)
+from bigraph_schema.protocols import local_lookup_module
 
 
 def local_lookup_registry(address):
