@@ -49,19 +49,19 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
-def deserialize_process(serialized, bindings=None, core=None):
+def deserialize_process(encoded, bindings=None, core=None):
     """Deserialize a process from a serialized state.
 
     This function is used by the type system to deserialize a process.
 
-    :param serialized: A JSON-safe representation of the process.
+    :param encoded: A JSON-safe representation of the process.
     :param bindings: The bindings to use for deserialization.
     :param core: The type system to use for deserialization.
 
     :returns: The deserialized state with an instantiated process.
     """
-    deserialized = serialized.copy()
-    protocol, address = serialized['address'].split(':', 1)
+    deserialized = encoded.copy()
+    protocol, address = encoded['address'].split(':', 1)
 
     if 'instance' in deserialized:
         instantiate = type(deserialized['instance'])
@@ -76,11 +76,11 @@ def deserialize_process(serialized, bindings=None, core=None):
 
     config = core.hydrate_state(
         instantiate.config_schema,
-        serialized.get('config', {}))
+        encoded.get('config', {}))
 
     interval = core.deserialize(
         process_interval_schema,
-        serialized.get('interval'))
+        encoded.get('interval'))
 
     if not 'instance' in deserialized:
         process = instantiate(config)
@@ -92,9 +92,9 @@ def deserialize_process(serialized, bindings=None, core=None):
     return deserialized
 
 
-def deserialize_step(serialized, bindings=None, core=None):
-    deserialized = serialized.copy()
-    protocol, address = serialized['address'].split(':', 1)
+def deserialize_step(encoded, bindings=None, core=None):
+    deserialized = encoded.copy()
+    protocol, address = encoded['address'].split(':', 1)
 
     if 'instance' in deserialized:
         instantiate = type(deserialized['instance'])
@@ -109,7 +109,7 @@ def deserialize_step(serialized, bindings=None, core=None):
 
     config = core.hydrate_state(
         instantiate.config_schema,
-        serialized.get('config', {}))
+        encoded.get('config', {}))
 
     if not 'instance' in deserialized:
         process = instantiate(config)
