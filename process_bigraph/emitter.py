@@ -94,6 +94,11 @@ class RAMEmitter(Emitter):
         return result
 
 
+class ContainerEmitter(Emitter):
+    config_schema = {
+        'ports': 'tree[any]'
+    }
+
 class DatabaseEmitter(Emitter):
     """
         Emit data to a mongoDB database
