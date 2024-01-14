@@ -96,11 +96,15 @@ class RAMEmitter(Emitter):
 
 class ContainerEmitter(Emitter):
     config_schema = {
-        'ports': 'tree[any]'
+        'ports': 'tree[any]',
+        'container_id': 'string'
     }
 
     def __init__(self, config: Dict):
         super().__init__(config)
+        self.container_id = self.config.get('container_id')
+        if not self.container_id:
+            raise ValueError('You must define a container id for this container emitter.')
 
     def schema(self):
         return self.config['ports']
@@ -111,6 +115,7 @@ class ContainerEmitter(Emitter):
             some store and this method should return an empty dict (state).
         """
         # TODO: Complete this implementation.
+        data = state['data']
         return {}
 
     def query(self, query=None):
