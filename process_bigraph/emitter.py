@@ -99,6 +99,18 @@ class ContainerEmitter(Emitter):
         'ports': 'tree[any]'
     }
 
+    def schema(self):
+        pass
+
+    def update(self, state) -> Dict:
+        """Run the container and emit data from the script being called
+            in the `CMD` line of the Dockerfile.
+        """
+        pass
+
+    def query(self):
+        pass
+
 class DatabaseEmitter(Emitter):
     """
         Emit data to a mongoDB database
