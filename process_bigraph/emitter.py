@@ -99,17 +99,26 @@ class ContainerEmitter(Emitter):
         'ports': 'tree[any]'
     }
 
+    def __init__(self, config: Dict):
+        super().__init__(config)
+
     def schema(self):
-        pass
+        return self.config['ports']
 
     def update(self, state) -> Dict:
         """Run the container and emit data from the script being called
-            in the `CMD` line of the Dockerfile.
+            in the `CMD` line of the Dockerfile. The emitted data should go into
+            some store and this method should return an empty dict (state).
+        """
+        # TODO: Complete this implementation.
+        return {}
+
+    def query(self, query=None):
+        """Run a script from a container that looks up values inside the value store
+            container.
         """
         pass
 
-    def query(self):
-        pass
 
 class DatabaseEmitter(Emitter):
     """
