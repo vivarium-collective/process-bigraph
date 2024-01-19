@@ -40,6 +40,13 @@ class Emitter(Step):
         the primary historical collection whose type pertains to Emitter child, i.e:
             database-emitter=>`pymongo.Collection`, ram-emitter=>`.RamEmitter.history`(`List`)
     """
+    config_schema = {
+        'inputs_schema': 'tree[any]',
+    }
+
+    def schema(self) -> Dict:
+        return {'inputs': self.config['inputs_schema']}
+
     def query(self, query=None):
         return {}
 
@@ -48,13 +55,6 @@ class Emitter(Step):
 
 
 class ConsoleEmitter(Emitter):
-    config_schema = {
-        'ports': 'tree[any]'}
-
-
-    def schema(self) -> Dict:
-        return self.config['ports']
-
 
     def update(self, state) -> Dict:
         print(state)
@@ -62,23 +62,14 @@ class ConsoleEmitter(Emitter):
 
 
 class RAMEmitter(Emitter):
-    config_schema = {
-        'ports': 'tree[any]'}
-
 
     def __init__(self, config):
         super().__init__(config)
-
         self.history = []
-
-
-    def schema(self) -> Dict:
-        return self.config['ports']
 
 
     def update(self, state) -> Dict:
         self.history.append(copy.deepcopy(state))
-
         return {}
 
 
@@ -116,7 +107,6 @@ class DatabaseEmitter(Emitter):
     """
     client_dict: Dict[int, MongoClient] = {}
     config_schema = {
-        'ports': 'tree[any]',
         'experiment_id': {
             '_type': 'string',
             '_default': str(uuid.uuid4())
@@ -150,8 +140,7 @@ class DatabaseEmitter(Emitter):
 
                 {'experiment_id':,
                  'emit_limit':,
-                 'embed_path':,
-                 'ports': {}}
+                 'embed_path':}
 
                 TODO: Automate this process for the user in builder
         """
@@ -246,8 +235,6 @@ class DatabaseEmitter(Emitter):
         print(emit_data)
         return {}
 
-    def schema(self) -> Dict:
-        return self.config['ports']
 
 
 def format_data(table_id: str, time: Optional[Union[int, str]] = None, **values: Any) -> Dict[str, Any]:
