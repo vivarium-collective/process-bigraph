@@ -405,7 +405,8 @@ class Composite(Process):
             initial_composition,
             initial_state)
 
-        self.composition = copy.deepcopy(composition)
+        self.composition = copy.deepcopy(
+            self.core.access(composition))
 
         # TODO: add flag to self.core.access(copy=True)
         initial_schema = self.core.access(
@@ -625,8 +626,6 @@ class Composite(Process):
             series = defer.get()
             if not isinstance(series, list):
                 series = [series]
-
-            import ipdb; ipdb.set_trace()
 
             for update in series:
                 paths = hierarchy_depth(update)
