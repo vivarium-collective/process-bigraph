@@ -280,7 +280,7 @@ class ProcessTypes(TypeSystem):
         initial_state = edge['instance'].initial_state()
         input_ports = get_path(schema, path + ('_inputs',))
         output_ports = get_path(schema, path + ('_outputs',))
-        ports = {'inputs': input_ports, 'outputs': output_ports}
+        ports = {'_inputs': input_ports, '_outputs': output_ports}
 
         input_state = self.project_edge(
             ports,

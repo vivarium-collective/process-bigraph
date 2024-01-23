@@ -626,6 +626,8 @@ class Composite(Process):
             if not isinstance(series, list):
                 series = [series]
 
+            import ipdb; ipdb.set_trace()
+
             for update in series:
                 paths = hierarchy_depth(update)
                 update_paths.extend(paths.keys())

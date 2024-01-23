@@ -41,11 +41,10 @@ class Emitter(Step):
             database-emitter=>`pymongo.Collection`, ram-emitter=>`.RamEmitter.history`(`List`)
     """
     config_schema = {
-        'inputs_schema': 'tree[any]',
-    }
+        'ports': 'schema'}
 
-    def schema(self) -> Dict:
-        return {'inputs': self.config['inputs_schema']}
+    def inputs(self) -> Dict:
+        return self.config['ports']
 
     def query(self, query=None):
         return {}

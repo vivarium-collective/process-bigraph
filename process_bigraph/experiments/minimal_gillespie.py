@@ -9,7 +9,14 @@ general stochastic transcription.
 
 
 import numpy as np
-from process_bigraph import Step, Process, Composite
+from process_bigraph import Step, Process, Composite, core
+
+
+core.register(
+    'default 1', {
+    # 'float(default:1.0)', {
+        '_type': 'float',
+        '_default': 1.0})
 
 
 class GillespieInterval(Step):
@@ -22,17 +29,25 @@ class GillespieInterval(Step):
             '_default': '1e-1'}}
 
 
-    def interface(self):
+    def inputs(self):
         return {
-            'inputs': {
-                'DNA': {
-                    'G': {
-                        '_type': 'float',
-                        '_default': '1.0'}},
-                'mRNA': {
-                    'C': {
-                        '_type': 'float',
-                        '_default': '1.0'}}},
+
+            'DNA': 'map[default 1]',
+            'mRNA': {
+                'A mRNA': 'default 1',
+                'B mRNA': 'default 1'}}
+
+                    # {
+                    # '_type': 'map',
+                    # '_value': 'float(default:1.0)'},
+
+                    # 'G': {
+                    #     '_type': 'float',
+                    #     '_default': '1.0'}},
+
+
+    def outputs(self):
+        return {
             'outputs': {
                 'interval': 'float'}}
 
@@ -40,13 +55,14 @@ class GillespieInterval(Step):
     def initial_state(self):
         return {
             'mRNA': {
-                'C': 2.0}}
+                'A mRNA': 2.0,
+                'B mRNA': 3.0}}
 
 
     def update(self, input):
         # retrieve the state values
-        g = input['DNA']['G']
-        c = input['mRNA']['C']
+        g = input['DNA']['A gene']
+        c = input['mRNA']['A mRNA']
 
         array_state = np.array([g, c])
 
@@ -61,6 +77,7 @@ class GillespieInterval(Step):
 
         output = {
             'interval': interval}
+
         return output
 
 
@@ -82,18 +99,41 @@ class GillespieEvent(Process):
 
     def initial_state(self):
         return {
-            'mRNA': {'C': 11.111},
+            'mRNA': {
+                'C mRNA': 11.111},
             'DNA': {
-                'G': 3.0}}
+                'A gene': 3.0,
+                'B gene': 5.0}}
 
 
-    def interface(self):
+    def inputs(self):
         return {
-            'inputs': {
-                'DNA': 'tree[float]',
-                'mRNA': 'tree[float]'},
-            'outputs': {
-                'mRNA': 'tree[float]'}}
+            'mRNA': 'map[float]',
+            'DNA': {
+                'A gene': 'float',
+                'B gene': 'float'}}
+
+                    # {
+                    # '_type': 'map',
+                    # '_value': 'float(default:1.0)'},
+
+                    # 'G': {
+                    #     '_type': 'float',
+                    #     '_default': '1.0'}},
+
+
+    def outputs(self):
+        return {
+            'mRNA': 'map[float]'}
+
+
+    # def interface(self):
+    #     return {
+    #         'inputs': {
+    #             'DNA': 'tree[float]',
+    #             'mRNA': 'tree[float]'},
+    #         'outputs': {
+    #             'mRNA': 'tree[float]'}}
 
 
     def next_reaction(self, x):
@@ -118,8 +158,8 @@ class GillespieEvent(Process):
     def update(self, state, interval):
 
         # retrieve the state values, put them in array
-        g = state['DNA']['G']
-        c = state['mRNA']['C']
+        g = state['DNA']['A gene']
+        c = state['mRNA']['A mRNA']
         array_state = np.array([g, c])
 
         # calculate the next reaction
@@ -131,7 +171,8 @@ class GillespieEvent(Process):
 
         update = {
             'mRNA': {
-                'C': d_c}}
+                'A mRNA': d_c}}
+
         return update
 
 
@@ -185,7 +226,6 @@ def test_gillespie_composite():
                 'mRNA': ['mRNA']}},
 
         'state': {
-            'mRNA': {'C': 23.0},
             'interval': {
                 '_type': 'step',
                 'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
@@ -212,9 +252,8 @@ def test_gillespie_composite():
                 'address': 'local:ram-emitter',
                 'config': {
                     'ports': {
-                        'inputs': {
-                            'mRNA': 'tree[float]',
-                            'interval': 'float'}}},
+                        'mRNA': 'map[float]',
+                        'interval': 'float'}},
                 'inputs': {
                     'mRNA': ['mRNA'],
                     'interval': ['event', 'interval']}}}}
@@ -244,9 +283,11 @@ def test_gillespie_composite():
 
     updates = gillespie.update({
         'DNA': {
-            'G': 11.0},
+            'A gene': 11.0,
+            'B gene': 5.0},
         'mRNA': {
-            'C': 5.0}},
+            'A mRNA': 33.3,
+            'B mRNA': 2.1}},
         1000.0)
 
     # TODO: make this work
