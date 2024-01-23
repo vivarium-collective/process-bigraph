@@ -197,7 +197,7 @@ class ProcessTypes(TypeSystem):
                 # TODO: fix is_descendant
                 # if core.type_registry.is_descendant('process', state_schema) or core.registry.is_descendant('step', state_schema):
                 if state_type == 'process' or state_type == 'step':
-                    port_schema = hydrated_state['instance'].schema()
+                    port_schema = hydrated_state['instance'].interface()
 
                     for port_key in ['inputs', 'outputs']:
                         subschema = port_schema.get(

@@ -61,10 +61,6 @@ class Step(Edge):
             config)
 
 
-    def schema(self):
-        return {}
-
-
     def initial_state(self):
         return {}
 
@@ -112,10 +108,6 @@ class Process(Edge):
         self.config = self.core.fill(
             self.config_schema,
             config)
-
-
-    def schema(self):
-        return {}
 
 
     def initial_state(self):
@@ -283,8 +275,8 @@ def build_step_network(steps):
             if step_key == other_key:
                 continue
 
-            schema = step['instance'].schema()
-            other_schema = other_step['instance'].schema()
+            schema = step['instance'].interface()
+            other_schema = other_step['instance'].interface()
 
             if ancestors[step_key]['input_paths'] is None:
                 ancestors[step_key]['input_paths'] = find_leaves(
@@ -462,8 +454,9 @@ class Composite(Process):
             self.composition,
             state)
 
+        self.process_schema = {}
         for port in ['inputs', 'outputs']:
-            self.process_schema = self.core.infer_edge(
+            self.process_schema[port] = self.core.infer_edge(
                 self.composition,
                 self.bridge[port])
 
@@ -512,7 +505,7 @@ class Composite(Process):
         return to_run
 
 
-    def schema(self):
+    def interface(self):
         return self.process_schema
 
 
@@ -643,7 +636,7 @@ class Composite(Process):
                     update)
 
                 bridge_update = self.core.view(
-                    self.process_schema,
+                    self.interface()['outputs'],
                     self.bridge['outputs'],
                     (),
                     update)
@@ -814,7 +807,7 @@ class Composite(Process):
         # do everything
 
         projection = self.core.project(
-            self.schema(),
+            self.interface()['inputs'],
             self.bridge['inputs'],
             [],
             state)

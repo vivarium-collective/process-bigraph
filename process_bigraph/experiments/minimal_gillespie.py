@@ -22,7 +22,7 @@ class GillespieInterval(Step):
             '_default': '1e-1'}}
 
 
-    def schema(self):
+    def interface(self):
         return {
             'inputs': {
                 'DNA': {
@@ -87,7 +87,7 @@ class GillespieEvent(Process):
                 'G': 3.0}}
 
 
-    def schema(self):
+    def interface(self):
         return {
             'inputs': {
                 'DNA': 'tree[float]',

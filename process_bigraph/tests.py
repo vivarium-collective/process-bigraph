@@ -19,7 +19,7 @@ class IncreaseProcess(Process):
         super().__init__(config)
 
 
-    def schema(self):
+    def interface(self):
         return {
             'inputs': {
                 'level': 'float'},
@@ -54,12 +54,12 @@ def test_merge_collections():
 
 def test_process():
     process = IncreaseProcess({'rate': 0.2})
-    schema = process.schema()
-    state = core.fill(schema['inputs'])
-    state = core.fill(schema['outputs'])
+    interface = process.interface()
+    state = core.fill(interface['inputs'])
+    state = core.fill(interface['outputs'])
     update = process.update({'level': 5.5}, 1.0)
 
-    new_state = core.apply(schema['outputs'], state, update)
+    new_state = core.apply(interface['outputs'], state, update)
 
     assert new_state['level'] == 1.1
 
@@ -127,7 +127,7 @@ class OperatorStep(Step):
         'operator': 'string'}
 
 
-    def schema(self):
+    def interface(self):
         return {
             'inputs': {
                 'a': 'float',
@@ -252,7 +252,7 @@ class SimpleCompartment(Process):
         'id': 'string'}
 
 
-    def schema(self):
+    def interface(self):
         return {
             'outer': 'tree[process]',
             'inner': 'tree[process]'}
@@ -267,7 +267,7 @@ class SimpleCompartment(Process):
 
         # TODO: implement divide_state(_)
         divisions = self.core.divide_state(
-            self.schema(),
+            self.interface(),
             inner)
 
         if choice < 0.2:
