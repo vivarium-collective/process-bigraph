@@ -12,9 +12,12 @@ import numpy as np
 from process_bigraph import Step, Process, Composite, core
 
 
+# 'map[float](default:1.0|apply:set)'
+# 'float(default:1.0)'
+
+
 core.register(
     'default 1', {
-    # 'float(default:1.0)', {
         '_type': 'float',
         '_default': 1.0})
 
@@ -31,7 +34,6 @@ class GillespieInterval(Step):
 
     def inputs(self):
         return {
-
             'DNA': 'map[default 1]',
             'mRNA': {
                 'A mRNA': 'default 1',
@@ -48,8 +50,7 @@ class GillespieInterval(Step):
 
     def outputs(self):
         return {
-            'outputs': {
-                'interval': 'float'}}
+            'interval': 'float'}
 
 
     def initial_state(self):
@@ -112,15 +113,6 @@ class GillespieEvent(Process):
             'DNA': {
                 'A gene': 'float',
                 'B gene': 'float'}}
-
-                    # {
-                    # '_type': 'map',
-                    # '_value': 'float(default:1.0)'},
-
-                    # 'G': {
-                    #     '_type': 'float',
-                    #     '_default': '1.0'}},
-
 
     def outputs(self):
         return {

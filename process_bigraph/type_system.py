@@ -42,6 +42,12 @@ def serialize_process(value, bindings=None, core=None):
     return process
 
 
+def assert_interface(interface):
+    required_keys = ['inputs', 'outputs']
+    existing_keys = set(interface.keys())
+    assert existing_keys == set(required_keys), f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
+
+
 DEFAULT_INTERVAL = 1.0
 
 
@@ -198,6 +204,8 @@ class ProcessTypes(TypeSystem):
                 # if core.type_registry.is_descendant('process', state_schema) or core.registry.is_descendant('step', state_schema):
                 if state_type == 'process' or state_type == 'step':
                     port_schema = hydrated_state['instance'].interface()
+                    assert_interface(
+                        port_schema)
 
                     for port_key in ['inputs', 'outputs']:
                         subschema = port_schema.get(

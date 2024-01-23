@@ -11,7 +11,7 @@ import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
 from bigraph_schema.type_system import Edge
-from process_bigraph.type_system import core
+from process_bigraph.type_system import core, assert_interface
 from process_bigraph.protocols import local_lookup_module
 
 
@@ -277,6 +277,9 @@ def build_step_network(steps):
 
             schema = step['instance'].interface()
             other_schema = other_step['instance'].interface()
+
+            assert_interface(schema)
+            assert_interface(other_schema)
 
             if ancestors[step_key]['input_paths'] is None:
                 ancestors[step_key]['input_paths'] = find_leaves(
