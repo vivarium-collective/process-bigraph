@@ -243,7 +243,7 @@ def test_gillespie_composite():
                 '_type': 'step',
                 'address': 'local:ram-emitter',
                 'config': {
-                    'ports': {
+                    'emit': {
                         'mRNA': 'map[float]',
                         'interval': 'float'}},
                 'inputs': {
@@ -288,6 +288,13 @@ def test_gillespie_composite():
     assert 'mRNA' in updates[0]
 
 
+def test_union_tree():
+    tree_union = core.access('list[string]~tree[list[string]]')
+    assert core.check(
+        tree_union,
+        {'a': ['what', 'is', 'happening']})
+
+
 def test_stochastic_deterministic_composite():
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
@@ -295,3 +302,4 @@ def test_stochastic_deterministic_composite():
 
 if __name__ == '__main__':
     test_gillespie_composite()
+    test_union_tree()

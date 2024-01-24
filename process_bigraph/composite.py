@@ -458,6 +458,11 @@ class Composite(Process):
             self.composition,
             state)
 
+        # TODO: call validate on this composite, not just check
+        # assert self.core.validate(
+        #     self.composition,
+        #     self.state)
+
         self.process_schema = {}
         for port in ['inputs', 'outputs']:
             self.process_schema[port] = self.core.infer_edge(
