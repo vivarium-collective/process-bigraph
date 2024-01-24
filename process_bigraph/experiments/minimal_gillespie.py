@@ -50,7 +50,7 @@ class GillespieInterval(Step):
 
     def outputs(self):
         return {
-            'interval': 'float'}
+            'interval': 'interval'}
 
 
     def initial_state(self):
@@ -78,6 +78,8 @@ class GillespieInterval(Step):
 
         output = {
             'interval': interval}
+
+        print(f'produced interval: {output}')
 
         return output
 
@@ -119,15 +121,6 @@ class GillespieEvent(Process):
             'mRNA': 'map[float]'}
 
 
-    # def interface(self):
-    #     return {
-    #         'inputs': {
-    #             'DNA': 'tree[float]',
-    #             'mRNA': 'tree[float]'},
-    #         'outputs': {
-    #             'mRNA': 'tree[float]'}}
-
-
     def next_reaction(self, x):
         """get the next reaction and return a new state"""
 
@@ -164,6 +157,8 @@ class GillespieEvent(Process):
         update = {
             'mRNA': {
                 'A mRNA': d_c}}
+
+        print(f'received interval: {interval}')
 
         return update
 
@@ -242,11 +237,16 @@ def test_gillespie_composite():
             'emitter': {
                 '_type': 'step',
                 'address': 'local:ram-emitter',
+                #     'emit': 'tree[any]'},
+                # 'inputs': []}}}
+
                 'config': {
                     'emit': {
+                        'time': 'float',
                         'mRNA': 'map[float]',
-                        'interval': 'float'}},
+                        'interval': 'interval'}},
                 'inputs': {
+                    'time': ['global_time'],
                     'mRNA': ['mRNA'],
                     'interval': ['event', 'interval']}}}}
 

@@ -251,12 +251,15 @@ def find_leaves(d, path=None):
     leaves = []
     path = ()
 
-    for key, value in d.items():
-        if isinstance(value, dict):
-            subleaves = find_leaves(value, path + (key,))
-            leaves.extend(subleaves)
-        else:
-            leaves.append(path + tuple(value))
+    if isinstance(d, list):
+        leaves = d
+    else:
+        for key, value in d.items():
+            if isinstance(value, dict):
+                subleaves = find_leaves(value, path + (key,))
+                leaves.extend(subleaves)
+            else:
+                leaves.append(path + tuple(value))
 
     return leaves
 
@@ -568,7 +571,8 @@ class Composite(Process):
 
     def run_process(self, path, process, end_time, full_step, force_complete):
         if path not in self.front:
-            self.front[path] = empty_front(self.state['global_time'])
+            self.front[path] = empty_front(
+                self.state['global_time'])
 
         process_time = self.front[path]['time']
         if process_time <= self.state['global_time']:
@@ -596,6 +600,11 @@ class Composite(Process):
                 # set future time based on global_time_precision
                 future = round(future, self.global_time_precision)
 
+            # absolute interval
+            interval = future - self.state['global_time']
+            if interval < full_step:
+                full_step = interval
+
             if future <= end_time:
                 update = self.process_update(
                     path,
@@ -608,16 +617,6 @@ class Composite(Process):
                 self.front[path]['time'] = future
                 self.front[path]['update'] = update
 
-                # absolute interval
-                interval = future - self.state['global_time']
-                if interval < full_step:
-                    full_step = interval
-            else:
-                # absolute interval
-                interval = future - self.state['global_time']
-                if interval < full_step:
-                    full_step = interval
-
         else:
             # don't shoot past processes that didn't run this time
             process_delay = process_time - self.state['global_time']
@@ -626,12 +625,16 @@ class Composite(Process):
 
         return full_step
 
+
     def apply_updates(self, updates):
         # view_expire = False
         update_paths = []
 
         for defer in updates:
             series = defer.get()
+            if series is None:
+                continue
+
             if not isinstance(series, list):
                 series = [series]
 
@@ -667,7 +670,8 @@ class Composite(Process):
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
 
-            for path, process in self.process_paths.items():
+            for path in self.process_paths:
+                process = get_path(self.state, path)
                 full_step = self.run_process(
                     path,
                     process,
@@ -769,6 +773,8 @@ class Composite(Process):
             to_run = self.cycle_step_state()
             if len(to_run) > 0:
                 self.run_steps(to_run)
+            else:
+                self.steps_run = set([])
         else:
             self.steps_run = set([])
 

@@ -8,15 +8,9 @@ from bigraph_schema import Edge, TypeSystem, get_path, establish_path, set_path,
 from process_bigraph.registry import protocol_registry
 
 
-process_interval_schema = {
-    '_type': 'float',
-    '_apply': 'set',
-    '_default': '1.0'}
-
-
 # TODO: implement these
-def apply_process(current, update, bindings=None, core=None):
-    process_schema = dict(core.access('process'))
+def apply_process(current, update, schema, core):
+    process_schema = schema.copy()
     process_schema.pop('_apply')
     return core.apply(
         process_schema,
@@ -24,17 +18,17 @@ def apply_process(current, update, bindings=None, core=None):
         update)
 
 
-def check_process(state, bindings, core):
+def check_process(state, schema, core):
     return 'instance' in state and isinstance(
         state['instance'],
         Edge)
 
 
-def divide_process(value, bindings=None, core=None):
+def divide_process(value, schema, core):
     return value
 
 
-def serialize_process(value, bindings=None, core=None):
+def serialize_process(value, schema, core):
     """Serialize a process to a JSON-safe representation."""
     # TODO -- need to get back the protocol: address and the config
     process = value.copy()
@@ -55,7 +49,7 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
-def deserialize_process(encoded, bindings=None, core=None):
+def deserialize_process(encoded, schema, core):
     """Deserialize a process from a serialized state.
 
     This function is used by the type system to deserialize a process.
@@ -85,7 +79,7 @@ def deserialize_process(encoded, bindings=None, core=None):
         encoded.get('config', {}))
 
     interval = core.deserialize(
-        process_interval_schema,
+        'interval',
         encoded.get('interval'))
 
     if not 'instance' in deserialized:
@@ -98,7 +92,7 @@ def deserialize_process(encoded, bindings=None, core=None):
     return deserialized
 
 
-def deserialize_step(encoded, bindings=None, core=None):
+def deserialize_step(encoded, schema, core):
     deserialized = encoded.copy()
     protocol, address = encoded['address'].split(':', 1)
 
@@ -128,10 +122,17 @@ def deserialize_step(encoded, bindings=None, core=None):
 
 process_types = {
     'protocol': {
-        '_super': 'string'},
+        '_type': 'protocol',
+        '_inherit': 'string'},
+
+    'interval': {
+        '_type': 'interval',
+        '_inherit': 'float',
+        '_apply': 'set',
+        '_default': '1.0'},
 
     'step': {
-        '_super': ['edge'],
+        '_inherit': 'edge',
         '_apply': apply_process,
         '_serialize': serialize_process,
         '_deserialize': deserialize_step,
@@ -143,7 +144,7 @@ process_types = {
         'config': 'tree[any]'},
 
     'process': {
-        '_super': ['edge'],
+        '_inherit': 'edge',
         '_apply': apply_process,
         '_serialize': serialize_process,
         '_deserialize': deserialize_process,
@@ -151,7 +152,7 @@ process_types = {
         '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
-        'interval': process_interval_schema
+        'interval': 'interval',
     }
 }
 
@@ -270,8 +271,7 @@ class ProcessTypes(TypeSystem):
         edge = {}
 
         if isinstance(wires, str):
-            import ipdb;
-            ipdb.set_trace()
+            import ipdb; ipdb.set_trace()
 
         for port_key, wire in wires.items():
             if isinstance(wire, dict):
