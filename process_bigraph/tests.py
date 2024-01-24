@@ -73,7 +73,7 @@ def test_composite():
 
     composite = Composite({
         'composition': {
-            'increase': 'process[level.float,level.float]',
+            'increase': 'process[level:float,level:float]',
             'value': 'float'},
         'schema': {
             'inputs': {
