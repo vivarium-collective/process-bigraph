@@ -253,6 +253,8 @@ def find_leaves(d, path=None):
 
     if isinstance(d, list):
         leaves = d
+    elif isinstance(d, tuple):
+        leaves.append(d)
     else:
         for key, value in d.items():
             if isinstance(value, dict):

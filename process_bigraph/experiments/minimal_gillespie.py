@@ -247,8 +247,8 @@ def test_gillespie_composite():
                     'mRNA': ['mRNA'],
                     'interval': ['event', 'interval']}}}}
 
-                #     'emit': 'tree[any]'},
-                # 'inputs': []}}}
+                #     'emit': 'any'},
+                # 'inputs': ()}}}
 
 
             # TODO: provide a way to emit everything:
