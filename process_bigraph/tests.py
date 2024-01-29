@@ -122,6 +122,10 @@ def test_infer():
     assert composite.state['value'] == 11.11
 
 
+def test_process_type():
+    assert core.access('process')['_type'] == 'process'
+
+
 class OperatorStep(Step):
     config_schema = {
         'operator': 'string'}

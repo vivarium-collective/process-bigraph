@@ -132,6 +132,7 @@ process_types = {
         '_default': '1.0'},
 
     'step': {
+        '_type': 'step',
         '_inherit': 'edge',
         '_apply': apply_process,
         '_serialize': serialize_process,
@@ -144,6 +145,7 @@ process_types = {
         'config': 'tree[any]'},
 
     'process': {
+        '_type': 'process',
         '_inherit': 'edge',
         '_apply': apply_process,
         '_serialize': serialize_process,

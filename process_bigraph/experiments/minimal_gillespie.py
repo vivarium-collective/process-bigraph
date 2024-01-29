@@ -237,9 +237,6 @@ def test_gillespie_composite():
             'emitter': {
                 '_type': 'step',
                 'address': 'local:ram-emitter',
-                #     'emit': 'tree[any]'},
-                # 'inputs': []}}}
-
                 'config': {
                     'emit': {
                         'time': 'float',
@@ -249,6 +246,10 @@ def test_gillespie_composite():
                     'time': ['global_time'],
                     'mRNA': ['mRNA'],
                     'interval': ['event', 'interval']}}}}
+
+                #     'emit': 'tree[any]'},
+                # 'inputs': []}}}
+
 
             # TODO: provide a way to emit everything:
             # 'emitter': emit_all(
