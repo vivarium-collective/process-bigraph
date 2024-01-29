@@ -382,12 +382,11 @@ class Composite(Process):
 
 
     config_schema = {
-        # TODO: add schema type
-        'composition': 'tree[any]',
+        'composition': 'schema',
         'state': 'tree[any]',
         'schema': {
-            'inputs': 'tree[any]',
-            'outputs': 'tree[any]'},
+            'inputs': 'schema',
+            'outputs': 'schema'},
         'bridge': {
             'inputs': 'wires',
             'outputs': 'wires'},
