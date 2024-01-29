@@ -18,7 +18,7 @@ from process_bigraph import Step, Process, Composite, core
 
 core.register(
     'default 1', {
-        '_type': 'float',
+        '_inherit': 'float',
         '_default': 1.0})
 
 
