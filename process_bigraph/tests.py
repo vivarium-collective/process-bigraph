@@ -3,9 +3,15 @@ Tests for Process Bigraph
 """
 
 import random
+import pytest
 
-from process_bigraph.composite import Process, Step, Composite, merge_collections
-from process_bigraph.type_system import core
+from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
+# from process_bigraph.type_system import ProcessTypes
+
+
+@pytest.fixture
+def core():
+    return ProcessTypes()
 
 
 class IncreaseProcess(Process):
@@ -15,16 +21,14 @@ class IncreaseProcess(Process):
             '_default': '0.1'}}
 
 
-    def __init__(self, config=None):
-        super().__init__(config)
-
-
-    def interface(self):
+    def inputs(self):
         return {
-            'inputs': {
-                'level': 'float'},
-            'outputs': {
-                'level': 'float'}}
+            'level': 'float'}
+
+
+    def outputs(self):
+        return {
+            'level': 'float'}
 
 
     def initial_state(self):
@@ -38,12 +42,12 @@ class IncreaseProcess(Process):
             'level': state['level'] * self.config['rate']}
 
 
-def test_default_config():
-    process = IncreaseProcess()
+def test_default_config(core):
+    process = IncreaseProcess({}, core)
     assert process.config['rate'] == 0.1
 
 
-def test_merge_collections():
+def test_merge_collections(core):
     a = {('what',): [1, 2, 3]}
     b = {('okay', 'yes'): [3, 3], ('what',): [4, 5, 11]}
 
@@ -52,8 +56,8 @@ def test_merge_collections():
     assert c[('what',)] == [1, 2, 3, 4, 5, 11]
 
 
-def test_process():
-    process = IncreaseProcess({'rate': 0.2})
+def test_process(core):
+    process = IncreaseProcess({'rate': 0.2}, core)
     interface = process.interface()
     state = core.fill(interface['inputs'])
     state = core.fill(interface['outputs'])
@@ -64,7 +68,7 @@ def test_process():
     assert new_state['level'] == 1.1
 
 
-def test_composite():
+def test_composite(core):
     # TODO: add support for the various vivarium emitter
 
     # increase = IncreaseProcess({'rate': 0.3})
@@ -92,7 +96,7 @@ def test_composite():
                 'interval': 1.0,
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}})
+            'value': '11.11'}}, core)
 
     initial_state = {'exchange': 3.33}
 
@@ -107,7 +111,7 @@ def test_composite():
     assert updates[0]['exchange'] == 0.999
 
 
-def test_infer():
+def test_infer(core):
     composite = Composite({
         'state': {
             'increase': {
@@ -116,13 +120,13 @@ def test_infer():
                 'config': {'rate': '0.3'},
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}})
+            'value': '11.11'}}, core)
 
     assert composite.composition['value']['_type'] == 'float'
     assert composite.state['value'] == 11.11
 
 
-def test_process_type():
+def test_process_type(core):
     assert core.access('process')['_type'] == 'process'
 
 
@@ -131,13 +135,15 @@ class OperatorStep(Step):
         'operator': 'string'}
 
 
-    def interface(self):
+    def inputs(self):
         return {
-            'inputs': {
-                'a': 'float',
-                'b': 'float'},
-            'outputs': {
-                'c': 'float'}}
+            'a': 'float',
+            'b': 'float'}
+
+
+    def outputs(self):
+        return {
+            'c': 'float'}
 
 
     def update(self, inputs):
@@ -154,7 +160,7 @@ class OperatorStep(Step):
         return {'c': c}
 
 
-def test_step_initialization():
+def test_step_initialization(core):
     composite = Composite({
         'state': {
             'A': 13,
@@ -178,13 +184,13 @@ def test_step_initialization():
                     'a': ['B'],
                     'b': ['C']},
                 'outputs': {
-                    'c': ['D']}}}})
+                    'c': ['D']}}}}, core)
 
 
     assert composite.state['D'] == (13 + 21) * 21
 
 
-def test_dependencies():
+def test_dependencies(core):
     operation = {
         'a': 11.111,
         'b': 22.2,
@@ -241,7 +247,7 @@ def test_dependencies():
             'outputs': {
                 'c': ['i']}}}
 
-    composite = Composite({'state': operation})
+    composite = Composite({'state': operation}, core)
 
     assert composite.state['h'] == -17396.469884
 
@@ -367,11 +373,13 @@ def test_reaction():
 
 
 if __name__ == '__main__':
-    test_default_config()
-    test_merge_collections()
-    test_process()
-    test_composite()
-    test_infer()
-    test_step_initialization()
-    test_dependencies()
+    core = ProcessTypes()
+
+    test_default_config(core)
+    test_merge_collections(core)
+    test_process(core)
+    test_composite(core)
+    test_infer(core)
+    test_step_initialization(core)
+    test_dependencies(core)
     # test_reaction()

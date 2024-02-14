@@ -17,8 +17,8 @@ from pymongo.errors import DocumentTooLarge
 from pymongo.database import Database
 from bigraph_schema import get_path, set_path
 from bson import MinKey, MaxKey
-from process_bigraph.composite import Step, Process
-from process_bigraph.registry import process_registry
+from process_bigraph.composite import Step, Process, Emitter
+# from process_bigraph.registry import process_registry
 
 
 HISTORY_INDEXES = [
@@ -33,55 +33,6 @@ CONFIGURATION_INDEXES = [
 ]
 
 SECRETS_PATH = 'secrets.json'
-
-
-class Emitter(Step):
-    """Base emitter class. An `Emitter` implementation instance diverts all querying of data to
-        the primary historical collection whose type pertains to Emitter child, i.e:
-            database-emitter=>`pymongo.Collection`, ram-emitter=>`.RamEmitter.history`(`List`)
-    """
-    config_schema = {
-        'emit': 'schema'}
-
-    def inputs(self) -> Dict:
-        return self.config['emit']
-
-    def query(self, query=None):
-        return {}
-
-    def update(self, state) -> Dict:
-        return {}
-
-
-class ConsoleEmitter(Emitter):
-
-    def update(self, state) -> Dict:
-        print(state)
-        return {}
-
-
-class RAMEmitter(Emitter):
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.history = []
-
-
-    def update(self, state) -> Dict:
-        self.history.append(copy.deepcopy(state))
-        return {}
-
-
-    def query(self, query=None):
-        if isinstance(query, list):
-            result = {}
-            for path in query:
-                element = get_path(self.history, path)
-                result = set_path(result, path, element)
-        else:
-            result = self.history
-
-        return result
 
 
 class DatabaseEmitter(Emitter):
@@ -134,7 +85,7 @@ class DatabaseEmitter(Emitter):
         for column in columns:
             table.create_index(column)
 
-    def __init__(self, config: Dict[str, Any] = None) -> None:
+    def __init__(self, config: Dict[str, Any] = None, core=None) -> None:
         """Config may have 'host' and 'database' items. The config passed is expected to be:
 
                 {'experiment_id':,
@@ -143,7 +94,7 @@ class DatabaseEmitter(Emitter):
 
                 TODO: Automate this process for the user in builder
         """
-        super().__init__(config)
+        super().__init__(config, core)
         self.experiment_id = self.config['experiment_id']
         # In the worst case, `breakdown_data` can underestimate the size of
         # data by a factor of 4: len(str(0)) == 1 but 0 is a 4-byte int.
@@ -263,11 +214,11 @@ def make_fallback_serializer_function() -> Callable:
 
     def default(obj: Any) -> Any:
         # Try to lookup by exclusive type
-        serializer = process_registry.access(str(type(obj)))
+        serializer = self.core.process_registry.access(str(type(obj)))
         if not serializer:
             compatible_serializers = []
-            for serializer_name in process_registry.list():
-                test_serializer = process_registry.access(serializer_name)
+            for serializer_name in self.core.process_registry.list():
+                test_serializer = self.core.process_registry.access(serializer_name)
                 # Subclasses with registered serializers will be caught here
                 if isinstance(obj, test_serializer.python_type):
                     compatible_serializers.append(test_serializer)

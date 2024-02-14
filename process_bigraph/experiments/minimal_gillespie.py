@@ -9,17 +9,18 @@ general stochastic transcription.
 
 
 import numpy as np
-from process_bigraph import Step, Process, Composite, core
+import pytest
+
+from process_bigraph import Step, Process, Composite, ProcessTypes
+
+
+@pytest.fixture
+def core():
+    return ProcessTypes()
 
 
 # 'map[float](default:1.0|apply:set)'
 # 'float(default:1.0)'
-
-
-core.register(
-    'default 1', {
-        '_inherit': 'float',
-        '_default': 1.0})
 
 
 class GillespieInterval(Step):
@@ -95,8 +96,9 @@ class GillespieEvent(Process):
             '_default': '1e-1'}}
 
 
-    def __init__(self, config=None):
-        super().__init__(config)
+    def __init__(self, config=None, core=None):
+        super().__init__(config, core)
+
         self.stoichiometry = np.array([[0, 1], [0, -1]])
 
 
@@ -163,7 +165,13 @@ class GillespieEvent(Process):
         return update
 
 
-def test_gillespie_composite():
+def test_gillespie_composite(core):
+    core.register(
+        'default 1', {
+            '_inherit': 'float',
+            '_default': 1.0})
+
+
     composite_schema = {
         # This all gets inferred -------------
         # ==================================
@@ -272,7 +280,7 @@ def test_gillespie_composite():
             # 'mRNA': {
             #     'C': '21.0'}}}
 
-    gillespie = Composite(composite_schema)
+    gillespie = Composite(composite_schema, core)
 
     updates = gillespie.update({
         'DNA': {
@@ -289,18 +297,20 @@ def test_gillespie_composite():
     assert 'mRNA' in updates[0]
 
 
-def test_union_tree():
+def test_union_tree(core):
     tree_union = core.access('list[string]~tree[list[string]]')
     assert core.check(
         tree_union,
         {'a': ['what', 'is', 'happening']})
 
 
-def test_stochastic_deterministic_composite():
+def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
 
 
 if __name__ == '__main__':
-    test_gillespie_composite()
-    test_union_tree()
+    core = ProcessTypes()
+
+    test_gillespie_composite(core)
+    test_union_tree(core)
