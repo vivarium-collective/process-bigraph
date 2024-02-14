@@ -1,4 +1,5 @@
 import pprint
+
 from process_bigraph.protocols import local_lookup
 from process_bigraph.composite import Process, Step, Composite, ProcessTypes
 
@@ -7,7 +8,7 @@ __all__ = [
     'Process',
     'Step',
     'Composite',
-    'types',
+    'core',
     'pp',
     'pf',
 ]
