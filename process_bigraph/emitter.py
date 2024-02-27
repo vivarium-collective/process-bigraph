@@ -54,4 +54,3 @@ class RAMEmitter(Emitter):
             result = self.history
 
         return result
-

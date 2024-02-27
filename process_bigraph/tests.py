@@ -5,8 +5,13 @@ Tests for Process Bigraph
 import random
 import pytest
 
-from process_bigraph.composite import Process, Step, Composite, merge_collections
-from process_bigraph.type_system import ProcessTypes
+from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
+# from process_bigraph.type_system import ProcessTypes
+
+
+@pytest.fixture
+def core():
+    return ProcessTypes()
 
 
 class IncreaseProcess(Process):
@@ -16,16 +21,14 @@ class IncreaseProcess(Process):
             '_default': '0.1'}}
 
 
-    def __init__(self, config=None, core=None):
-        super().__init__(config, core)
-
-
-    def interface(self):
+    def inputs(self):
         return {
-            'inputs': {
-                'level': 'float'},
-            'outputs': {
-                'level': 'float'}}
+            'level': 'float'}
+
+
+    def outputs(self):
+        return {
+            'level': 'float'}
 
 
     def initial_state(self):
@@ -41,6 +44,7 @@ class IncreaseProcess(Process):
 
 def test_default_config(core):
     process = IncreaseProcess(core=core)
+
     assert process.config['rate'] == 0.1
 
 
@@ -140,13 +144,15 @@ class OperatorStep(Step):
         'operator': 'string'}
 
 
-    def interface(self):
+    def inputs(self):
         return {
-            'inputs': {
-                'a': 'float',
-                'b': 'float'},
-            'outputs': {
-                'c': 'float'}}
+            'a': 'float',
+            'b': 'float'}
+
+
+    def outputs(self):
+        return {
+            'c': 'float'}
 
 
     def update(self, inputs):

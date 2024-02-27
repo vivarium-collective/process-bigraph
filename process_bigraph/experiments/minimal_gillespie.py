@@ -10,7 +10,8 @@ general stochastic transcription.
 
 import numpy as np
 import pytest
-from process_bigraph import Step, Process, Composite, ProcessTypes # , core
+
+from process_bigraph import Step, Process, Composite, ProcessTypes
 
 
 # 'map[float](default:1.0|apply:set)'
@@ -96,8 +97,9 @@ class GillespieEvent(Process):
             '_default': '1e-1'}}
 
 
-    def __init__(self, config=None):
-        super().__init__(config)
+    def __init__(self, config=None, core=None):
+        super().__init__(config, core)
+
         self.stoichiometry = np.array([[0, 1], [0, -1]])
 
 
