@@ -94,8 +94,8 @@ class Process(Edge):
     """
     config_schema = {}
 
-    def __init__(self, config=None, local_types=None):
-        self.core = local_types or core
+    def __init__(self, config=None, core=None):
+        self.core = core or ProcessTypes()
         if config is None:
             config = {}
 
@@ -395,8 +395,8 @@ class Composite(Process):
         'global_time_precision': 'maybe[float]'}
 
 
-    def __init__(self, config=None, local_types=None):
-        super().__init__(config, local_types)
+    def __init__(self, config=None, core=None):
+        super().__init__(config, core)
 
         # insert global_time into schema if not present
         initial_composition = self.config.get('composition', {})

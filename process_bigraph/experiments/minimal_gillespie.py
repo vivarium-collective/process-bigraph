@@ -9,7 +9,8 @@ general stochastic transcription.
 
 
 import numpy as np
-from process_bigraph import Step, Process, Composite # , core
+import pytest
+from process_bigraph import Step, Process, Composite, ProcessTypes # , core
 
 
 # 'map[float](default:1.0|apply:set)'
@@ -163,7 +164,14 @@ class GillespieEvent(Process):
         return update
 
 
-def test_gillespie_composite():
+@pytest.fixture
+def core():
+    core = ProcessTypes()
+    core.import_types(EXPORT)
+    return core
+    
+
+def test_gillespie_composite(core):
     composite_schema = {
         # This all gets inferred -------------
         # ==================================
@@ -272,9 +280,9 @@ def test_gillespie_composite():
             # 'mRNA': {
             #     'C': '21.0'}}}
 
-    gillespie = Composite(composite_schema)
-
-    import ipdb; ipdb.set_trace()
+    gillespie = Composite(
+        composite_schema,
+        core=core)
 
     updates = gillespie.update({
         'DNA': {
@@ -291,18 +299,21 @@ def test_gillespie_composite():
     assert 'mRNA' in updates[0]
 
 
-def test_union_tree():
+def test_union_tree(core):
     tree_union = core.access('list[string]~tree[list[string]]')
     assert core.check(
         tree_union,
         {'a': ['what', 'is', 'happening']})
 
 
-def test_stochastic_deterministic_composite():
+def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
 
 
 if __name__ == '__main__':
-    test_gillespie_composite()
-    test_union_tree()
+    core = ProcessTypes()
+    core.import_types(EXPORT)
+
+    test_gillespie_composite(core)
+    test_union_tree(core)
