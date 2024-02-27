@@ -4,7 +4,6 @@ from typing import Any, Dict, List, Optional, Tuple, Callable, Union
 import numpy as np
 from bigraph_schema import get_path, set_path
 from process_bigraph.composite import Step, Process
-from process_bigraph.registry import process_registry
 
 
 class Emitter(Step):
