@@ -3,7 +3,7 @@ from process_bigraph.protocols import local_lookup
 from process_bigraph.registry import protocol_registry, process_registry,register_process
 from process_bigraph.emitter import ConsoleEmitter, RAMEmitter, DatabaseEmitter
 from process_bigraph.composite import Process, Step, Composite
-from process_bigraph.type_system import ProcessTypes, core
+from process_bigraph.type_system import ProcessTypes # , core
 
 
 __all__ = [

@@ -9,17 +9,17 @@ general stochastic transcription.
 
 
 import numpy as np
-from process_bigraph import Step, Process, Composite, core
+from process_bigraph import Step, Process, Composite # , core
 
 
 # 'map[float](default:1.0|apply:set)'
 # 'float(default:1.0)'
 
 
-core.register(
-    'default 1', {
+EXPORT = {
+    'default 1': {
         '_inherit': 'float',
-        '_default': 1.0})
+        '_default': 1.0}}
 
 
 class GillespieInterval(Step):
@@ -273,6 +273,8 @@ def test_gillespie_composite():
             #     'C': '21.0'}}}
 
     gillespie = Composite(composite_schema)
+
+    import ipdb; ipdb.set_trace()
 
     updates = gillespie.update({
         'DNA': {

@@ -11,7 +11,7 @@ import collections
 from typing import Dict
 from bigraph_schema.registry import deep_merge, validate_merge, get_path
 from bigraph_schema.type_system import Edge
-from process_bigraph.type_system import core, assert_interface
+from process_bigraph.type_system import ProcessTypes, assert_interface
 from process_bigraph.protocols import local_lookup_module
 
 
@@ -50,8 +50,8 @@ class Step(Edge):
     config_schema = {}
 
 
-    def __init__(self, config=None, local_types=None):
-        self.core = local_types or core
+    def __init__(self, config=None, core=None):
+        self.core = core or ProcessTypes()
 
         if config is None:
             config = {}
