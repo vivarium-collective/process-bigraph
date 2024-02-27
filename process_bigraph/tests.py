@@ -43,7 +43,8 @@ class IncreaseProcess(Process):
 
 
 def test_default_config(core):
-    process = IncreaseProcess({}, core)
+    process = IncreaseProcess(core=core)
+
     assert process.config['rate'] == 0.1
 
 
@@ -56,14 +57,22 @@ def test_merge_collections(core):
     assert c[('what',)] == [1, 2, 3, 4, 5, 11]
 
 
+@pytest.fixture
+def core():
+    return ProcessTypes()
+
+
 def test_process(core):
-    process = IncreaseProcess({'rate': 0.2}, core)
+    process = IncreaseProcess({'rate': 0.2}, core=core)
     interface = process.interface()
     state = core.fill(interface['inputs'])
     state = core.fill(interface['outputs'])
     update = process.update({'level': 5.5}, 1.0)
 
-    new_state = core.apply(interface['outputs'], state, update)
+    new_state = core.apply(
+        interface['outputs'],
+        state,
+        update)
 
     assert new_state['level'] == 1.1
 
@@ -96,7 +105,7 @@ def test_composite(core):
                 'interval': 1.0,
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core)
+            'value': '11.11'}}, core=core)
 
     initial_state = {'exchange': 3.33}
 
@@ -120,7 +129,7 @@ def test_infer(core):
                 'config': {'rate': '0.3'},
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core)
+            'value': '11.11'}}, core=core)
 
     assert composite.composition['value']['_type'] == 'float'
     assert composite.state['value'] == 11.11
@@ -184,8 +193,7 @@ def test_step_initialization(core):
                     'a': ['B'],
                     'b': ['C']},
                 'outputs': {
-                    'c': ['D']}}}}, core)
-
+                    'c': ['D']}}}}, core=core)
 
     assert composite.state['D'] == (13 + 21) * 21
 
@@ -247,7 +255,9 @@ def test_dependencies(core):
             'outputs': {
                 'c': ['i']}}}
 
-    composite = Composite({'state': operation}, core)
+    composite = Composite(
+        {'state': operation},
+        core=core)
 
     assert composite.state['h'] == -17396.469884
 

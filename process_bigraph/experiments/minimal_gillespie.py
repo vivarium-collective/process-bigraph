@@ -14,13 +14,14 @@ import pytest
 from process_bigraph import Step, Process, Composite, ProcessTypes
 
 
-@pytest.fixture
-def core():
-    return ProcessTypes()
-
-
 # 'map[float](default:1.0|apply:set)'
 # 'float(default:1.0)'
+
+
+EXPORT = {
+    'default 1': {
+        '_inherit': 'float',
+        '_default': 1.0}}
 
 
 class GillespieInterval(Step):
@@ -165,13 +166,14 @@ class GillespieEvent(Process):
         return update
 
 
+@pytest.fixture
+def core():
+    core = ProcessTypes()
+    core.import_types(EXPORT)
+    return core
+    
+
 def test_gillespie_composite(core):
-    core.register(
-        'default 1', {
-            '_inherit': 'float',
-            '_default': 1.0})
-
-
     composite_schema = {
         # This all gets inferred -------------
         # ==================================
@@ -280,7 +282,9 @@ def test_gillespie_composite(core):
             # 'mRNA': {
             #     'C': '21.0'}}}
 
-    gillespie = Composite(composite_schema, core)
+    gillespie = Composite(
+        composite_schema,
+        core=core)
 
     updates = gillespie.update({
         'DNA': {
@@ -311,6 +315,7 @@ def test_stochastic_deterministic_composite(core):
 
 if __name__ == '__main__':
     core = ProcessTypes()
+    core.import_types(EXPORT)
 
     test_gillespie_composite(core)
     test_union_tree(core)

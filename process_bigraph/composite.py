@@ -10,6 +10,7 @@ import math
 import collections
 from typing import Dict
 
+
 from bigraph_schema import Edge, TypeSystem, get_path, validate_merge, establish_path, set_path, deep_merge
 from bigraph_schema.registry import Registry
 
@@ -17,7 +18,7 @@ from process_bigraph.protocols import local_lookup, local_lookup_module
 
 
 # TODO: implement these
-def apply_process(current, update, schema, core):
+def apply_process(schema, current, update, core):
     process_schema = schema.copy()
     process_schema.pop('_apply')
     return core.apply(
@@ -26,17 +27,17 @@ def apply_process(current, update, schema, core):
         update)
 
 
-def check_process(state, schema, core):
+def check_process(schema, state, core):
     return 'instance' in state and isinstance(
         state['instance'],
         Edge)
 
 
-def divide_process(value, schema, core):
+def divide_process(schema, value, core):
     return value
 
 
-def serialize_process(value, schema, core):
+def serialize_process(schema, value, core):
     """Serialize a process to a JSON-safe representation."""
     # TODO -- need to get back the protocol: address and the config
     process = value.copy()
@@ -57,7 +58,7 @@ TYPE_SCHEMAS = {
     'float': 'float'}
 
 
-def deserialize_process(encoded, schema, core):
+def deserialize_process(schema, encoded, core):
     """Deserialize a process from a serialized state.
 
     This function is used by the type system to deserialize a process.
@@ -91,7 +92,7 @@ def deserialize_process(encoded, schema, core):
         encoded.get('interval'))
 
     if not 'instance' in deserialized:
-        process = instantiate(config, core)
+        process = instantiate(config, core=core)
         deserialized['instance'] = process
 
     deserialized['config'] = config
@@ -100,7 +101,7 @@ def deserialize_process(encoded, schema, core):
     return deserialized
 
 
-def deserialize_step(encoded, schema, core):
+def deserialize_step(schema, encoded, core):
     deserialized = encoded.copy()
     protocol, address = encoded['address'].split(':', 1)
 
@@ -120,7 +121,7 @@ def deserialize_step(encoded, schema, core):
         encoded.get('config', {}))
 
     if not 'instance' in deserialized:
-        process = instantiate(config, core)
+        process = instantiate(config, core=core)
         deserialized['instance'] = process
 
     deserialized['config'] = config
@@ -346,7 +347,6 @@ class ProcessTypes(TypeSystem):
         if protocol == 'local':
             self.lookup_local(config)
 
-
 def hierarchy_depth(hierarchy, path=()):
     """
     Create a mapping of every path in the hierarchy to the node living at
@@ -383,7 +383,7 @@ class Step(Edge):
 
 
     def __init__(self, config=None, core=None):
-        self.core = core
+        self.core = core or ProcessTypes()
 
         if config is None:
             config = {}
@@ -427,7 +427,8 @@ class Process(Edge):
     config_schema = {}
 
     def __init__(self, config=None, core=None):
-        self.core = core
+        self.core = core or ProcessTypes()
+
         if config is None:
             config = {}
 
