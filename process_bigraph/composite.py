@@ -11,8 +11,8 @@ import collections
 from typing import Dict
 
 
-from bigraph_schema import Edge, TypeSystem, get_path, validate_merge, establish_path, set_path, deep_merge
-from bigraph_schema.registry import Registry
+from bigraph_schema import Edge, TypeSystem, get_path, establish_path, set_path, deep_merge
+from bigraph_schema.registry import Registry, validate_merge
 
 from process_bigraph.protocols import local_lookup, local_lookup_module
 
