@@ -1,13 +1,35 @@
 from process_bigraph import Step, Process, Composite, ProcessTypes
 
 
+core = ProcessTypes()
+
+
+core.register('scannable_process', {
+    '_type': 'process',
+    '_inputs': {
+        'species': {
+            '_type': 'array',
+            '_data': 'float'}},
+    '_outputs': {
+        'species': {
+            '_type': 'array',
+            '_data': 'float'}}})
+
+
+core.register('ode_config', {
+    'rates': {
+        '_type': 'array',
+        '_data': 'float'},
+    'species_names': 'list[string]'})
+
+
 class ODE(Process):
-    config_schema = {
-        # 'rates': {
-        #     '_type': 'array',
-        #     '_data': 'float'},
-        'rates': 'map[float]',
-        'species_names': 'list[string]'}
+    config_schema = 'ode_config'
+    # config_schema = {
+    #     'rates': {
+    #         '_type': 'array',
+    #         '_data': 'float'},
+    #     'species_names': 'list[string]'}
 
 
     def __init__(self, config, core):
@@ -30,16 +52,22 @@ class ODE(Process):
 
 
     def update(self, state, interval):
-        return state['species'] * self.config['rates']
+        total = np.dot(
+            self.config['rates'],
+            state['species'])
 
+        return total - state['species']
+
+
+# TODO: This step during __init__ generates the composite containing all of the processes
+#   we are scanning over
 
 class ParameterScan(Step):
     config_schema = {
         'parameter_ranges': 'map[list[float]]',
         'process_address': 'string',
-        'process_config': {
-            '_type': 'tree',
-            'species_names': 'list[string]'},
+        'process_schema': 'scannable_process',
+        'process_config': 'ode_config',
         'timestep': 'float',
         'runtime': 'float'}
 
@@ -79,6 +107,10 @@ class ParameterScan(Step):
                 '_type': 'array',
                 '_data': 'float',
                 '_shape': self.results_shape}
+
+
+    def update(self, inputs):
+        import ipdb; ipdb.set_trace()
 
 
 # TODO: support dataframe type?
