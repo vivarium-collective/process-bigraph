@@ -91,9 +91,6 @@ class ODE(Process):
         return delta
 
 
-# TODO: This step during __init__ generates the composite containing all of the processes
-#   we are scanning over
-
 class RunProcess(Step):
     config_schema = {
         'process_address': 'string',
@@ -126,7 +123,9 @@ class RunProcess(Step):
                 'address': 'local:ram-emitter',
                 'config': {
                     'emit': self.process.outputs()},
-                'inputs': {'emit': list(self.process.outputs().keys())},
+                'inputs': {
+                    key: [key]
+                    for key in self.process.outputs()},
                 'outputs': {}}}})
 
 
@@ -139,17 +138,17 @@ class RunProcess(Step):
             output_key: {
                 '_type': 'list',
                 '_element': output_schema}
-            for output_key, output_schema in self.process.outputs()}
+            for output_key, output_schema in self.process.outputs().items()}
 
 
     def update(self, inputs):
+        import ipdb; ipdb.set_trace()
+
         # TODO: make method for setting the state of a composite
         self.composite.state = self.core.set(
             self.composite.composition,
             self.composite.state,
             inputs)
-
-        import ipdb; ipdb.set_trace()
 
         self.composite.run(
             self.config['runtime'])
@@ -247,10 +246,10 @@ def test_run_process():
                 'timestep': 0.1,
                 'runtime': 10.0}}}
 
+    import ipdb; ipdb.set_trace()
+
     run = Composite({
         'state': state})
-
-    import ipdb; ipdb.set_trace()
 
 
 def test_parameter_scan():

@@ -83,7 +83,7 @@ def deserialize_process(schema, encoded, core):
         if not instantiate:
             raise Exception(f'process "{address}" not found')
 
-    config = core.hydrate_state(
+    config = core.deserialize(
         instantiate.config_schema,
         encoded.get('config', {}))
 
@@ -116,7 +116,7 @@ def deserialize_step(schema, encoded, core):
         if not instantiate:
             raise Exception(f'process "{address}" not found')
 
-    config = core.hydrate_state(
+    config = core.deserialize(
         instantiate.config_schema,
         encoded.get('config', {}))
 
@@ -337,9 +337,6 @@ class ProcessTypes(TypeSystem):
 
         return state
 
-
-    def dehydrate(self, schema):
-        return {}
 
     def lookup_address(self, address):
         protocol, config = address.split(':')
@@ -789,9 +786,7 @@ class Composite(Process):
 
         state = deep_merge(edge_state, state)
 
-        # calling hydrate here assumes all processes have already been
-        # deserialized in the call to infer_schema above.
-        self.state = self.core.hydrate(
+        self.state = self.core.deserialize(
             self.composition,
             state)
 
