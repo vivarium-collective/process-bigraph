@@ -116,16 +116,22 @@ class RunProcess(Step):
                 'config': self.config['process_config'],
                 'instance': self.process,
                 'interval': self.config['timestep'],
-                'inputs': {},
-                'outputs': {}},
+                'inputs': {
+                    key: [key]
+                    for key in self.process.inputs()},
+                'outputs': {
+                    key: [key]
+                    for key in self.process.outputs()}},
             'emitter': {
                 '_type': 'step',
                 'address': 'local:ram-emitter',
                 'config': {
-                    'emit': self.process.outputs()},
-                'inputs': {
+                    'emit': dict(
+                        {'time': 'float'},
+                        **self.process.outputs())},
+                'inputs': dict({'time': ['global_time']}, **{
                     key: [key]
-                    for key in self.process.outputs()},
+                    for key in self.process.outputs()}),
                 'outputs': {}}}})
 
 
@@ -153,7 +159,15 @@ class RunProcess(Step):
         self.composite.run(
             self.config['runtime'])
 
-        results = self.composite.gather_results()
+        history = self.composite.state['emitter']['instance'].history
+        results = {}
+        for key in history[0].keys():
+            local = [
+                step[key]
+                for step in history]
+            results[key] = local
+
+        # results = self.composite.gather_results()
 
         return results
 
@@ -235,21 +249,24 @@ class ParameterScan(Step):
 
 def test_run_process():
     state = {
+        'A': 11.11,
         'run': {
             '_type': 'step',
             'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
             'config': {
                 'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
                 'process_config': {
-                    'kdeg': 1.0,
-                    'ksynth': 1.0},
+                    'kdeg': 1.1,
+                    'ksynth': 0.9},
                 'timestep': 0.1,
-                'runtime': 10.0}}}
-
-    import ipdb; ipdb.set_trace()
+                'runtime': 10.0},
+            'inputs': {'A': ['A']},
+            'outputs': {'results': ['A_results']}}}
 
     run = Composite({
         'state': state})
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_parameter_scan():
@@ -273,7 +290,6 @@ def test_parameter_scan():
         'state': state})
             
     import ipdb; ipdb.set_trace()
-
 
 
 if __name__ == '__main__':
