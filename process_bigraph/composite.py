@@ -707,6 +707,17 @@ def determine_steps(steps, remaining, fulfilled):
     return to_run, remaining, fulfilled
 
 
+def interval_time_precision(timestep):
+    # get number of decimal places to set global time precision
+    timestep_str = str(timestep)
+    global_time_precision = 0
+    if '.' in timestep_str:
+        _, decimals = timestep_str.split('.')
+        global_time_precision = len(decimals)
+
+    return global_time_precision
+
+
 class Composite(Process):
     """
     Composite parent class.
@@ -761,7 +772,7 @@ class Composite(Process):
 
         self.emitter_paths = find_instance_paths(
             state,
-            'process_bigraph.emitter.Emitter')
+            'process_bigraph.composite.Emitter')
 
         # merge the processes and steps into a single "edges" dict
         self.edge_paths = self.process_paths.copy()
@@ -1131,6 +1142,10 @@ class Composite(Process):
         self.run_steps(to_run)
 
 
+    def emit_port(self, emitter_path, process_path, port_path):
+        pass
+
+
     def gather_results(self, queries=None):
         '''
         a map of paths to emitter --> queries for the emitter at that path
@@ -1145,6 +1160,7 @@ class Composite(Process):
         for path, query in queries.items():
             emitter = get_path(self.state, path)
             results[path] = emitter['instance'].query(query)
+
         return results
 
     def update(self, state, interval):
@@ -1218,3 +1234,11 @@ class RAMEmitter(Emitter):
         return result
 
 
+def test_emitter():
+    composite = Composite({})
+
+    composite.add_emitter(['emitters', 'ram'], 'ram-emitter')
+    composite.emit_port(
+        ['emitters', 'ram'],
+        ['processes', 'translation'],
+        ['outputs', 'protein'])

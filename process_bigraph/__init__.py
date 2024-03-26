@@ -1,5 +1,6 @@
 import pprint
-from process_bigraph.composite import Process, Step, Composite, ProcessTypes
+from bigraph_schema.registry import deep_merge
+from process_bigraph.composite import Process, Step, Composite, ProcessTypes, interval_time_precision
 
 
 __all__ = [

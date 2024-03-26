@@ -1,4 +1,4 @@
-from process_bigraph import Step, Process, Composite, ProcessTypes
+from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
 core = ProcessTypes()
@@ -109,30 +109,46 @@ class RunProcess(Step):
             'inputs': {},
             'outputs': {}})['instance']
 
-        self.composite = Composite({'state': {
-            'process': {
-                '_type': 'process',
-                'address': self.config['process_address'],
-                'config': self.config['process_config'],
-                'instance': self.process,
-                'interval': self.config['timestep'],
-                'inputs': {
-                    key: [key]
-                    for key in self.process.inputs()},
-                'outputs': {
-                    key: [key]
-                    for key in self.process.outputs()}},
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'config': {
-                    'emit': dict(
-                        {'time': 'float'},
-                        **self.process.outputs())},
-                'inputs': dict({'time': ['global_time']}, **{
-                    key: [key]
-                    for key in self.process.outputs()}),
-                'outputs': {}}}})
+        global_time_precision = interval_time_precision(
+            self.config['timestep'])
+
+        self.composite = Composite({
+            'global_time_precision': global_time_precision,
+            # TODO: support emitter at the composite level
+            #   they are a list of emit dicts that describe
+            #   which emitter to use and what from the composite
+            #   state will be emitted. The schema can be inferred
+            #   from the targets. ALSO: support process ports
+            #   to be targets
+            # 'emit': [{
+            #     'address': 'local:mongo-emitter'
+            #     'targets': dict({'time': ['global_time']}, **{
+            #         key: [key]
+            #         for key in self.process.outputs()})}],
+            'state': {
+                'process': {
+                    '_type': 'process',
+                    'address': self.config['process_address'],
+                    'config': self.config['process_config'],
+                    'instance': self.process,
+                    'interval': self.config['timestep'],
+                    'inputs': {
+                        key: [key]
+                        for key in self.process.inputs()},
+                    'outputs': {
+                        key: [key]
+                        for key in self.process.outputs()}},
+                'emitter': {
+                    '_type': 'step',
+                    'address': 'local:ram-emitter',
+                    'config': {
+                        'emit': dict(
+                            {'time': 'float'},
+                            **self.process.outputs())},
+                    'inputs': dict({'time': ['global_time']}, **{
+                        key: [key]
+                        for key in self.process.outputs()}),
+                    'outputs': {}}}})
 
 
     def inputs(self):
@@ -140,16 +156,19 @@ class RunProcess(Step):
 
 
     def outputs(self):
+        outputs = self.process.outputs()
+        outputs['time'] = 'float'
+
         return {
-            output_key: {
-                '_type': 'list',
-                '_element': output_schema}
-            for output_key, output_schema in self.process.outputs().items()}
+            'results': {
+                output_key: {
+                    '_type': 'list',
+                    '_apply': 'set',
+                    '_element': output_schema}
+                for output_key, output_schema in outputs.items()}}
 
 
     def update(self, inputs):
-        import ipdb; ipdb.set_trace()
-
         # TODO: make method for setting the state of a composite
         self.composite.state = self.core.set(
             self.composite.composition,
@@ -159,17 +178,39 @@ class RunProcess(Step):
         self.composite.run(
             self.config['runtime'])
 
-        history = self.composite.state['emitter']['instance'].history
-        results = {}
-        for key in history[0].keys():
-            local = [
-                step[key]
-                for step in history]
-            results[key] = local
+        # TODO: generalize this for any emitter
+        #   use gather_results?
+        
+        # history = self.composite.state['emitter']['instance'].history
+        histories = self.composite.gather_results()
 
-        # results = self.composite.gather_results()
+        results = {
+            key: timeseries_from_history(history)
+            for key, history in histories.items()}
 
-        return results
+        all_results = {}
+        for timeseries in results.values():
+            all_results = deep_merge(all_results, timeseries)
+
+        # results = {}
+        # for key in history['emitter'].keys():
+        #     local = [
+        #         step[key]
+        #         for step in history]
+        #     results[key] = local
+
+        return {'results': all_results}
+
+
+def timeseries_from_history(history):
+    results = {}
+    for moment in history:
+        for key, value in moment.items():
+            if key not in results:
+                results[key] = []
+            results[key].append(value)
+
+    return results
 
 
 class ParameterScan(Step):
@@ -248,6 +289,9 @@ class ParameterScan(Step):
 
 
 def test_run_process():
+    timestep = 0.1
+    runtime = 10.0
+
     state = {
         'A': 11.11,
         'run': {
@@ -258,15 +302,21 @@ def test_run_process():
                 'process_config': {
                     'kdeg': 1.1,
                     'ksynth': 0.9},
-                'timestep': 0.1,
-                'runtime': 10.0},
+                'timestep': timestep,
+                'runtime': runtime},
+            # '_outputs': {'results': {'_emit': True}},
             'inputs': {'A': ['A']},
             'outputs': {'results': ['A_results']}}}
 
-    run = Composite({
+    process = Composite({
+        'bridge': {
+            'outputs': {
+                'results': ['A_results']}},
         'state': state})
 
-    import ipdb; ipdb.set_trace()
+    results = process.update({}, 0.0)
+
+    assert results[0]['results']['time'][-1] == runtime
 
 
 def test_parameter_scan():
