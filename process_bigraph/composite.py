@@ -861,6 +861,13 @@ class Composite(Process):
         return self.process_schema
 
 
+    def set_state(self, initial):
+        self.state = self.core.set(
+            self.composition,
+            self.state,
+            initial)
+
+
     def process_update(
             self,
             path,

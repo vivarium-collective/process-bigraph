@@ -1,3 +1,5 @@
+import numpy as np
+
 from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
@@ -169,19 +171,11 @@ class RunProcess(Step):
 
 
     def update(self, inputs):
-        # TODO: make method for setting the state of a composite
-        self.composite.state = self.core.set(
-            self.composite.composition,
-            self.composite.state,
-            inputs)
+        self.composite.set_state(inputs)
 
         self.composite.run(
             self.config['runtime'])
 
-        # TODO: generalize this for any emitter
-        #   use gather_results?
-        
-        # history = self.composite.state['emitter']['instance'].history
         histories = self.composite.gather_results()
 
         results = {
@@ -191,13 +185,6 @@ class RunProcess(Step):
         all_results = {}
         for timeseries in results.values():
             all_results = deep_merge(all_results, timeseries)
-
-        # results = {}
-        # for key in history['emitter'].keys():
-        #     local = [
-        #         step[key]
-        #         for step in history]
-        #     results[key] = local
 
         return {'results': all_results}
 
@@ -213,11 +200,28 @@ def timeseries_from_history(history):
     return results
 
 
+def generate_key(parameters):
+    if isinstance(parameters, dict):
+        pairs = []
+        for key, value in parameters.items():
+            pairs.append((key, generate_key(value)))
+        tokens = [f'{key}:{value}' for key, value in pairs]
+        join = ','.join(tokens)
+        return '{' + join + '}'
+
+    elif isinstance(parameters, str):
+        return parameters
+
+    else:
+        return str(parameters)
+
+
 class ParameterScan(Step):
     config_schema = {
         'parameter_ranges': 'map[list[float]]',
         'process_address': 'string',
         'process_config': 'tree[any]',
+        'initial_state': 'tree[any]',
         'observables': 'list[string]',
         'timestep': 'float',
         'runtime': 'float'}
@@ -226,8 +230,10 @@ class ParameterScan(Step):
     def __init__(self, config, core):
         super().__init__(config, core)
 
-        self.steps_count = int(self.config['runtime'] / self.config['timestep'])
-        self.observables_count = len(self.config['observables'])
+        self.steps_count = int(
+            self.config['runtime'] / self.config['timestep']) + 1 # TODO shouldn't need to add 1
+        self.observables_count = len(
+            self.config['observables'])
 
         self.total_combinations = 1
         results_shape = []
@@ -254,6 +260,32 @@ class ParameterScan(Step):
                         **{parameter_key: parameter_value}))
             self.process_parameters = configs
 
+        bridge = {'outputs': {}}
+        state = {}
+        for parameters in self.process_parameters:
+            parameters_key = generate_key(parameters)
+            bridge['outputs'][f'results_{parameters_key}'] = [f'results_{parameters_key}']
+
+            for initial_key, initial_value in self.config['initial_state'].items():
+                state[f'{initial_key}_{parameters_key}'] = initial_value
+
+            state[f'process_{parameters_key}'] = {
+                '_type': 'step',
+                'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
+                'config': {
+                    'process_address': self.config['process_address'],
+                    'process_config': parameters,
+                    'timestep': self.config['timestep'],
+                    'runtime': self.config['runtime']},
+                'inputs': {
+                    initial_key: [f'{initial_key}_{parameters_key}']
+                    for initial_key in self.config['initial_state'].keys()},
+                'outputs': {'results': [f'results_{parameters_key}']}}
+
+        self.scan = Composite({
+            'bridge': bridge,
+            'state': state})
+
 
     def outputs(self):
         return {
@@ -264,16 +296,20 @@ class ParameterScan(Step):
 
 
     def update(self, inputs):
-        scan = {}
+        results = self.scan.update({}, 0.0)
 
-#         for index, parameters in enumerate(self.process_parameters):
-#             scan[str(index)] = {
-#                 '_type': 'step',
-#                 'address': 
-#                 'config':
-# }
+        result_list = []
+        for result in results:
+            observable_list = []
+            for observable in self.config['observables']:
+                observable_list.append(
+                    np.array(list(result.values())[0][observable]))
 
-        import ipdb; ipdb.set_trace()
+            result_list.append(
+                np.array(observable_list))
+
+        return {
+            'results': np.array(result_list)}
 
 
 # TODO: support dataframe type?
@@ -318,6 +354,8 @@ def test_run_process():
 
     assert results[0]['results']['time'][-1] == runtime
 
+    import ipdb; ipdb.set_trace()
+
 
 def test_parameter_scan():
     state = {
@@ -331,12 +369,16 @@ def test_parameter_scan():
                 'process_config': {
                     'ksynth': 1.0},
                 'observables': ['A'],
+                'initial_state': {'A': 13.3333},
                 'timestep': 1.0,
                 'runtime': 10},
             'outputs': {
                 'results': ['results']}}}
 
     scan = Composite({
+        'bridge': {
+            'outputs': {
+                'results': ['results']}},
         'state': state})
             
     import ipdb; ipdb.set_trace()
