@@ -231,10 +231,11 @@ class ParameterScan(Step):
         super().__init__(config, core)
 
         self.steps_count = int(
-            self.config['runtime'] / self.config['timestep']) + 1 # TODO shouldn't need to add 1
+            self.config['runtime'] / self.config['timestep']) + 1
         self.observables_count = len(
             self.config['observables'])
 
+        # TODO: test two parameters scanning simultaneously
         self.total_combinations = 1
         results_shape = []
         for parameter_key, ranges in self.config['parameter_ranges'].items():
@@ -264,7 +265,7 @@ class ParameterScan(Step):
         state = {}
         for parameters in self.process_parameters:
             parameters_key = generate_key(parameters)
-            bridge['outputs'][f'results_{parameters_key}'] = [f'results_{parameters_key}']
+            bridge['outputs'][f'{parameters_key}'] = [f'{parameters_key}']
 
             for initial_key, initial_value in self.config['initial_state'].items():
                 state[f'{initial_key}_{parameters_key}'] = initial_value
@@ -277,11 +278,14 @@ class ParameterScan(Step):
                     'process_config': parameters,
                     'timestep': self.config['timestep'],
                     'runtime': self.config['runtime']},
+                # TODO: these could be the same if the internal process uses its own state
+                #   for calculating history?
                 'inputs': {
                     initial_key: [f'{initial_key}_{parameters_key}']
                     for initial_key in self.config['initial_state'].keys()},
-                'outputs': {'results': [f'results_{parameters_key}']}}
+                'outputs': {'results': [f'{parameters_key}']}}
 
+        # TODO: perform parallelization on the independent steps
         self.scan = Composite({
             'bridge': bridge,
             'state': state})
@@ -298,6 +302,9 @@ class ParameterScan(Step):
     def update(self, inputs):
         results = self.scan.update({}, 0.0)
 
+        # TODO: Figure out the right format for returning results -
+        #   perhaps more like we are already receiving from the scan,
+        #   with parameters and keys present
         result_list = []
         for result in results:
             observable_list = []
