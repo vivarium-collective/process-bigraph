@@ -310,21 +310,6 @@ class ParameterScan(Step):
 
         self.results_schema = results_schema
 
-        # # TODO: get schema for observables and use them for outputs
-        # process = self.first_process()
-        # config_schema = {}
-        # results_schema = {}
-        # for parameter_path, parameter_range in self.config['parameter_ranges']:
-        #     parameter_schema, _ = self.core.slice(
-        #         process.config_schema,
-        #         {},
-        #         parameter_path)
-        #     set_path(config_schema, parameter_path, parameter_schema)
-
-        # self.results_schema = results_schema
-
-        import ipdb; ipdb.set_trace()
-
 
     def first_process(self):
         for key, value in self.scan.state.items():
@@ -336,20 +321,10 @@ class ParameterScan(Step):
         return {
             'results': self.results_schema}
 
-        # return {'results': 'tree[any]'}
-        # return {
-        #     'results': {
-        #         '_type': 'array',
-        #         '_data': 'float',
-        #         '_shape': self.results_shape}}
-
 
     def update(self, inputs):
         results = self.scan.update({}, 0.0)
 
-        # TODO: Figure out the right format for returning results -
-        #   perhaps more like we are already receiving from the scan,
-        #   with parameters and keys present
         update = {}
         for result in results:
             observable_list = []
@@ -359,23 +334,10 @@ class ParameterScan(Step):
 
             for observable in self.config['observables']:
                 value = get_path(values, observable)
-                # observable_list.append(value)
                 set_path(update[key], observable, value)
-                    # np.array(list(value)))
-                    # np.array(list(result.values())[0][observable]))
-
-            # result_list.append(observable_list)
-
-            # result_list.append(
-            #     np.array(observable_list))
-
-        import ipdb; ipdb.set_trace()
 
         return {
             'results': update}
-
-            # 'results': result_list}
-            # 'results': np.array(result_list)}
 
 
 # TODO: support dataframe type?
