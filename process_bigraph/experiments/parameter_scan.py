@@ -295,7 +295,7 @@ class ParameterScan(Step):
         for parameters in self.process_parameters:
             parameters_key = generate_key(parameters)
             results_schema[parameters_key] = {
-                'time': 'float'}
+                'time': 'list[float]'}
 
             for observable_path in self.config['observables']:
                 observable_schema, _ = self.core.slice(
@@ -306,7 +306,7 @@ class ParameterScan(Step):
                 set_path(
                     results_schema[parameters_key],
                     observable_path,
-                    observable_schema)
+                    {'_type': 'list', '_element': observable_schema})
 
         self.results_schema = results_schema
 
@@ -350,19 +350,21 @@ class ParameterScan(Step):
         # TODO: Figure out the right format for returning results -
         #   perhaps more like we are already receiving from the scan,
         #   with parameters and keys present
-        result_list = []
+        update = {}
         for result in results:
             observable_list = []
             key = list(result.keys())[0]
             values = list(result.values())[0]
+            update[key] = {'time': values['time']}
 
             for observable in self.config['observables']:
                 value = get_path(values, observable)
-                observable_list.append(value)
+                # observable_list.append(value)
+                set_path(update[key], observable, value)
                     # np.array(list(value)))
                     # np.array(list(result.values())[0][observable]))
 
-            result_list.append(observable_list)
+            # result_list.append(observable_list)
 
             # result_list.append(
             #     np.array(observable_list))
@@ -370,7 +372,9 @@ class ParameterScan(Step):
         import ipdb; ipdb.set_trace()
 
         return {
-            'results': result_list}
+            'results': update}
+
+            # 'results': result_list}
             # 'results': np.array(result_list)}
 
 
@@ -453,7 +457,7 @@ def test_parameter_scan():
                 'results': ['results']}},
         'state': state})
             
-    scan.run(0.0)
+    result = scan.update({}, 0.0)
 
     import ipdb; ipdb.set_trace()
 
