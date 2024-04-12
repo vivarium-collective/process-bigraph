@@ -396,15 +396,15 @@ def test_parameter_scan():
             '_type': 'step',
             'address': 'local:!process_bigraph.experiments.parameter_scan.ParameterScan',
             'config': {
-                'parameter_ranges': [
-                    (['rates', 'A', 'kdeg'], [0.0, 0.1, 1.0, 10.0])],
+                'parameter_ranges': [(
+                    ['rates', 'A', 'kdeg'], [0.0, 0.1, 1.0, 10.0])],
                 'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
                 'process_config': {
                     'rates': {
                         'A': {
                             'ksynth': 1.0}}},
-                # TODO: allow for observables that live at paths
-                'observables': [['species']],
+                'observables': [
+                    ['species']],
                 'initial_state': {
                     'species': {
                         'A': 13.3333}},
