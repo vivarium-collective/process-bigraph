@@ -195,6 +195,7 @@ def test_step_initialization(core):
                 'outputs': {
                     'c': ['D']}}}}, core=core)
 
+    composite.run(0.0)
     assert composite.state['D'] == (13 + 21) * 21
 
 
@@ -258,6 +259,8 @@ def test_dependencies(core):
     composite = Composite(
         {'state': operation},
         core=core)
+
+    composite.run(0.0)
 
     assert composite.state['h'] == -17396.469884
 

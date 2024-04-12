@@ -1,5 +1,7 @@
+import copy
 import numpy as np
 
+from bigraph_schema import get_path, set_path
 from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
@@ -25,40 +27,37 @@ core.register('ode_config', {
     'rates': 'map[float]',
     'species': 'map[float]'})
 
-    # 'rates': {
-    #     '_type': 'array',
-    #     '_data': 'float'},
-
 
 class ToySystem(Process):
     config_schema = {
-        'kdeg': 'float',
-        'ksynth': 'float'}
+        'rates': {
+            '_type': 'map',
+            '_value': {
+                'kdeg': 'float',
+                'ksynth': 'float'}}}
 
 
     def inputs(self):
         return {
-            'A': 'float'}
+            'species': 'map[float]'}
 
 
     def outputs(self):
         return {
-            'A': 'float'}
+            'species': 'map[float]'}
 
 
     def update(self, inputs, interval):
-        return {
-            'A': inputs['A'] * (self.config['ksynth'] - self.config['kdeg'])}
+        species = {
+            key: input * (self.config['rates'][key]['ksynth'] - self.config['rates'][key]['kdeg'])
+            for key, input in inputs['species'].items()}
 
+        return {
+            'species': species}
 
 
 class ODE(Process):
     config_schema = 'ode_config'
-    # config_schema = {
-    #     'rates': {
-    #         '_type': 'array',
-    #         '_data': 'float'},
-    #     'species_names': 'list[string]'}
 
 
     def __init__(self, config, core):
@@ -218,11 +217,11 @@ def generate_key(parameters):
 
 class ParameterScan(Step):
     config_schema = {
-        'parameter_ranges': 'map[list[float]]',
+        'parameter_ranges': 'list[tuple[path,list[float]]]',
         'process_address': 'string',
         'process_config': 'tree[any]',
         'initial_state': 'tree[any]',
-        'observables': 'list[string]',
+        'observables': 'list[path]',
         'timestep': 'float',
         'runtime': 'float'}
 
@@ -237,9 +236,10 @@ class ParameterScan(Step):
 
         # TODO: test two parameters scanning simultaneously
         self.total_combinations = 1
+
         results_shape = []
-        for parameter_key, ranges in self.config['parameter_ranges'].items():
-            ranges_count = len(ranges)
+        for parameter_path, parameter_range in self.config['parameter_ranges']:
+            ranges_count = len(parameter_range)
             self.total_combinations *= ranges_count
             results_shape.append(ranges_count)
 
@@ -252,13 +252,13 @@ class ParameterScan(Step):
         self.process_parameters = [
             self.config['process_config']]
 
-        for parameter_key, parameter_range in self.config['parameter_ranges'].items():
+        for parameter_path, parameter_range in self.config['parameter_ranges']:
             configs = []
             for process_parameter in self.process_parameters:
                 for parameter_value in parameter_range:
-                    configs.append(dict(
-                        process_parameter,
-                        **{parameter_key: parameter_value}))
+                    next_parameters = copy.deepcopy(process_parameter)
+                    set_path(next_parameters, parameter_path, parameter_value)
+                    configs.append(next_parameters)
             self.process_parameters = configs
 
         bridge = {'outputs': {}}
@@ -290,13 +290,58 @@ class ParameterScan(Step):
             'bridge': bridge,
             'state': state})
 
+        results_schema = {}
+        process = self.first_process()
+        for parameters in self.process_parameters:
+            parameters_key = generate_key(parameters)
+            results_schema[parameters_key] = {
+                'time': 'float'}
+
+            for observable_path in self.config['observables']:
+                observable_schema, _ = self.core.slice(
+                    process.outputs(),
+                    {},
+                    observable_path)
+
+                set_path(
+                    results_schema[parameters_key],
+                    observable_path,
+                    observable_schema)
+
+        self.results_schema = results_schema
+
+        # # TODO: get schema for observables and use them for outputs
+        # process = self.first_process()
+        # config_schema = {}
+        # results_schema = {}
+        # for parameter_path, parameter_range in self.config['parameter_ranges']:
+        #     parameter_schema, _ = self.core.slice(
+        #         process.config_schema,
+        #         {},
+        #         parameter_path)
+        #     set_path(config_schema, parameter_path, parameter_schema)
+
+        # self.results_schema = results_schema
+
+        import ipdb; ipdb.set_trace()
+
+
+    def first_process(self):
+        for key, value in self.scan.state.items():
+            if key.startswith('process_'):
+                return value['instance'].composite.state['process']['instance']
+
 
     def outputs(self):
         return {
-            'results': {
-                '_type': 'array',
-                '_data': 'float',
-                '_shape': self.results_shape}}
+            'results': self.results_schema}
+
+        # return {'results': 'tree[any]'}
+        # return {
+        #     'results': {
+        #         '_type': 'array',
+        #         '_data': 'float',
+        #         '_shape': self.results_shape}}
 
 
     def update(self, inputs):
@@ -308,15 +353,25 @@ class ParameterScan(Step):
         result_list = []
         for result in results:
             observable_list = []
-            for observable in self.config['observables']:
-                observable_list.append(
-                    np.array(list(result.values())[0][observable]))
+            key = list(result.keys())[0]
+            values = list(result.values())[0]
 
-            result_list.append(
-                np.array(observable_list))
+            for observable in self.config['observables']:
+                value = get_path(values, observable)
+                observable_list.append(value)
+                    # np.array(list(value)))
+                    # np.array(list(result.values())[0][observable]))
+
+            result_list.append(observable_list)
+
+            # result_list.append(
+            #     np.array(observable_list))
+
+        import ipdb; ipdb.set_trace()
 
         return {
-            'results': np.array(result_list)}
+            'results': result_list}
+            # 'results': np.array(result_list)}
 
 
 # TODO: support dataframe type?
@@ -336,19 +391,21 @@ def test_run_process():
     runtime = 10.0
 
     state = {
-        'A': 11.11,
+        'species': {'A': 11.11},
         'run': {
             '_type': 'step',
             'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
             'config': {
                 'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
                 'process_config': {
-                    'kdeg': 1.1,
-                    'ksynth': 0.9},
+                    'rates': {
+                        'A': {
+                            'kdeg': 1.1,
+                            'ksynth': 0.9}}},
                 'timestep': timestep,
                 'runtime': runtime},
             # '_outputs': {'results': {'_emit': True}},
-            'inputs': {'A': ['A']},
+            'inputs': {'species': ['species']},
             'outputs': {'results': ['A_results']}}}
 
     process = Composite({
@@ -365,18 +422,26 @@ def test_run_process():
 
 
 def test_parameter_scan():
+    # TODO: make a parameter scan with a biosimulator process,
+    #   ie - Copasi
+
     state = {
         'scan': {
             '_type': 'step',
             'address': 'local:!process_bigraph.experiments.parameter_scan.ParameterScan',
             'config': {
-                'parameter_ranges': {
-                    'kdeg': [0.0, 0.1, 1.0, 10.0]},
+                'parameter_ranges': [
+                    (['rates', 'A', 'kdeg'], [0.0, 0.1, 1.0, 10.0])],
                 'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
                 'process_config': {
-                    'ksynth': 1.0},
-                'observables': ['A'],
-                'initial_state': {'A': 13.3333},
+                    'rates': {
+                        'A': {
+                            'ksynth': 1.0}}},
+                # TODO: allow for observables that live at paths
+                'observables': [['species']],
+                'initial_state': {
+                    'species': {
+                        'A': 13.3333}},
                 'timestep': 1.0,
                 'runtime': 10},
             'outputs': {
@@ -388,7 +453,20 @@ def test_parameter_scan():
                 'results': ['results']}},
         'state': state})
             
+    scan.run(0.0)
+
     import ipdb; ipdb.set_trace()
+
+
+# scan = {
+#     'scan': {
+#         '_type': 'step',
+#         'address': 'local:!process_bigraph.experiments.parameter_scan.ParameterScan'},
+
+#     'processes': {
+#         'process_0': {
+#                       '_type': 'step'}}
+# }
 
 
 if __name__ == '__main__':

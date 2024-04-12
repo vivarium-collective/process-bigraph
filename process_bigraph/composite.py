@@ -836,9 +836,9 @@ class Composite(Process):
             self.step_paths)
 
         self.reset_step_state(self.step_paths)
-        to_run = self.cycle_step_state()
+        self.to_run = self.cycle_step_state()
 
-        self.run_steps(to_run)
+        # self.run_steps(self.to_run)
 
 
     def reset_step_state(self, step_paths):
@@ -1013,6 +1013,10 @@ class Composite(Process):
 
 
     def run(self, interval, force_complete=False):
+        if self.to_run:
+            self.run_steps(self.to_run)
+            self.to_run = None
+
         end_time = self.state['global_time'] + interval
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
