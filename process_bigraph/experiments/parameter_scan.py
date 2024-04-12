@@ -170,6 +170,8 @@ class RunProcess(Step):
 
 
     def update(self, inputs):
+        # TODO: instead of the composite being a reference it is instead read through
+        #   some port and lives in the state of the simulation (??)
         self.composite.set_state(inputs)
 
         self.composite.run(
@@ -413,15 +415,24 @@ def test_parameter_scan():
             'outputs': {
                 'results': ['results']}}}
 
+    # TODO: make a Workflow class that is a Step-composite
+    # scan = Workflow({
     scan = Composite({
         'bridge': {
             'outputs': {
                 'results': ['results']}},
         'state': state})
             
+    # TODO: make a method so we can run it directly, provide some way to get the result out
+    # result = scan.update({})
     result = scan.update({}, 0.0)
 
     import ipdb; ipdb.set_trace()
+
+
+def test_composite_workflow():
+    # TODO: Make a workflow with a composite inside
+    pass
 
 
 # scan = {
