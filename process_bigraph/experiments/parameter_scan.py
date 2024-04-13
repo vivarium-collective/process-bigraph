@@ -96,6 +96,7 @@ class RunProcess(Step):
     config_schema = {
         'process_address': 'string',
         'process_config': 'tree[any]',
+        'observables': 'list[path]',
         'timestep': 'float',
         'runtime': 'float'}
 
@@ -112,6 +113,26 @@ class RunProcess(Step):
 
         global_time_precision = interval_time_precision(
             self.config['timestep'])
+
+        process_outputs = self.process.outputs()
+        self.observables_schema = {}
+        self.results_schema = {}
+        for observable in self.config['observables']:
+            subschema, _ = self.core.slice(
+                process_outputs,
+                {},
+                observable)
+
+            set_path(self.observables_schema, observable, subschema)
+            set_path(
+                self.results_schema,
+                observable, {
+                    '_type': 'list',
+                    '_element': subschema})
+
+        emit_config = dict(
+            {'time': 'float'},
+            **self.observables_schema)
 
         self.composite = Composite({
             'global_time_precision': global_time_precision,
@@ -138,14 +159,12 @@ class RunProcess(Step):
                         for key in self.process.inputs()},
                     'outputs': {
                         key: [key]
-                        for key in self.process.outputs()}},
+                        for key in process_outputs}},
                 'emitter': {
                     '_type': 'step',
                     'address': 'local:ram-emitter',
                     'config': {
-                        'emit': dict(
-                            {'time': 'float'},
-                            **self.process.outputs())},
+                        'emit': emit_config},
                     'inputs': dict({'time': ['global_time']}, **{
                         key: [key]
                         for key in self.process.outputs()}),
@@ -157,16 +176,20 @@ class RunProcess(Step):
 
 
     def outputs(self):
-        outputs = self.process.outputs()
-        outputs['time'] = 'float'
+        return dict(
+            {'time': 'list[float]'},
+            **self.results_schema)
 
-        return {
-            'results': {
-                output_key: {
-                    '_type': 'list',
-                    '_apply': 'set',
-                    '_element': output_schema}
-                for output_key, output_schema in outputs.items()}}
+        # outputs = self.process.outputs()
+        # outputs['time'] = 'float'
+
+        # return {
+        #     'results': {
+        #         output_key: {
+        #             '_type': 'list',
+        #             '_apply': 'set',
+        #             '_element': output_schema}
+        #         for output_key, output_schema in outputs.items()}}
 
 
     def update(self, inputs):
@@ -237,19 +260,6 @@ class ParameterScan(Step):
             self.config['observables'])
 
         # TODO: test two parameters scanning simultaneously
-        self.total_combinations = 1
-
-        results_shape = []
-        for parameter_path, parameter_range in self.config['parameter_ranges']:
-            ranges_count = len(parameter_range)
-            self.total_combinations *= ranges_count
-            results_shape.append(ranges_count)
-
-        results_shape.extend([
-            self.observables_count,
-            self.steps_count])
-
-        self.results_shape = tuple(results_shape)
 
         self.process_parameters = [
             self.config['process_config']]
@@ -278,6 +288,7 @@ class ParameterScan(Step):
                 'config': {
                     'process_address': self.config['process_address'],
                     'process_config': parameters,
+                    'observables': self.config['observables'],
                     'timestep': self.config['timestep'],
                     'runtime': self.config['runtime']},
                 # TODO: these could be the same if the internal process uses its own state
@@ -327,6 +338,8 @@ class ParameterScan(Step):
     def update(self, inputs):
         results = self.scan.update({}, 0.0)
 
+        import ipdb; ipdb.set_trace()
+
         update = {}
         for result in results:
             observable_list = []
@@ -335,7 +348,8 @@ class ParameterScan(Step):
             update[key] = {'time': values['time']}
 
             for observable in self.config['observables']:
-                value = get_path(values, observable)
+                subschema = self.results_schema[key]
+                value_schema, value = core.slice(subschema, values, observable)
                 set_path(update[key], observable, value)
 
         return {
@@ -370,6 +384,7 @@ def test_run_process():
                         'A': {
                             'kdeg': 1.1,
                             'ksynth': 0.9}}},
+                'observables': [['species']],
                 'timestep': timestep,
                 'runtime': runtime},
             # '_outputs': {'results': {'_emit': True}},
@@ -381,6 +396,8 @@ def test_run_process():
             'outputs': {
                 'results': ['A_results']}},
         'state': state})
+
+    import ipdb; ipdb.set_trace()
 
     results = process.update({}, 0.0)
 
@@ -406,7 +423,7 @@ def test_parameter_scan():
                         'A': {
                             'ksynth': 1.0}}},
                 'observables': [
-                    ['species']],
+                    ['species', 'A']],
                 'initial_state': {
                     'species': {
                         'A': 13.3333}},
