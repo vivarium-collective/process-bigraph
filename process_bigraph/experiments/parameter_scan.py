@@ -117,13 +117,18 @@ class RunProcess(Step):
         process_outputs = self.process.outputs()
         self.observables_schema = {}
         self.results_schema = {}
+
         for observable in self.config['observables']:
             subschema, _ = self.core.slice(
                 process_outputs,
                 {},
                 observable)
 
-            set_path(self.observables_schema, observable, subschema)
+            set_path(
+                self.observables_schema,
+                observable,
+                subschema)
+
             set_path(
                 self.results_schema,
                 observable, {
@@ -134,7 +139,7 @@ class RunProcess(Step):
             {'time': 'float'},
             **self.observables_schema)
 
-        self.composite = Composite({
+        composite_config = {
             'global_time_precision': global_time_precision,
             # TODO: support emitter at the composite level
             #   they are a list of emit dicts that describe
@@ -154,6 +159,8 @@ class RunProcess(Step):
                     'config': self.config['process_config'],
                     'instance': self.process,
                     'interval': self.config['timestep'],
+                    '_inputs': self.process.inputs(),
+                    '_outputs': self.process.outputs(),
                     'inputs': {
                         key: [key]
                         for key in self.process.inputs()},
@@ -162,13 +169,16 @@ class RunProcess(Step):
                         for key in process_outputs}},
                 'emitter': {
                     '_type': 'step',
+                    '_inputs': emit_config,
                     'address': 'local:ram-emitter',
                     'config': {
                         'emit': emit_config},
                     'inputs': dict({'time': ['global_time']}, **{
                         key: [key]
                         for key in self.process.outputs()}),
-                    'outputs': {}}}})
+                    'outputs': {}}}}
+
+        self.composite = Composite(composite_config)
 
 
     def inputs(self):
@@ -195,7 +205,8 @@ class RunProcess(Step):
     def update(self, inputs):
         # TODO: instead of the composite being a reference it is instead read through
         #   some port and lives in the state of the simulation (??)
-        self.composite.set_state(inputs)
+        self.composite.merge(
+            inputs)
 
         self.composite.run(
             self.config['runtime'])

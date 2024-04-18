@@ -70,6 +70,9 @@ def deserialize_process(schema, encoded, core):
     :returns: The deserialized state with an instantiated process.
     """
     deserialized = encoded.copy()
+    if 'address' not in encoded:
+        import ipdb; ipdb.set_trace()
+
     protocol, address = encoded['address'].split(':', 1)
 
     if 'instance' in deserialized:
@@ -97,6 +100,8 @@ def deserialize_process(schema, encoded, core):
 
     deserialized['config'] = config
     deserialized['interval'] = interval
+    deserialized['_inputs'] = deserialized['instance'].inputs()
+    deserialized['_outputs'] = deserialized['instance'].outputs()
 
     return deserialized
 
@@ -125,6 +130,8 @@ def deserialize_step(schema, encoded, core):
         deserialized['instance'] = process
 
     deserialized['config'] = config
+    deserialized['_inputs'] = deserialized['instance'].inputs()
+    deserialized['_outputs'] = deserialized['instance'].outputs()
 
     return deserialized
 
@@ -216,8 +223,12 @@ class ProcessTypes(TypeSystem):
 
         if isinstance(state, dict):
             if '_type' in state:
-                state_type = state['_type']
-                state_schema = self.access(state_type)
+                state_type = {
+                    key: value
+                    for key, value in state.items()
+                    if key.startswith('_')}
+                state_schema = self.access(
+                    state_type)
 
                 hydrated_state = self.deserialize(state_schema, state)
                 top_state = set_path(
@@ -228,11 +239,11 @@ class ProcessTypes(TypeSystem):
                 schema = set_path(
                     schema,
                     path,
-                    {'_type': state_type})
+                    state_schema)
 
                 # TODO: fix is_descendant
                 # if core.type_registry.is_descendant('process', state_schema) or core.registry.is_descendant('step', state_schema):
-                if state_type == 'process' or state_type == 'step':
+                if state_type['_type'] == 'process' or state_type['_type'] == 'step':
                     port_schema = hydrated_state['instance'].interface()
                     assert_interface(
                         port_schema)
@@ -240,6 +251,13 @@ class ProcessTypes(TypeSystem):
                     for port_key in ['inputs', 'outputs']:
                         subschema = port_schema.get(
                             port_key, {})
+
+                        # schema = self.set_slice(
+                        #     'schema',
+                        #     schema,
+                        #     path + (f'_{port_key}',),
+                        #     'schema',
+                        #     subschema)
 
                         schema = set_path(
                             schema,
@@ -861,11 +879,11 @@ class Composite(Process):
         return self.process_schema
 
 
-    def set_state(self, initial):
-        self.state = self.core.set(
+    def merge(self, initial_state):
+        self.state = self.core.merge(
             self.composition,
             self.state,
-            initial)
+            initial_state)
 
 
     def process_update(
@@ -1183,10 +1201,13 @@ class Composite(Process):
             [],
             state)
 
-        self.state = self.core.set(
-            self.composition,
-            self.state,
+        self.merge(
             projection)
+
+        # self.state = self.core.set(
+        #     self.composition,
+        #     self.state,
+        #     projection)
 
         self.run(interval)
 
