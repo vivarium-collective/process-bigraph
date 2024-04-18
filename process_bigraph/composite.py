@@ -252,7 +252,7 @@ class ProcessTypes(TypeSystem):
                         subschema = port_schema.get(
                             port_key, {})
 
-                        # schema = self.set_slice(
+                        # _, schema = self.set_slice(
                         #     'schema',
                         #     schema,
                         #     path + (f'_{port_key}',),
