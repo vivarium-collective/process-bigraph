@@ -186,9 +186,10 @@ class RunProcess(Step):
 
 
     def outputs(self):
-        return dict(
-            {'time': 'list[float]'},
-            **self.results_schema)
+        return {
+            'results': dict(
+                {'time': 'list[float]'},
+                **self.results_schema)}
 
         # outputs = self.process.outputs()
         # outputs['time'] = 'float'
@@ -360,8 +361,15 @@ class ParameterScan(Step):
 
             for observable in self.config['observables']:
                 subschema = self.results_schema[key]
-                value_schema, value = core.slice(subschema, values, observable)
-                set_path(update[key], observable, value)
+                value_schema, value = core.slice(
+                    subschema,
+                    values,
+                    observable)
+
+                set_path(
+                    update[key],
+                    observable,
+                    value)
 
         return {
             'results': update}
@@ -402,13 +410,13 @@ def test_run_process():
             'inputs': {'species': ['species']},
             'outputs': {'results': ['A_results']}}}
 
+    import ipdb; ipdb.set_trace()
+
     process = Composite({
         'bridge': {
             'outputs': {
                 'results': ['A_results']}},
         'state': state})
-
-    import ipdb; ipdb.set_trace()
 
     results = process.update({}, 0.0)
 
