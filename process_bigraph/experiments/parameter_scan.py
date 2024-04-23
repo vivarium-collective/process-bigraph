@@ -117,6 +117,7 @@ class RunProcess(Step):
         process_outputs = self.process.outputs()
         self.observables_schema = {}
         self.results_schema = {}
+        self.inputs_config = {}
 
         for observable in self.config['observables']:
             subschema, _ = self.core.slice(
@@ -134,6 +135,13 @@ class RunProcess(Step):
                 observable, {
                     '_type': 'list',
                     '_element': subschema})
+
+            set_path(
+                self.inputs_config,
+                observable,
+                [observable[-1]])
+
+        import ipdb; ipdb.set_trace()
 
         emit_config = dict(
             {'time': 'float'},
@@ -173,9 +181,9 @@ class RunProcess(Step):
                     'address': 'local:ram-emitter',
                     'config': {
                         'emit': emit_config},
-                    'inputs': dict({'time': ['global_time']}, **{
-                        key: [key]
-                        for key in self.process.outputs()}),
+                    'inputs': dict(
+                        {'time': ['global_time']},
+                        **self.inputs_config),
                     'outputs': {}}}}
 
         self.composite = Composite(composite_config)
@@ -391,8 +399,10 @@ def test_run_process():
     timestep = 0.1
     runtime = 10.0
 
+    initial_A = 11.11
+
     state = {
-        'species': {'A': 11.11},
+        'species': {'A': initial_A},
         'run': {
             '_type': 'step',
             'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
@@ -410,8 +420,6 @@ def test_run_process():
             'inputs': {'species': ['species']},
             'outputs': {'results': ['A_results']}}}
 
-    import ipdb; ipdb.set_trace()
-
     process = Composite({
         'bridge': {
             'outputs': {
@@ -421,8 +429,7 @@ def test_run_process():
     results = process.update({}, 0.0)
 
     assert results[0]['results']['time'][-1] == runtime
-
-    import ipdb; ipdb.set_trace()
+    assert results[0]['results']['species'][0]['A'] == initial_A
 
 
 def test_parameter_scan():
