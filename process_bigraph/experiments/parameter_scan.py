@@ -1,7 +1,7 @@
 import copy
 import numpy as np
 
-from bigraph_schema import get_path, set_path
+from bigraph_schema import get_path, set_path, transform_path
 from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
@@ -139,9 +139,8 @@ class RunProcess(Step):
             set_path(
                 self.inputs_config,
                 observable,
-                [observable[-1]])
-
-        import ipdb; ipdb.set_trace()
+                observable)
+                # [observable[-1]])
 
         emit_config = dict(
             {'time': 'float'},
@@ -199,17 +198,6 @@ class RunProcess(Step):
                 {'time': 'list[float]'},
                 **self.results_schema)}
 
-        # outputs = self.process.outputs()
-        # outputs['time'] = 'float'
-
-        # return {
-        #     'results': {
-        #         output_key: {
-        #             '_type': 'list',
-        #             '_apply': 'set',
-        #             '_element': output_schema}
-        #         for output_key, output_schema in outputs.items()}}
-
 
     def update(self, inputs):
         # TODO: instead of the composite being a reference it is instead read through
@@ -223,7 +211,9 @@ class RunProcess(Step):
         histories = self.composite.gather_results()
 
         results = {
-            key: timeseries_from_history(history)
+            key: timeseries_from_history(
+                history,
+                self.config['observables'] + [['time']])
             for key, history in histories.items()}
 
         all_results = {}
@@ -233,13 +223,18 @@ class RunProcess(Step):
         return {'results': all_results}
 
 
-def timeseries_from_history(history):
+def timeseries_from_history(history, observables):
     results = {}
     for moment in history:
-        for key, value in moment.items():
-            if key not in results:
-                results[key] = []
-            results[key].append(value)
+        for observable in observables:
+            def transform(before):
+                if not before:
+                    before = []
+                value = get_path(moment, observable)
+                before.append(value)
+                return before
+
+            transform_path(results, observable, transform)
 
     return results
 
@@ -358,8 +353,6 @@ class ParameterScan(Step):
     def update(self, inputs):
         results = self.scan.update({}, 0.0)
 
-        import ipdb; ipdb.set_trace()
-
         update = {}
         for result in results:
             observable_list = []
@@ -432,6 +425,43 @@ def test_run_process():
     assert results[0]['results']['species'][0]['A'] == initial_A
 
 
+def test_nested_wires():
+    timestep = 0.1
+    runtime = 10.0
+
+    initial_A = 11.11
+
+    state = {
+        'species': {'A': initial_A},
+        'run': {
+            '_type': 'step',
+            'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
+            'config': {
+                'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
+                'process_config': {
+                    'rates': {
+                        'A': {
+                            'kdeg': 1.1,
+                            'ksynth': 0.9}}},
+                'observables': [['species', 'A']],
+                'timestep': timestep,
+                'runtime': runtime},
+            # '_outputs': {'results': {'_emit': True}},
+            'inputs': {'species': ['species']},
+            'outputs': {'results': ['A_results']}}}
+
+    process = Composite({
+        'bridge': {
+            'outputs': {
+                'results': ['A_results']}},
+        'state': state})
+
+    results = process.update({}, 0.0)
+
+    assert results[0]['results']['time'][-1] == runtime
+    assert results[0]['results']['species']['A'][0] == initial_A
+
+
 def test_parameter_scan():
     # TODO: make a parameter scan with a biosimulator process,
     #   ie - Copasi
@@ -470,8 +500,6 @@ def test_parameter_scan():
     # result = scan.update({})
     result = scan.update({}, 0.0)
 
-    import ipdb; ipdb.set_trace()
-
 
 def test_composite_workflow():
     # TODO: Make a workflow with a composite inside
@@ -491,4 +519,5 @@ def test_composite_workflow():
 
 if __name__ == '__main__':
     test_run_process()
+    test_nested_wires()
     test_parameter_scan()
