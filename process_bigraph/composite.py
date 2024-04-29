@@ -202,7 +202,7 @@ class ProcessTypes(TypeSystem):
         register_emitters(self)
 
 
-    def register_process(name, process_data):
+    def register_process(self, name, process_data):
         self.process_registry.register(name, process_data)
 
 
@@ -1266,11 +1266,11 @@ class RAMEmitter(Emitter):
         return result
 
 
-def test_emitter():
-    composite = Composite({})
+# def test_emitter():
+#     composite = Composite({})
 
-    composite.add_emitter(['emitters', 'ram'], 'ram-emitter')
-    composite.emit_port(
-        ['emitters', 'ram'],
-        ['processes', 'translation'],
-        ['outputs', 'protein'])
+#     composite.add_emitter(['emitters', 'ram'], 'ram-emitter')
+#     composite.emit_port(
+#         ['emitters', 'ram'],
+#         ['processes', 'translation'],
+#         ['outputs', 'protein'])

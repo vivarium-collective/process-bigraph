@@ -141,8 +141,6 @@ class RunProcess(Step):
                 observable,
                 [observable[-1]])
 
-        import ipdb; ipdb.set_trace()
-
         emit_config = dict(
             {'time': 'float'},
             **self.observables_schema)
@@ -358,8 +356,6 @@ class ParameterScan(Step):
     def update(self, inputs):
         results = self.scan.update({}, 0.0)
 
-        import ipdb; ipdb.set_trace()
-
         update = {}
         for result in results:
             observable_list = []
@@ -469,8 +465,6 @@ def test_parameter_scan():
     # TODO: make a method so we can run it directly, provide some way to get the result out
     # result = scan.update({})
     result = scan.update({}, 0.0)
-
-    import ipdb; ipdb.set_trace()
 
 
 def test_composite_workflow():
