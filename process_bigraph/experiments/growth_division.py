@@ -1,7 +1,7 @@
 from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
-def Grow(Process):
+class Grow(Process):
     config_schema = {
         'rate': 'float'}
 
@@ -29,7 +29,7 @@ def Grow(Process):
 
 # TODO: build composite and divide within it
 
-def Divide(Step):
+class Divide(Step):
     # assume the agent_schema has the right divide methods present
     config_schema = {
         'agent_id': 'string',
@@ -61,7 +61,7 @@ def Divide(Step):
     # state from the self.config['agent_schema'] (instead of trigger > threshold)
     def update(self, state):
         if state['trigger'] > self.config['threshold']:
-            mother = self.config["agent_id"]
+            mother = self.config['agent_id']
             daughters = [
                 f'{agent_id}_{i}'
                 for i in range(self.config['divisions'])]
@@ -76,15 +76,17 @@ def Divide(Step):
                             'daughters': daughters}}}}
 
 
-def generate_bridge(schema, state):
-    bridge_wires = {
+def generate_bridge_wires(schema):
+    return {
         key: [key]
         for key in schema
         if not key.startswith('_')}
 
+
+def generate_bridge(schema, state):
     bridge = {
-        'inputs': bridge_wires,
-        'outputs': bridge_wires}
+        port: generate_bridge_wires(schema[port])
+        for port in ['inputs', 'outputs']}
 
     config = {
         'state': state,
@@ -94,13 +96,19 @@ def generate_bridge(schema, state):
         '_type': 'process',
         'address': 'local:composite',
         'config': config,
-        'inputs': bridge_wires,
-        'outputs': bridge_wires}
+        'inputs': generate_bridge_wires(schema['inputs']),
+        'outputs': generate_bridge_wires(schema['outputs'])}
 
     return composite
 
 
-def grow_divide_agent(config):
+def grow_divide_agent(config=None, state=None, path=None):
+    agent_id = path[-1]
+
+    config = config or {}
+    state = state or {}
+    path = path or []
+
     agent_schema = config.get(
         'agent_schema',
         {'mass': 'float'})
@@ -110,25 +118,29 @@ def grow_divide_agent(config):
 
     grow_config = deep_merge(
         grow_config,
-        config.get('grow'))
+        config.get(
+            'grow'))
 
     divide_config = {
-        'agent_id': 0,
+        'agent_id': agent_id,
         'agent_schema': agent_schema,
         'threshold': 2.0,
         'divisions': 2}
 
     divide_config = deep_merge(
         divide_config,
-        config.get('divide'))
+        config.get(
+            'divide'))
 
     grow_divide_state = {
         'grow': {
             '_type': 'process',
             'address': 'local:grow',
             'config': grow_config,
-            'inputs': {'mass': ['mass']},
-            'outputs': {'mass': ['mass']}},
+            'inputs': {
+                'mass': ['mass']},
+            'outputs': {
+                'mass': ['mass']}},
 
         'divide': {
             '_type': 'process',
@@ -137,49 +149,39 @@ def grow_divide_agent(config):
             'inputs': {
                 'trigger': ['mass']},
             'outputs': {
-                'environment': ['..']}}}
+                'environment': ['environment']}}}
 
-    composite = generate_bridge(
-        agent_schema,
+    grow_divide_state = deep_merge(
+        grow_divide_state,
+        state)
+
+    composite = generate_bridge({
+        'inputs': {},
+        'outputs': agent_schema},
         grow_divide_state)
+
+    composite['config']['bridge']['outputs']['environment'] = ['environment']
+    composite['outputs']['environment'] = ['..']
 
     return composite
 
-    # bridge_wires = {
-    #     key: [key]
-    #     for key in agent_schema
-    #     if not key.startswith('_')}
-
-    # grow_divide_bridge = {
-    #     'inputs': bridge_wires,
-    #     'outputs': bridge_wires}
-
-    # grow_divide = {
-    #     'state': grow_divide_state,
-    #     'bridge': grow_divide_bridge}
-
-    # return {
-    #     '_type': 'process',
-    #     'address': 'local:composite',
-    #     'config': grow_divide,
-    #     'inputs': bridge_wires,
-    #     'outputs': bridge_wires}
-
 
 def test_grow_divide(core):
-    grow_divide = grow_divide_agent({
-        'grow': {
-            'rate': 0.03}})
+    grow_divide = grow_divide_agent(
+        {'grow': {'rate': 0.03}},
+        {'mass': 1.0},
+        ['environment', '0'])
 
     environment = {
         'environment': {
-            '0': grow_divide}}
-
-    composite = Composite({
-        'state': environment})
+            '0': {
+                'grow_divide': grow_divide}}}
 
     import ipdb; ipdb.set_trace()
     
+    composite = Composite({
+        'state': environment}, core=core)
+
     composite.run(10.0)
 
     import ipdb; ipdb.set_trace()

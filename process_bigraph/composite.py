@@ -7,6 +7,7 @@ Composite, Process, and Step classes
 import abc
 import copy
 import math
+import types
 import collections
 from typing import Dict
 
@@ -70,9 +71,6 @@ def deserialize_process(schema, encoded, core):
     :returns: The deserialized state with an instantiated process.
     """
     deserialized = encoded.copy()
-    if 'address' not in encoded:
-        import ipdb; ipdb.set_trace()
-
     protocol, address = encoded['address'].split(':', 1)
 
     if 'instance' in deserialized:
@@ -274,7 +272,8 @@ class ProcessTypes(TypeSystem):
                             hydrated_state,
                             ports,
                             top_schema=schema,
-                            path=path[:-1])
+                            path=path)
+                            # path=path[:-1])
 
             elif '_type' in schema:
                 hydrated_state = self.deserialize(schema, state)
