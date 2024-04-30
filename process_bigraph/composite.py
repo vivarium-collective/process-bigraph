@@ -187,8 +187,8 @@ def register_protocols(core):
 
 
 def register_emitters(core):
-    core.process_registry.register('console-emitter', ConsoleEmitter)
-    core.process_registry.register('ram-emitter', RAMEmitter)
+    core.register_process('console-emitter', ConsoleEmitter)
+    core.register_process('ram-emitter', RAMEmitter)
 
 
 class ProcessTypes(TypeSystem):
@@ -200,6 +200,8 @@ class ProcessTypes(TypeSystem):
         register_process_types(self)
         register_protocols(self)
         register_emitters(self)
+
+        self.register_process('composite', Composite)
 
 
     def register_process(self, name, process_data):
@@ -1203,11 +1205,6 @@ class Composite(Process):
 
         self.merge(
             projection)
-
-        # self.state = self.core.set(
-        #     self.composition,
-        #     self.state,
-        #     projection)
 
         self.run(interval)
 
