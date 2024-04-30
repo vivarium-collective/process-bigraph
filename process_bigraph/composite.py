@@ -202,7 +202,7 @@ class ProcessTypes(TypeSystem):
         register_emitters(self)
 
 
-    def register_process(name, process_data):
+    def register_process(self, name, process_data):
         self.process_registry.register(name, process_data)
 
 
