@@ -88,7 +88,7 @@ def test_composite(core):
         'composition': {
             'increase': 'process[level:float,level:float]',
             'value': 'float'},
-        'schema': {
+        'interface': {
             'inputs': {
                 'exchange': 'float'},
             'outputs': {

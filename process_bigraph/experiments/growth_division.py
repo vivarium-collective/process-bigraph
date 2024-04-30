@@ -63,7 +63,7 @@ class Divide(Step):
         if state['trigger'] > self.config['threshold']:
             mother = self.config['agent_id']
             daughters = [
-                f'{agent_id}_{i}'
+                f'{mother}_{i}'
                 for i in range(self.config['divisions'])]
 
             # return divide reaction
@@ -83,7 +83,7 @@ def generate_bridge_wires(schema):
         if not key.startswith('_')}
 
 
-def generate_bridge(schema, state):
+def generate_bridge(schema, state, interval=1.0):
     bridge = {
         port: generate_bridge_wires(schema[port])
         for port in ['inputs', 'outputs']}
@@ -95,6 +95,7 @@ def generate_bridge(schema, state):
     composite = {
         '_type': 'process',
         'address': 'local:composite',
+        'interval': interval,
         'config': config,
         'inputs': generate_bridge_wires(schema['inputs']),
         'outputs': generate_bridge_wires(schema['outputs'])}
@@ -167,14 +168,17 @@ def grow_divide_agent(config=None, state=None, path=None):
 
 
 def test_grow_divide(core):
+    initial_mass = 1.0
+
     grow_divide = grow_divide_agent(
         {'grow': {'rate': 0.03}},
-        {'mass': 1.0},
+        {'mass': initial_mass},
         ['environment', '0'])
 
     environment = {
         'environment': {
             '0': {
+                'mass': initial_mass,
                 'grow_divide': grow_divide}}}
 
     import ipdb; ipdb.set_trace()
@@ -182,7 +186,7 @@ def test_grow_divide(core):
     composite = Composite({
         'state': environment}, core=core)
 
-    composite.run(10.0)
+    updates = composite.update({}, 100.0)
 
     import ipdb; ipdb.set_trace()
 

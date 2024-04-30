@@ -334,23 +334,32 @@ class ProcessTypes(TypeSystem):
 
     def initialize_edge_state(self, schema, path, edge):
         initial_state = edge['instance'].initial_state()
+        if not initial_state:
+            return initial_state
+
         input_ports = get_path(schema, path + ('_inputs',))
         output_ports = get_path(schema, path + ('_outputs',))
-        ports = {'_inputs': input_ports, '_outputs': output_ports}
+        ports = {
+            '_inputs': input_ports,
+            '_outputs': output_ports}
 
-        input_state = self.project_edge(
-            ports,
-            edge,
-            path[:-1],
-            initial_state,
-            ports_key='inputs')
+        input_state = {}
+        if input_ports:
+            input_state = self.project_edge(
+                ports,
+                edge,
+                path[:-1],
+                initial_state,
+                ports_key='inputs')
 
-        output_state = self.project_edge(
-            ports,
-            edge,
-            path[:-1],
-            initial_state,
-            ports_key='outputs')
+        output_state = {}
+        if output_ports:
+            output_state = self.project_edge(
+                ports,
+                edge,
+                path[:-1],
+                initial_state,
+                ports_key='outputs')
 
         state = deep_merge(input_state, output_state)
 
@@ -525,17 +534,17 @@ def find_instances(state, instance_type='process_bigraph.composite.Process'):
     found = {}
 
     for key, inner in state.items():
-        if isinstance(inner, dict) and isinstance(inner.get('instance'), process_class):
-            found[key] = inner
+        if isinstance(inner, dict):
+            if isinstance(inner.get('instance'), process_class):
+                found[key] = inner
+            elif not key.startswith('_'):
+                inner_instances = find_instances(
+                    inner,
+                    instance_type=instance_type)
+
+                if inner_instances:
+                    found[key] = inner_instances
     return found
-
-
-def find_processes(state):
-    return find_instances(state, 'process_bigraph.composite.Process')
-
-
-def find_steps(state):
-    return find_instances(state, 'process_bigraph.composite.Step')
 
 
 def find_instance_paths(state, instance_type='process_bigraph.composite.Process'):
@@ -746,7 +755,7 @@ class Composite(Process):
     config_schema = {
         'composition': 'schema',
         'state': 'tree[any]',
-        'schema': {
+        'interface': {
             'inputs': 'schema',
             'outputs': 'schema'},
         'bridge': {
@@ -776,8 +785,6 @@ class Composite(Process):
             self.core.access(composition))
 
         # TODO: add flag to self.core.access(copy=True)
-        initial_schema = self.core.access(
-            self.config.get('schema', {})) or {}
         self.bridge = self.config.get('bridge', {})
 
         # find all processes, steps, and emitter in the state
@@ -876,8 +883,12 @@ class Composite(Process):
         return to_run
 
 
-    def interface(self):
-        return self.process_schema
+    def inputs(self):
+        return self.process_schema.get('inputs', {})
+
+
+    def outputs(self):
+        return self.process_schema.get('outputs', {})
 
 
     def merge(self, initial_state):
