@@ -183,7 +183,8 @@ def test_grow_divide(core):
     import ipdb; ipdb.set_trace()
     
     composite = Composite({
-        'state': environment}, core=core)
+        'state': environment},
+        core=core)
 
     updates = composite.update({}, 100.0)
 

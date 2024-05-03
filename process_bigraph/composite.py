@@ -34,8 +34,12 @@ def check_process(schema, state, core):
         Edge)
 
 
-def divide_process(schema, value, core):
-    return value
+def fold_process(schema, state, method, values, core):
+    import ipdb; ipdb.set_trace()
+
+
+def divide_process(schema, state, values, core):
+    import ipdb; ipdb.set_trace()
 
 
 def serialize_process(schema, value, core):
@@ -152,6 +156,7 @@ process_types = {
         '_serialize': serialize_process,
         '_deserialize': deserialize_step,
         '_check': check_process,
+        '_fold': fold_process,
         '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
@@ -165,6 +170,7 @@ process_types = {
         '_serialize': serialize_process,
         '_deserialize': deserialize_process,
         '_check': check_process,
+        '_fold': fold_process,
         '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
