@@ -46,8 +46,7 @@ class Divide(Step):
 
     def inputs(self):
         return {
-            'trigger': 'float',
-            'self': self.config['agent_schema']}
+            'trigger': 'float'}
 
 
     def outputs(self):
