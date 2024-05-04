@@ -70,7 +70,6 @@ class Divide(Step):
                 'environment': {
                     '_react': {
                         'divide': {
-                            # 'path': [self.config['agent_id']]}}}}
                             'mother': mother,
                             'daughters': daughters}}}}
 

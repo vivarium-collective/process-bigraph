@@ -13,7 +13,7 @@ from typing import Dict
 
 
 from bigraph_schema import Edge, TypeSystem, get_path, establish_path, set_path, deep_merge
-from bigraph_schema.registry import Registry, validate_merge
+from bigraph_schema.registry import Registry, validate_merge, visit_method
 
 from process_bigraph.protocols import local_lookup, local_lookup_module
 
@@ -34,12 +34,46 @@ def check_process(schema, state, core):
         Edge)
 
 
-def fold_process(schema, state, method, values, core):
-    import ipdb; ipdb.set_trace()
+def fold_visit(schema, state, method, values, core):
+    visit = visit_method(
+        schema,
+        state,
+        method,
+        values,
+        core)
+
+    return visit
 
 
 def divide_process(schema, state, values, core):
-    import ipdb; ipdb.set_trace()
+    # daughter_configs must have a config per daughter
+
+    existing_config = state['config']
+    daughter_configs = values.get(
+        'daughter_configs',
+        [{} for index in range(values['divisions'])])
+
+    divisions = []
+    for index in range(values['divisions']):
+        daughter_config = copy.deepcopy(
+            existing_config)
+        daughter_config = deep_merge(
+            daughter_config,
+            daughter_configs[index])
+        
+        # TODO: provide a way to override inputs and outputs
+        daughter_state = {
+            'address': state['address'],
+            'config': daughter_config,
+            'inputs': copy.deepcopy(state['inputs']),
+            'outputs': copy.deepcopy(state['outputs'])}
+
+        if 'interval' in state:
+            daughter_state['interval'] = state['interval']
+
+        divisions.append(daughter_state)
+
+    return divisions
 
 
 def serialize_process(schema, value, core):
@@ -156,7 +190,7 @@ process_types = {
         '_serialize': serialize_process,
         '_deserialize': deserialize_step,
         '_check': check_process,
-        '_fold': fold_process,
+        '_fold': fold_visit,
         '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
@@ -170,12 +204,13 @@ process_types = {
         '_serialize': serialize_process,
         '_deserialize': deserialize_process,
         '_check': check_process,
-        '_fold': fold_process,
+        '_fold': fold_visit,
         '_divide': divide_process,
         '_description': '',
         # TODO: support reference to type parameters from other states
         'interval': 'interval',
-    }
+        'address': 'protocol',
+        'config': 'tree[any]'},
 }
 
 
