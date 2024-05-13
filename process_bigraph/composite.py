@@ -268,19 +268,20 @@ class ProcessTypes(TypeSystem):
                     key: value
                     for key, value in state.items()
                     if key.startswith('_')}
+
                 state_schema = self.access(
                     state_type)
 
-                hydrated_state = self.deserialize(state_schema, state)
-                top_state = set_path(
+                hydrated_state = self.deserialize(
+                    state_schema,
+                    state)
+
+                schema, top_state = self.set_slice(
+                    schema,
                     top_state,
                     path,
+                    state_schema,
                     hydrated_state)
-
-                schema = set_path(
-                    schema,
-                    path,
-                    state_schema)
 
                 # TODO: fix is_descendant
                 # if core.type_registry.is_descendant('process', state_schema) or core.registry.is_descendant('step', state_schema):
@@ -292,13 +293,6 @@ class ProcessTypes(TypeSystem):
                     for port_key in ['inputs', 'outputs']:
                         subschema = port_schema.get(
                             port_key, {})
-
-                        # _, schema = self.set_slice(
-                        #     'schema',
-                        #     schema,
-                        #     path + (f'_{port_key}',),
-                        #     'schema',
-                        #     subschema)
 
                         schema = set_path(
                             schema,
@@ -314,7 +308,6 @@ class ProcessTypes(TypeSystem):
                             ports,
                             top_schema=schema,
                             path=path)
-                            # path=path[:-1])
 
             elif '_type' in schema:
                 hydrated_state = self.deserialize(schema, state)
@@ -337,21 +330,11 @@ class ProcessTypes(TypeSystem):
             pass
 
         else:
-            type_schema = TYPE_SCHEMAS.get(str(type(state)), schema)
-
-            peer = get_path(schema, path)
-            destination = establish_path(
-                peer,
-                path[:-1],
-                top=schema,
-                cursor=path[:-1])
-
-            path_key = path[-1]
-            if path_key in destination:
-                # TODO: validate
-                pass
-            else:
-                destination[path_key] = type_schema
+            schema, top_state = super().infer_schema(
+                schema,
+                state,
+                top_state,
+                path)
 
         return schema, top_state
 
