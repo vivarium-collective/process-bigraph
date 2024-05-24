@@ -840,7 +840,7 @@ class Composite(Process):
                 edge)
 
             try:
-                edge_state = validate_merge(state, edge_state, initial)
+                edge_state = deep_merge(edge_state, initial)
             except:
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
