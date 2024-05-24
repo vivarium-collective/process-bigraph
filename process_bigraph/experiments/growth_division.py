@@ -62,7 +62,11 @@ class Divide(Step):
         if state['trigger'] > self.config['threshold']:
             mother = self.config['agent_id']
             daughters = [
-                f'{mother}_{i}'
+                (f'{mother}_{i}', {
+                    'state': {
+                        'divide': {
+                            'config': {
+                                'agent_id': f'{mother}_{i}'}}}})
                 for i in range(self.config['divisions'])]
 
             # return divide reaction

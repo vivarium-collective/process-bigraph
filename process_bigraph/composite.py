@@ -48,10 +48,14 @@ def fold_visit(schema, state, method, values, core):
 def divide_process(schema, state, values, core):
     # daughter_configs must have a config per daughter
 
-    existing_config = state['config']
     daughter_configs = values.get(
         'daughter_configs',
         [{} for index in range(values['divisions'])])
+
+    if 'config' not in state:
+        return daughter_configs
+
+    existing_config = state['config']
 
     divisions = []
     for index in range(values['divisions']):
@@ -109,6 +113,9 @@ def deserialize_process(schema, encoded, core):
     :returns: The deserialized state with an instantiated process.
     """
     deserialized = encoded.copy()
+    if 'address' not in deserialized:
+        return deserialized
+
     protocol, address = encoded['address'].split(':', 1)
 
     if 'instance' in deserialized:
@@ -814,18 +821,8 @@ class Composite(Process):
         # TODO: add flag to self.core.access(copy=True)
         self.bridge = self.config.get('bridge', {})
 
-        # find all processes, steps, and emitter in the state
-        self.process_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Process')
-
-        self.step_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Step')
-
-        self.emitter_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Emitter')
+        self.find_instance_paths(
+            state)
 
         # merge the processes and steps into a single "edges" dict
         self.edge_paths = self.process_paths.copy()
@@ -908,6 +905,21 @@ class Composite(Process):
             self.trigger_state)
 
         return to_run
+
+
+    def find_instance_paths(self, state):
+        # find all processes, steps, and emitter in the state
+        self.process_paths = find_instance_paths(
+            state,
+            'process_bigraph.composite.Process')
+
+        self.step_paths = find_instance_paths(
+            state,
+            'process_bigraph.composite.Step')
+
+        self.emitter_paths = find_instance_paths(
+            state,
+            'process_bigraph.composite.Emitter')
 
 
     def inputs(self):
@@ -1069,6 +1081,34 @@ class Composite(Process):
         #     self.state.build_topology_views()
 
 
+    def expire_process_paths(self, update_paths):
+        for update_path in update_paths:
+            for process_path in self.process_paths.copy():
+                updated = all([
+                    update == process
+                    for update, process in zip(update_path, process_path)])
+
+                if updated:
+                    self.find_instance_paths(
+                        self.state)
+                    return
+
+                    # del self.process_paths[process_path]
+
+                    # target_schema, target_state = self.core.slice(
+                    #     self.composition,
+                    #     self.state,
+                    #     update_path)
+
+                    # process_subpaths = find_instance_paths(
+                    #     target_state,
+                    #     'process_bigraph.composite.Process')
+
+                    # for subpath, process in process_subpaths.items():
+                    #     process_path = update_path + subpath
+                    #     self.process_paths[process_path] = process
+
+
     def run(self, interval, force_complete=False):
         if self.to_run:
             self.run_steps(self.to_run)
@@ -1115,6 +1155,7 @@ class Composite(Process):
                 # get all update paths, then trigger steps that
                 # depend on those paths
                 update_paths = self.apply_updates(updates)
+                self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
 
                 # # display and emit
