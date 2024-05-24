@@ -1,3 +1,4 @@
+import pytest
 from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
@@ -183,15 +184,19 @@ def test_grow_divide(core):
                 'mass': initial_mass,
                 'grow_divide': grow_divide}}}
 
-    import ipdb; ipdb.set_trace()
-    
     composite = Composite({
         'state': environment},
         core=core)
 
     updates = composite.update({}, 100.0)
 
-    import ipdb; ipdb.set_trace()
+
+@pytest.fixture
+def core():
+    core = ProcessTypes()
+    core.register_process('grow', Grow)
+    core.register_process('divide', Divide)
+    return core
 
 
 if __name__ == '__main__':
