@@ -396,6 +396,7 @@ class ProcessTypes(TypeSystem):
         if protocol == 'local':
             self.lookup_local(config)
 
+
 def hierarchy_depth(hierarchy, path=()):
     """
     Create a mapping of every path in the hierarchy to the node living at
@@ -406,7 +407,9 @@ def hierarchy_depth(hierarchy, path=()):
 
     for key, inner in hierarchy.items():
         down = tuple(path + (key,))
-        if isinstance(inner, dict) and 'instance' not in inner:
+        if key.startswith('_'):
+            base[path] = inner
+        elif isinstance(inner, dict) and 'instance' not in inner:
             base.update(hierarchy_depth(inner, down))
         else:
             base[down] = inner
