@@ -16,29 +16,37 @@ from process_bigraph.process_types import process_types
 from process_bigraph.protocols import local_lookup, local_lookup_module
 
 
-def assert_interface(interface):
+def assert_interface(interface: Dict):
+    """Ensure that an interface dict has the required keys"""
     required_keys = ['inputs', 'outputs']
     existing_keys = set(interface.keys())
     assert existing_keys == set(required_keys), f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
 
 
-def register_process_types(core):
+def register_process_types(core: TypeSystem):
+    """Register process types with the core"""
     for process_key, process_type in process_types.items():
         core.register(process_key, process_type)
-
     return core
 
 
-def register_protocols(core):
+def register_protocols(core: TypeSystem):
+    """Register protocols with the core"""
     core.protocol_registry.register('local', local_lookup)
 
 
-def register_emitters(core):
+def register_emitters(core: TypeSystem):
+    """Register emitters with the core"""
     core.register_process('console-emitter', ConsoleEmitter)
     core.register_process('ram-emitter', RAMEmitter)
 
 
 class ProcessTypes(TypeSystem):
+    """ProcessTypes class
+
+    This class extends the TypeSystem class to include process types.
+    """
+
     def __init__(self):
         super().__init__()
         self.process_registry = Registry()
@@ -55,7 +63,13 @@ class ProcessTypes(TypeSystem):
         self.process_registry.register(name, process_data)
 
 
-    def infer_schema(self, schema, state, top_state=None, path=None):
+    def infer_schema(
+            self,
+            schema,
+            state,
+            top_state=None,
+            path=None
+    ):
         """
         Given a schema fragment and an existing state with _type keys,
         return the full schema required to describe that state,
@@ -198,13 +212,6 @@ class ProcessTypes(TypeSystem):
         return state
 
 
-    def lookup_address(self, address):
-        protocol, config = address.split(':')
-
-        if protocol == 'local':
-            self.lookup_local(config)
-
-
 def hierarchy_depth(hierarchy, path=()):
     """
     Create a mapping of every path in the hierarchy to the node living at
@@ -225,8 +232,6 @@ def hierarchy_depth(hierarchy, path=()):
     return base
 
 
-# deal with steps vs temporal process vs edges
-
 class SyncUpdate():
     def __init__(self, update):
         self.update = update
@@ -237,8 +242,7 @@ class SyncUpdate():
 
 class Step(Edge):
     """Step base class."""
-    # TODO: support trigger every time
-    #   as well as dependency trigger
+    # TODO: support trigger every time as well as dependency trigger
     config_schema = {}
 
 
@@ -507,15 +511,6 @@ def build_step_network(steps):
 
     return ancestors, nodes
 
-
-def combined_step_network(steps):
-    steps, nodes = build_step_network(steps)
-
-    trigger_state = {
-        'steps': steps,
-        'nodes': nodes}
-
-    return trigger_state
 
 
 def build_trigger_state(nodes):
@@ -1052,10 +1047,6 @@ class Composite(Process):
         self.run_steps(to_run)
 
 
-    def emit_port(self, emitter_path, process_path, port_path):
-        pass
-
-
     def gather_results(self, queries=None):
         '''
         a map of paths to emitter --> queries for the emitter at that path
@@ -1093,10 +1084,20 @@ class Composite(Process):
         return updates
 
 
+
+"""
+Emitters
+--------
+Emitters are steps that observe the state of the system and emit it to an external source. 
+This could be to a database, to a file, or to the console.
+"""
+
 class Emitter(Step):
-    """Base emitter class. An `Emitter` implementation instance diverts all querying of data to
-        the primary historical collection whose type pertains to Emitter child, i.e:
-            database-emitter=>`pymongo.Collection`, ram-emitter=>`.RamEmitter.history`(`List`)
+    """Base emitter class.
+
+    An `Emitter` implementation instance diverts all querying of data to
+    the primary historical collection whose type pertains to Emitter child, i.e:
+     database-emitter=>`pymongo.Collection`, ram-emitter=>`.RamEmitter.history`(`List`)
     """
     config_schema = {
         'emit': 'schema'}
@@ -1112,6 +1113,10 @@ class Emitter(Step):
 
 
 class ConsoleEmitter(Emitter):
+    """Console emitter class.
+
+    This emitter logs the state to the console.
+    """
 
     def update(self, state) -> Dict:
         print(state)
@@ -1119,6 +1124,10 @@ class ConsoleEmitter(Emitter):
 
 
 class RAMEmitter(Emitter):
+    """RAM emitter class.
+
+    This emitter logs the state to a list in memory.
+    """
 
     def __init__(self, config, core):
         super().__init__(config, core)
