@@ -42,9 +42,10 @@ def register_emitters(core: TypeSystem):
 
 
 class ProcessTypes(TypeSystem):
-    """ProcessTypes class
-
-    This class extends the TypeSystem class to include process types.
+    """
+    ProcessTypes class extends the TypeSystem class to include process types.
+    It maintains a registry of process types and provides methods to register
+    new process types, protocols, and emitters.
     """
 
     def __init__(self):
@@ -59,7 +60,18 @@ class ProcessTypes(TypeSystem):
         self.register_process('composite', Composite)
 
 
-    def register_process(self, name, process_data):
+    def register_process(
+            self,
+            name,
+            process_data
+    ):
+        """
+        Registers a new process type in the process registry.
+
+        Args:
+            name (str): The name of the process type.
+            process_data: The data associated with the process type.
+        """
         self.process_registry.register(name, process_data)
 
 
@@ -161,6 +173,10 @@ class ProcessTypes(TypeSystem):
         return schema, top_state
 
     def infer_edge(self, schema, wires):
+        """
+        Infer the schema for an edge based by projecting the schema with the wires.
+        """
+
         schema = schema or {}
         edge = {}
 
@@ -179,6 +195,9 @@ class ProcessTypes(TypeSystem):
         return edge
 
     def initialize_edge_state(self, schema, path, edge):
+        """
+        Initialize the state for an edge based on the schema and the edge.
+        """
         initial_state = edge['instance'].initial_state()
         if not initial_state:
             return initial_state
@@ -241,7 +260,12 @@ class SyncUpdate():
 
 
 class Step(Edge):
-    """Step base class."""
+    """Step base class.
+
+    Steps are the basic unit of computation in a composite process, they are non-temporal
+    processes that can get triggered based on their dependencies, setting up a flow of steps
+    like a workflow.
+    """
     # TODO: support trigger every time as well as dependency trigger
     config_schema = {}
 
@@ -444,16 +468,16 @@ def empty_front(time):
     }
 
 
-def find_leaves(d, path=None):
+def find_leaves(tree_structure, path=None):
     leaves = []
     path = ()
 
-    if isinstance(d, list):
-        leaves = d
-    elif isinstance(d, tuple):
-        leaves.append(d)
+    if isinstance(tree_structure, list):
+        leaves = tree_structure
+    elif isinstance(tree_structure, tuple):
+        leaves.append(tree_structure)
     else:
-        for key, value in d.items():
+        for key, value in tree_structure.items():
             if isinstance(value, dict):
                 subleaves = find_leaves(value, path + (key,))
                 leaves.extend(subleaves)
@@ -906,11 +930,15 @@ class Composite(Process):
 
 
     def run(self, interval, force_complete=False):
+        # If there are steps to run, execute them
         if self.to_run:
             self.run_steps(self.to_run)
             self.to_run = None
 
+        # Define the end time for the run
         end_time = self.state['global_time'] + interval
+
+        # Run the processes and apply updates until the end time is reached
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
 
