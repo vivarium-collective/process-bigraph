@@ -189,6 +189,7 @@ def test_grow_divide(core):
         core=core)
 
     updates = composite.update({}, 100.0)
+    assert '0_0_0_0_0' in composite.state['environment']
 
 
 @pytest.fixture

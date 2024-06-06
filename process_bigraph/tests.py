@@ -33,8 +33,7 @@ class IncreaseProcess(Process):
 
     def initial_state(self):
         return {
-            'inputs': {
-                'level': 11.0}}
+            'level': 4.4}
 
 
     def update(self, state, interval):
@@ -132,7 +131,7 @@ def test_infer(core):
             'value': '11.11'}}, core=core)
 
     assert composite.composition['value']['_type'] == 'float'
-    assert composite.state['value'] == 11.11
+    assert composite.state['value'] == 4.4
 
 
 def test_process_type(core):
