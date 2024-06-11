@@ -665,7 +665,7 @@ class Composite(Process):
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
 
-        state = deep_merge(edge_state, state)
+        state = deep_merge(state, edge_state)
 
         self.state = self.core.deserialize(
             self.composition,
