@@ -10,7 +10,7 @@ import collections
 from typing import Dict
 
 from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge
-from bigraph_schema.registry import Registry
+from bigraph_schema.registry import Registry, is_schema_key
 
 from process_bigraph.process_types import process_types
 from process_bigraph.protocols import local_lookup, local_lookup_module
@@ -400,7 +400,7 @@ def find_instances(state, instance_type='process_bigraph.composite.Process'):
         if isinstance(inner, dict):
             if isinstance(inner.get('instance'), process_class):
                 found[key] = inner
-            elif not key.startswith('_'):
+            elif not is_schema_key(key):
                 inner_instances = find_instances(
                     inner,
                     instance_type=instance_type)
@@ -604,7 +604,6 @@ class Composite(Process):
     """
     Composite parent class.
     """
-
 
     config_schema = {
         'composition': 'schema',
