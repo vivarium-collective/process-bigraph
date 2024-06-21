@@ -168,16 +168,16 @@ def run_dfba_spatial():
                 'config': dfba_config(),
                 'inputs': {
                     'substrates': {
-                        'glucose': ['..', '..', 'fields', 'glucose', i, j],
-                        'acetate': ['..', '..', 'fields', 'acetate', i, j],
-                        'biomass': ['..', '..', 'fields', 'biomass', i, j],
+                        'glucose': ['..', 'fields', 'glucose', i, j],
+                        'acetate': ['..', 'fields', 'acetate', i, j],
+                        'biomass': ['..', 'fields', 'biomass', i, j],
                     }
                 },
                 'outputs': {
                     'substrates': {
-                        'glucose': ['..', '..', 'fields', 'glucose', i, j],
-                        'acetate': ['..', '..', 'fields', 'acetate', i, j],
-                        'biomass': ['..', '..', 'fields', 'biomass', i, j]
+                        'glucose': ['..', 'fields', 'glucose', i, j],
+                        'acetate': ['..', 'fields', 'acetate', i, j],
+                        'biomass': ['..', 'fields', 'biomass', i, j]
                     }
                 }
             }
@@ -197,7 +197,11 @@ def run_dfba_spatial():
         'spatial_dfba': dfba_processes_dict
     }
 
+    import ipdb; ipdb.set_trace()
+
     sim = Composite({'state': composite_state}, core=core)
+
+    import ipdb; ipdb.set_trace()
 
 
 if __name__ == '__main__':
