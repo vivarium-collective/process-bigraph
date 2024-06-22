@@ -187,8 +187,8 @@ def run_dfba_spatial():
             '_type': 'map',
             '_value': {
                 '_type': 'array',
-                '_size': n_bins,
-                '_value': 'positive_float'
+                '_shape': n_bins,
+                '_data': 'positive_float'
             },
             'glucose': initial_glucose,
             'acetate': initial_acetate,
