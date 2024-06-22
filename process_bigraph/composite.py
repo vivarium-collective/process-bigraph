@@ -866,7 +866,8 @@ class Composite(Process):
                     self.interface()['outputs'],
                     self.bridge['outputs'],
                     (),
-                    update)
+                    top_schema=self.composition,
+                    top_state=update)
 
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
