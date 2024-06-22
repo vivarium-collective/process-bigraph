@@ -70,10 +70,12 @@ class DynamicFBA(Process):
                 self.model.reactions.get_by_id(reaction_id).upper_bound = bounds['upper']
 
     def inputs(self):
-        return {'substrates': 'map[positive_float]'}
+        return {
+            'substrates': 'map[positive_float]'}
 
     def outputs(self):
-        return {'substrates': 'map[positive_float]'}
+        return {
+            'substrates': 'map[positive_float]'}
 
     # TODO -- can we just put the inputs/outputs directly in the function?
     def update(self, state, interval):
@@ -200,6 +202,10 @@ def run_dfba_spatial():
     import ipdb; ipdb.set_trace()
 
     sim = Composite({'state': composite_state}, core=core)
+
+    import ipdb; ipdb.set_trace()
+
+    sim.update({}, 10.0)
 
     import ipdb; ipdb.set_trace()
 

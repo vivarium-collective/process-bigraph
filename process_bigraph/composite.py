@@ -10,7 +10,7 @@ import collections
 from typing import Dict
 
 from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge
-from bigraph_schema.registry import Registry, is_schema_key
+from bigraph_schema.registry import Registry, is_schema_key, hierarchy_depth
 
 from process_bigraph.process_types import process_types
 from process_bigraph.protocols import local_lookup, local_lookup_module
@@ -229,26 +229,6 @@ class ProcessTypes(TypeSystem):
         state = deep_merge(input_state, output_state)
 
         return state
-
-
-def hierarchy_depth(hierarchy, path=()):
-    """
-    Create a mapping of every path in the hierarchy to the node living at
-    that path in the hierarchy.
-    """
-
-    base = {}
-
-    for key, inner in hierarchy.items():
-        down = tuple(path + (key,))
-        if key.startswith('_'):
-            base[path] = inner
-        elif isinstance(inner, dict) and 'instance' not in inner:
-            base.update(hierarchy_depth(inner, down))
-        else:
-            base[down] = inner
-
-    return base
 
 
 class SyncUpdate():
