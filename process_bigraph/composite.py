@@ -10,7 +10,7 @@ import collections
 from typing import Dict
 
 from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge
-from bigraph_schema.registry import Registry, is_schema_key, hierarchy_depth
+from bigraph_schema.registry import Registry, is_schema_key, hierarchy_depth, strip_schema_keys
 
 from process_bigraph.process_types import process_types
 from process_bigraph.protocols import local_lookup, local_lookup_module
@@ -594,7 +594,8 @@ class Composite(Process):
         'bridge': {
             'inputs': 'wires',
             'outputs': 'wires'},
-        'global_time_precision': 'maybe[float]'}
+        'global_time_precision': 'maybe[float]',
+    }
 
 
     def __init__(self, config=None, core=None):
@@ -763,6 +764,9 @@ class Composite(Process):
             Tuple of the deferred update (in absolute terms) and
             ``store``.
         """
+
+        states = strip_schema_keys(states)
+
         update = process['instance'].invoke(states, interval)
 
         def defer_project(update, args):

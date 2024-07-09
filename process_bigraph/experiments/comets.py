@@ -121,6 +121,7 @@ LAPLACIAN_2D = np.array([[0, 1, 0],
                          [1, -4, 1],
                          [0, 1, 0]])
 
+
 class DiffusionAdvection(Process):
     config_schema = {
         'n_bins': 'tuple[integer,integer]',
@@ -374,6 +375,7 @@ def run_diffusion_process():
     }
 
     sim = Composite({'state': composite_state}, core=core)
+    # sim.add_emitter()
 
     sim.update({}, 10.0)
 
@@ -382,6 +384,102 @@ def run_diffusion_process():
     print(data)
 
 
+def run_comets():
+    n_bins = (10, 10)
+
+    initial_glucose = np.random.uniform(low=0, high=20, size=n_bins)
+    initial_acetate = np.random.uniform(low=0, high=0, size=n_bins)
+    initial_biomass = np.random.uniform(low=0, high=0.1, size=n_bins)
+
+    dfba_processes_dict = {}
+    for i in range(n_bins[0]):
+        for j in range(n_bins[1]):
+            dfba_processes_dict[f'[{i},{j}]'] = {
+                '_type': 'process',
+                'address': 'local:DynamicFBA',
+                'config': dfba_config(),
+                'inputs': {
+                    'substrates': {
+                        'glucose': ['..', 'fields', 'glucose', i, j],
+                        'acetate': ['..', 'fields', 'acetate', i, j],
+                        'biomass': ['..', 'fields', 'biomass', i, j],
+                    }
+                },
+                'outputs': {
+                    'substrates': {
+                        'glucose': ['..', 'fields', 'glucose', i, j],
+                        'acetate': ['..', 'fields', 'acetate', i, j],
+                        'biomass': ['..', 'fields', 'biomass', i, j]
+                    }
+                }
+            }
+
+    composite_state = {
+        'fields': {
+            '_type': 'map',
+            '_value': {
+                '_type': 'array',
+                '_shape': n_bins,
+                '_data': 'positive_float'
+            },
+            'glucose': initial_glucose,
+            'acetate': initial_acetate,
+            'biomass': initial_biomass,
+        },
+        'spatial_dfba': dfba_processes_dict,
+        'diffusion': {
+            '_type': 'process',
+            'address': 'local:DiffusionAdvection',
+            'config': {
+                'n_bins': n_bins,
+                'bounds': (10, 10),
+                'default_diffusion_rate': 1e-1,
+                'default_diffusion_dt': 1e-1,
+                'diffusion_coeffs': {
+                    'glucose': 1e-1,
+                    'acetate': 1e-1,
+                    'biomass': 1e-1,
+                },
+                'advection_coeffs': {
+                    'glucose': (0, 0),
+                    'acetate': (0, 0),
+                    'biomass': (0, 0),
+                },
+            },
+            'inputs': {
+                'fields': ['fields']
+            },
+            'outputs': {
+                'fields': ['fields']
+            }
+        },
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:ram-emitter',
+            'config': {
+                'emit': {
+                    'fields': 'map',
+                    'time': 'float',
+                }
+            },
+            'inputs': {
+                'fields': ['fields'],
+                'time': ['global_time']
+            }
+        }
+    }
+
+    sim = Composite({'state': composite_state}, core=core)
+
+    sim.update({}, 10.0)
+
+    results = sim.gather_results()
+
+    print(results)
+
+
+
 if __name__ == '__main__':
     # run_dfba_spatial()
-    run_diffusion_process()
+    # run_diffusion_process()
+    run_comets()
