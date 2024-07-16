@@ -188,6 +188,7 @@ process_types = {
         'address': 'protocol',
         'config': 'tree[any]'},
 
+    # TODO: slice process to allow for navigating through a port
     'process': {
         '_type': 'process',
         '_inherit': 'edge',

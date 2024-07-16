@@ -594,8 +594,19 @@ class Composite(Process):
         'bridge': {
             'inputs': 'wires',
             'outputs': 'wires'},
-        'global_time_precision': 'maybe[float]',
-    }
+        'emitter': {
+            'path': {
+                '_type': 'path',
+                '_default': ['emitter']},
+            'address': {
+                '_type': 'string',
+                '_default': 'local:ram-emitter'},
+            'config': 'tree[any]',
+            'mode': { # this should be an enum: all, none, bridge, port
+                '_type': 'string',
+                '_default': 'none'},
+            'emit': 'wires'},
+        'global_time_precision': 'maybe[float]'}
 
 
     def __init__(self, config=None, core=None):
@@ -665,6 +676,9 @@ class Composite(Process):
         self.global_time_precision = self.config[
             'global_time_precision']
 
+        self.add_emitter(
+            self.config['emitter'])
+
         self.step_triggers = {}
 
         for step_path, step in self.step_paths.items():
@@ -728,6 +742,46 @@ class Composite(Process):
 
     def outputs(self):
         return self.process_schema.get('outputs', {})
+
+
+    def read_emitter_config(self, emitter_config):
+        address = emitter_config.get('address', 'local:ram-emitter')
+        config = emitter_config.get('config', {})
+        mode = emitter_config.get('mode', 'none')
+
+        if mode == 'all':
+            inputs = {
+                key: [key]
+                for key in self.state.keys()
+                if not is_schema_key(key) and key not in self.config['emitter']['inputs']}
+
+        elif mode == 'none':
+            inputs = emitter_config.get('emit', {})
+
+        elif mode == 'bridge':
+            inputs = {}
+
+        elif mode == 'ports':
+            inputs = {}
+            
+        if not 'emit' in config:
+            config['emit'] = {
+                input: 'any'
+                for input in inputs}
+
+        return {
+            '_type': 'step',
+            'address': address,
+            'config': config,
+            'inputs': inputs}
+        
+
+    def add_emitter(self, emitter_config):
+        path = emitter_config['path']
+        step_config = self.read_emitter_config(emitter_config)
+        emitter = set_path(
+            {}, path, step_config)
+        self.merge(emitter)
 
 
     def merge(self, initial_state):
@@ -1161,6 +1215,9 @@ class RAMEmitter(Emitter):
             result = self.history
 
         return result
+
+
+# def StateEmitter(Emitter):
 
 
 # def test_emitter():

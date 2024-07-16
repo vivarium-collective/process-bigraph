@@ -384,6 +384,66 @@ def test_reaction():
                             'inner': ['inner']}}}}}}
 
 
+def test_emitter(core):
+    composite_schema = {
+        'bridge': {
+            'inputs': {
+                'DNA': ['DNA'],
+                'mRNA': ['mRNA']},
+            'outputs': {
+                'DNA': ['DNA'],
+                'mRNA': ['mRNA']}},
+
+        'state': {
+            'interval': {
+                '_type': 'step',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
+                'config': {'ktsc': '6e0'},
+                'inputs': {
+                    'DNA': ['DNA'],
+                    'mRNA': ['mRNA']},
+                'outputs': {
+                    'interval': ['event', 'interval']}},
+
+            'event': {
+                '_type': 'process',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
+                'config': {'ktsc': 6e0},
+                'inputs': {
+                    'DNA': ['DNA'],
+                    'mRNA': ['mRNA']},
+                'outputs': {
+                    'mRNA': ['mRNA']},
+                'interval': '3.0'}},
+
+        'emitter': {
+            'emit': {
+                'time': ['global_time'],
+                'mRNA': ['mRNA'],
+                'interval': ['event', 'interval']}}}
+
+    gillespie = Composite(
+        composite_schema,
+        core=core)
+
+    updates = gillespie.update({
+        'DNA': {
+            'A gene': 11.0,
+            'B gene': 5.0},
+        'mRNA': {
+            'A mRNA': 33.3,
+            'B mRNA': 2.1}},
+        1000.0)
+
+    # TODO: make this work
+    results = gillespie.gather_results()
+
+    assert 'mRNA' in updates[0]
+    # TODO: support omit as well as emit
+    
+
+
+
 if __name__ == '__main__':
     core = ProcessTypes()
 
@@ -394,4 +454,5 @@ if __name__ == '__main__':
     test_infer(core)
     test_step_initialization(core)
     test_dependencies(core)
+    test_emitter(core)
     # test_reaction()
