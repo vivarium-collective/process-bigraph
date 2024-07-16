@@ -185,7 +185,7 @@ class RunProcess(Step):
                         **self.inputs_config),
                     'outputs': {}}}}
 
-        self.composite = Composite(composite_config)
+        self.composite = Composite(composite_config, core=core)
 
 
     def inputs(self):

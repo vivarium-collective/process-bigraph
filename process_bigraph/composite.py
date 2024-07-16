@@ -10,7 +10,7 @@ import collections
 from typing import Dict
 
 from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge
-from bigraph_schema.registry import Registry
+from bigraph_schema.registry import Registry, is_schema_key, hierarchy_depth, strip_schema_keys
 
 from process_bigraph.process_types import process_types
 from process_bigraph.protocols import local_lookup, local_lookup_module
@@ -231,26 +231,6 @@ class ProcessTypes(TypeSystem):
         return state
 
 
-def hierarchy_depth(hierarchy, path=()):
-    """
-    Create a mapping of every path in the hierarchy to the node living at
-    that path in the hierarchy.
-    """
-
-    base = {}
-
-    for key, inner in hierarchy.items():
-        down = tuple(path + (key,))
-        if key.startswith('_'):
-            base[path] = inner
-        elif isinstance(inner, dict) and 'instance' not in inner:
-            base.update(hierarchy_depth(inner, down))
-        else:
-            base[down] = inner
-
-    return base
-
-
 class SyncUpdate():
     def __init__(self, update):
         self.update = update
@@ -400,7 +380,7 @@ def find_instances(state, instance_type='process_bigraph.composite.Process'):
         if isinstance(inner, dict):
             if isinstance(inner.get('instance'), process_class):
                 found[key] = inner
-            elif not key.startswith('_'):
+            elif not is_schema_key(key):
                 inner_instances = find_instances(
                     inner,
                     instance_type=instance_type)
@@ -605,7 +585,6 @@ class Composite(Process):
     Composite parent class.
     """
 
-
     config_schema = {
         'composition': 'schema',
         'state': 'tree[any]',
@@ -615,7 +594,8 @@ class Composite(Process):
         'bridge': {
             'inputs': 'wires',
             'outputs': 'wires'},
-        'global_time_precision': 'maybe[float]'}
+        'global_time_precision': 'maybe[float]',
+    }
 
 
     def __init__(self, config=None, core=None):
@@ -784,6 +764,9 @@ class Composite(Process):
             Tuple of the deferred update (in absolute terms) and
             ``store``.
         """
+
+        states = strip_schema_keys(states)
+
         update = process['instance'].invoke(states, interval)
 
         def defer_project(update, args):
@@ -887,7 +870,8 @@ class Composite(Process):
                     self.interface()['outputs'],
                     self.bridge['outputs'],
                     (),
-                    update)
+                    top_schema=self.composition,
+                    top_state=update)
 
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
