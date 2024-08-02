@@ -27,7 +27,6 @@ bounds_type = {
 }
 core.register_process('bounds', bounds_type)
 
-
 # TODO -- check the function signature of the apply method and report missing keys upon registration
 
 MODEL_FOR_TESTING = load_model('textbook')
@@ -168,27 +167,31 @@ class DiffusionAdvection(Process):
         self.diffusion_dt = min(diffusion_dt, self.config['default_diffusion_dt'])
 
     def inputs(self):
+        bins_str = "|".join(str(x) for x in self.config['n_bins'])
         return {
-            'fields': {
-                '_type': 'map',
-                '_value': {
-                    '_type': 'array',
-                    '_shape': self.config['n_bins'],
-                    '_data': 'positive_float'
-                },
-            }
+            'fields': f'map[array[positive_float,({bins_str})]]'
+            # 'fields': {
+            #     '_type': 'map',
+            #     '_value': {
+            #         '_type': 'array',
+            #         '_shape': self.config['n_bins'],
+            #         '_data': 'positive_float'
+            #     },
+            # }
         }
 
     def outputs(self):
+        bins_str = "|".join(str(x) for x in self.config['n_bins'])
         return {
-            'fields': {
-                '_type': 'map',
-                '_value': {
-                    '_type': 'array',
-                    '_shape': self.config['n_bins'],
-                    '_data': 'positive_float'
-                },
-            }
+            'fields': f'map[array[positive_float,({bins_str})]]'
+            # 'fields': {
+            #     '_type': 'map',
+            #     '_value': {
+            #         '_type': 'array',
+            #         '_shape': self.config['n_bins'],
+            #         '_data': 'positive_float'
+            #     },
+            # }
         }
 
     def update(self, state, interval):
