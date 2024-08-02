@@ -32,6 +32,7 @@ core.register_process('bounds', bounds_type)
 
 MODEL_FOR_TESTING = load_model('textbook')
 
+
 class DynamicFBA(Process):
     """
     Performs dynamic FBA.
