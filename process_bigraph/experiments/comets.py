@@ -30,6 +30,9 @@ core.register_process('bounds', bounds_type)
 
 # TODO -- check the function signature of the apply method and report missing keys upon registration
 
+MODEL_FOR_TESTING = load_model('textbook')
+
+
 class DynamicFBA(Process):
     """
     Performs dynamic FBA.
@@ -46,6 +49,7 @@ class DynamicFBA(Process):
 
     config_schema = {
         'model_file': 'string',
+        'model': 'Any',
         'kinetic_params': 'map[tuple[float,float]]',
         'biomass_reaction': {
             '_type': 'string',
@@ -59,11 +63,17 @@ class DynamicFBA(Process):
     def __init__(self, config, core):
         super().__init__(config, core)
 
-        if not 'xml' in self.config['model_file']:
+        if self.config['model_file'] == 'TESTING':
+            self.model = MODEL_FOR_TESTING
+        elif not 'xml' in self.config['model_file']:
             # use the textbook model if no model file is provided
             self.model = load_model(self.config['model_file'])
-        else:
+        elif isinstance(self.config['model_file'], str):
             self.model = cobra.io.read_sbml_model(self.config['model_file'])
+        else:
+            # error handling
+            raise ValueError('Invalid model file')
+
 
         for reaction_id, bounds in self.config['bounds'].items():
             if bounds['lower'] is not None:
@@ -385,7 +395,7 @@ def run_diffusion_process():
 
 
 def run_comets():
-    n_bins = (10, 10)
+    n_bins = (6, 6)
 
     initial_glucose = np.random.uniform(low=0, high=20, size=n_bins)
     initial_acetate = np.random.uniform(low=0, high=0, size=n_bins)
@@ -397,7 +407,9 @@ def run_comets():
             dfba_processes_dict[f'[{i},{j}]'] = {
                 '_type': 'process',
                 'address': 'local:DynamicFBA',
-                'config': dfba_config(),
+                'config': dfba_config(
+                    model_file='TESTING'  # load the same model for all processes
+                ),
                 'inputs': {
                     'substrates': {
                         'glucose': ['..', 'fields', 'glucose', i, j],
@@ -471,7 +483,7 @@ def run_comets():
 
     sim = Composite({'state': composite_state}, core=core)
 
-    sim.update({}, 10.0)
+    sim.update({}, 100.0)
 
     results = sim.gather_results()
 
