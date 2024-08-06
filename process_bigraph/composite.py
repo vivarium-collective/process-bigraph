@@ -676,8 +676,10 @@ class Composite(Process):
         self.global_time_precision = self.config[
             'global_time_precision']
 
-        self.add_emitter(
-            self.config['emitter'])
+        emitter_config = self.config.get('emitter')
+        if emitter_config:
+            self.add_emitter(
+                emitter_config)
 
         self.step_triggers = {}
 
@@ -751,9 +753,9 @@ class Composite(Process):
 
         if mode == 'all':
             inputs = {
-                key: [key]
+                key: [emitter_config.get('inputs', {}).get(key, key)]
                 for key in self.state.keys()
-                if not is_schema_key(key) and key not in self.config['emitter']['inputs']}
+                if not is_schema_key(key)}
 
         elif mode == 'none':
             inputs = emitter_config.get('emit', {})
@@ -777,13 +779,25 @@ class Composite(Process):
         
 
     def add_emitter(self, emitter_config):
-        path = emitter_config['path']
+        path = tuple(emitter_config['path'])
+        
         step_config = self.read_emitter_config(emitter_config)
         emitter = set_path(
             {}, path, step_config)
         self.merge(emitter)
+        _, instance = self.core.slice(
+            self.composition,
+            self.state,
+            path)
+
+        self.emitter_paths[path] = instance
+        self.step_paths[path] = instance
 
 
+    # TODO: merge needs to be schema aware,
+    #   and since the results of the merge may
+    #   entail a schema update, we need to return
+    #   the new schema
     def merge(self, initial_state):
         self.state = self.core.merge(
             self.composition,
@@ -1065,6 +1079,8 @@ class Composite(Process):
                     self.state,
                     step_path)
 
+                import ipdb; ipdb.set_trace()
+
                 state = self.core.view_edge(
                     self.composition,
                     self.state,
@@ -1127,6 +1143,9 @@ class Composite(Process):
         for path, query in queries.items():
             emitter = get_path(self.state, path)
             results[path] = emitter['instance'].query(query)
+
+        # TODO: unnest the results?
+        # TODO: allow the results to be transposed
 
         return results
 
@@ -1201,6 +1220,8 @@ class RAMEmitter(Emitter):
 
 
     def update(self, state) -> Dict:
+        import ipdb; ipdb.set_trace()
+
         self.history.append(copy.deepcopy(state))
         return {}
 

@@ -465,25 +465,31 @@ def run_comets():
                 'fields': ['fields']
             }
         },
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'emit': {
-                    'fields': 'map',
-                    'time': 'float',
-                }
-            },
-            'inputs': {
-                'fields': ['fields'],
-                'time': ['global_time']
-            }
-        }
+        # 'emitter': {
+        #     '_type': 'step',
+        #     'address': 'local:ram-emitter',
+        #     'config': {
+        #         'emit': {
+        #             'fields': 'map',
+        #             'time': 'float',
+        #         }
+        #     },
+        #     'inputs': {
+        #         'fields': ['fields'],
+        #         'time': ['global_time']
+        #     }
+        # }
     }
 
-    sim = Composite({'state': composite_state}, core=core)
+    sim = Composite({
+        'state': composite_state,
+        'emitter': {
+            'mode': 'all'}}, core=core)
 
-    sim.update({}, 100.0)
+    # sim = Composite({
+    #     'state': composite_state}, core=core)
+
+    sim.update({}, 10.0)
 
     results = sim.gather_results()
 
