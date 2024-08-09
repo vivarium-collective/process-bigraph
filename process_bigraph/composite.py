@@ -310,6 +310,12 @@ class Process(Edge):
             self.config_schema,
             config)
 
+        # TODO: validate your config after filling, report if anything
+        #   is off
+        # print(self.core.validate_state(
+        #     self.config_schema,
+        #     config))
+
 
     def initial_state(self):
         return {}
@@ -602,9 +608,7 @@ class Composite(Process):
                 '_type': 'string',
                 '_default': 'local:ram-emitter'},
             'config': 'tree[any]',
-            'mode': { # this should be an enum: all, none, bridge, port
-                '_type': 'string',
-                '_default': 'none'},
+            'mode': 'emitter_mode',
             'emit': 'wires'},
         'global_time_precision': 'maybe[float]'}
 

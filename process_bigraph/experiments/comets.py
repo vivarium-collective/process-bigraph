@@ -486,8 +486,11 @@ def run_comets():
         'emitter': {
             'mode': 'all'}}, core=core)
 
+    # TODO: this should fail validation
     # sim = Composite({
-    #     'state': composite_state}, core=core)
+    #     'state': composite_state,
+    #     'emitter': {
+    #         'mode': 'pluto'}}, core=core)
 
     sim.update({}, 10.0)
 
