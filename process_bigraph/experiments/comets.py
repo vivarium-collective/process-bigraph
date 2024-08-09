@@ -493,6 +493,8 @@ def run_comets():
 
     results = sim.gather_results()
 
+    import ipdb; ipdb.set_trace()
+
     print(results)
 
 

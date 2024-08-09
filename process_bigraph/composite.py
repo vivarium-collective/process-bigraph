@@ -804,6 +804,10 @@ class Composite(Process):
             self.state,
             initial_state)
 
+        self.composition, self.state = self.core.complete(
+            self.composition,
+            self.state)
+
 
     def process_update(
             self,
@@ -1079,8 +1083,6 @@ class Composite(Process):
                     self.state,
                     step_path)
 
-                import ipdb; ipdb.set_trace()
-
                 state = self.core.view_edge(
                     self.composition,
                     self.state,
@@ -1220,8 +1222,6 @@ class RAMEmitter(Emitter):
 
 
     def update(self, state) -> Dict:
-        import ipdb; ipdb.set_trace()
-
         self.history.append(copy.deepcopy(state))
         return {}
 
