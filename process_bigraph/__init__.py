@@ -1,5 +1,5 @@
 import pprint
-from bigraph_schema.registry import deep_merge
+from bigraph_schema.registry import deep_merge, default
 from process_bigraph.composite import Process, Step, Composite, ProcessTypes, interval_time_precision
 
 
