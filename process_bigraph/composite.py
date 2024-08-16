@@ -681,7 +681,7 @@ class Composite(Process):
             'global_time_precision']
 
         emitter_config = self.config.get('emitter')
-        if emitter_config:
+        if emitter_config and not emitter_config.get('mode', 'none') == 'none':
             self.add_emitter(
                 emitter_config)
 
