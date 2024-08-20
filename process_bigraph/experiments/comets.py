@@ -483,6 +483,9 @@ def run_comets():
 
     sim = Composite({'state': composite_state}, core=core)
 
+    save the document
+    sim.save(filename='comets.json', outdir='out')
+
     sim.update({}, 100.0)
 
     results = sim.gather_results()
