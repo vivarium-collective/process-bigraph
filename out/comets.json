@@ -1,0 +1,3343 @@
+{
+    "global_time": "0.0",
+    "fields": {
+        "_type": "map",
+        "_value": {
+            "_type": "array",
+            "_shape": [
+                6,
+                6
+            ],
+            "_data": "positive_float"
+        },
+        "glucose": {
+            "list": [
+                [
+                    19.779478971116056,
+                    15.742072723142812,
+                    2.2521671028356915,
+                    11.247785783325066,
+                    9.780448136819906,
+                    6.716165422565458
+                ],
+                [
+                    15.718951408504608,
+                    3.6084256447703544,
+                    5.656613562283832,
+                    5.6449358833170145,
+                    6.969883341561904,
+                    4.957477884806238
+                ],
+                [
+                    7.087252415155514,
+                    3.463959628273794,
+                    10.572797591032925,
+                    14.917594188680322,
+                    18.98446133257418,
+                    12.826397426395237
+                ],
+                [
+                    18.970305174641656,
+                    3.7431131823494646,
+                    0.25757183861342847,
+                    8.324173564358047,
+                    14.395433559276709,
+                    8.651872458612292
+                ],
+                [
+                    17.204846301227136,
+                    3.4198664525326583,
+                    15.67263257131711,
+                    8.58367680863541,
+                    10.9554401873564,
+                    13.013121692520249
+                ],
+                [
+                    2.163658990484194,
+                    12.748163547582658,
+                    8.77136859359534,
+                    10.837287542691698,
+                    14.547505597241813,
+                    17.169541903929396
+                ]
+            ],
+            "data": "float",
+            "shape": [
+                6,
+                6
+            ]
+        },
+        "acetate": {
+            "list": [
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ],
+                [
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0,
+                    0.0
+                ]
+            ],
+            "data": "float",
+            "shape": [
+                6,
+                6
+            ]
+        },
+        "biomass": {
+            "list": [
+                [
+                    0.06792005328108794,
+                    0.06994978764665728,
+                    0.08989552882880456,
+                    0.0015727161818465342,
+                    0.08825663667914363,
+                    0.059515389710095117
+                ],
+                [
+                    0.06696065776745806,
+                    0.02436348448311785,
+                    0.008481380595277355,
+                    0.054085528639122527,
+                    0.02236197711741894,
+                    0.03437498340598795
+                ],
+                [
+                    0.0008455852849481361,
+                    0.022402172182903957,
+                    0.06475047965554762,
+                    0.09763972136448086,
+                    0.005920909338954128,
+                    0.08670505981477239
+                ],
+                [
+                    0.07231864102507027,
+                    0.0489039246797403,
+                    0.07764107973389647,
+                    0.06412396300396749,
+                    0.03534690977819628,
+                    0.0944322199505641
+                ],
+                [
+                    0.053744219668966565,
+                    0.0949669784819969,
+                    0.07058882748542174,
+                    0.08764880184112095,
+                    0.06875110982878717,
+                    0.039499103752164234
+                ],
+                [
+                    0.05911399855463792,
+                    0.06633280097671883,
+                    0.04289217208902721,
+                    0.08868053793755619,
+                    0.057788573282514126,
+                    0.059485583137849796
+                ]
+            ],
+            "data": "float",
+            "shape": [
+                6,
+                6
+            ]
+        }
+    },
+    "spatial_dfba": {
+        "[0,0]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        0
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        0
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[0,1]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        1
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        1
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[0,2]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        2
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        2
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[0,3]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        3
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        3
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[0,4]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        4
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        4
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[0,5]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        5
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        0,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        0,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        0,
+                        5
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[1,0]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        0
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        0
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[1,1]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        1
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        1
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[1,2]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        2
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        2
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[1,3]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        3
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        3
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[1,4]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        4
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        4
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[1,5]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        5
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        1,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        1,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        1,
+                        5
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[2,0]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        0
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        0
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[2,1]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        1
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        1
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[2,2]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        2
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        2
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[2,3]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        3
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        3
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[2,4]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        4
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        4
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[2,5]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        5
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        2,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        2,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        2,
+                        5
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[3,0]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        0
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        0
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[3,1]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        1
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        1
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[3,2]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        2
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        2
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[3,3]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        3
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        3
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[3,4]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        4
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        4
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[3,5]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        5
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        3,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        3,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        3,
+                        5
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[4,0]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        0
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        0
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[4,1]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        1
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        1
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[4,2]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        2
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        2
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[4,3]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        3
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        3
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[4,4]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        4
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        4
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[4,5]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        5
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        4,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        4,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        4,
+                        5
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[5,0]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        0
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        0
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        0
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        0
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[5,1]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        1
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        1
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        1
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        1
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[5,2]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        2
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        2
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        2
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        2
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[5,3]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        3
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        3
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        3
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        3
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[5,4]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        4
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        4
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        4
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        4
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        },
+        "[5,5]": {
+            "_type": "process",
+            "address": "local:DynamicFBA",
+            "config": {
+                "model_file": "TESTING",
+                "model": "None",
+                "kinetic_params": {
+                    "glucose": [
+                        "0.5",
+                        "1.0"
+                    ],
+                    "acetate": [
+                        "0.5",
+                        "2.0"
+                    ]
+                },
+                "biomass_reaction": "Biomass_Ecoli_core",
+                "substrate_update_reactions": {
+                    "glucose": "EX_glc__D_e",
+                    "acetate": "EX_ac_e"
+                },
+                "biomass_identifier": "biomass",
+                "bounds": {
+                    "EX_o2_e": {},
+                    "ATPM": {}
+                }
+            },
+            "inputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        5
+                    ]
+                }
+            },
+            "outputs": {
+                "substrates": {
+                    "glucose": [
+                        "..",
+                        "fields",
+                        "glucose",
+                        5,
+                        5
+                    ],
+                    "acetate": [
+                        "..",
+                        "fields",
+                        "acetate",
+                        5,
+                        5
+                    ],
+                    "biomass": [
+                        "..",
+                        "fields",
+                        "biomass",
+                        5,
+                        5
+                    ]
+                }
+            },
+            "interval": 1.0,
+            "_inputs": {
+                "substrates": "map[positive_float]"
+            },
+            "_outputs": {
+                "substrates": "map[positive_float]"
+            }
+        }
+    },
+    "diffusion": {
+        "_type": "process",
+        "address": "local:DiffusionAdvection",
+        "config": {
+            "n_bins": [
+                "6",
+                "6"
+            ],
+            "bounds": [
+                "10.0",
+                "10.0"
+            ],
+            "default_diffusion_rate": "0.1",
+            "default_diffusion_dt": "0.1",
+            "diffusion_coeffs": {
+                "glucose": "0.1",
+                "acetate": "0.1",
+                "biomass": "0.1"
+            },
+            "advection_coeffs": {
+                "glucose": [
+                    "0.0",
+                    "0.0"
+                ],
+                "acetate": [
+                    "0.0",
+                    "0.0"
+                ],
+                "biomass": [
+                    "0.0",
+                    "0.0"
+                ]
+            }
+        },
+        "inputs": {
+            "fields": [
+                "fields"
+            ]
+        },
+        "outputs": {
+            "fields": [
+                "fields"
+            ]
+        },
+        "interval": 1.0,
+        "_inputs": {
+            "fields": {
+                "_type": "map",
+                "_value": {
+                    "_type": "array",
+                    "_shape": [
+                        6,
+                        6
+                    ],
+                    "_data": "positive_float"
+                }
+            }
+        },
+        "_outputs": {
+            "fields": {
+                "_type": "map",
+                "_value": {
+                    "_type": "array",
+                    "_shape": [
+                        6,
+                        6
+                    ],
+                    "_data": "positive_float"
+                }
+            }
+        }
+    },
+    "emitter": {
+        "_type": "step",
+        "address": "local:ram-emitter",
+        "config": {
+            "emit": {
+                "fields": "map",
+                "time": "float"
+            }
+        },
+        "inputs": {
+            "fields": [
+                "fields"
+            ],
+            "time": [
+                "global_time"
+            ]
+        },
+        "_inputs": {
+            "fields": "map",
+            "time": "float"
+        },
+        "_outputs": {},
+        "outputs": {}
+    }
+}
