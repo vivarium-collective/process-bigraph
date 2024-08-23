@@ -1,10 +1,12 @@
 import numpy as np
-from process_bigraph import Process, ProcessTypes, Composite
-from process_bigraph.experiments.parameter_scan import RunProcess
+from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.ndimage import convolve
 import cobra
 from cobra.io import load_model
+
+from process_bigraph import Process, ProcessTypes, Composite
+from process_bigraph.experiments.parameter_scan import RunProcess
 
 core = ProcessTypes()
 
@@ -472,12 +474,28 @@ def run_comets():
         'emitter': {
             'mode': 'all'}}, core=core)
 
+    outdir = Path('out')
+    filename = 'comets.json'
+
     # save the document
-    sim.save(filename='comets.json', outdir='out')
+    sim.save(
+        filename=filename,
+        outdir=outdir,
+        include_schema=True)
 
     sim.update({}, 100.0)
 
     results = sim.gather_results()
+
+    load = Composite.load(
+        path=outdir/filename,
+        core=core)
+
+    load.update({}, 100.0)
+
+    other_results = load.gather_results()
+
+    assert results == other_results
 
     import ipdb; ipdb.set_trace()
 

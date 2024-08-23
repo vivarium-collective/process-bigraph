@@ -614,6 +614,17 @@ class Composite(Process):
         'global_time_precision': 'maybe[float]'}
 
 
+    @classmethod
+    def load(cls, path, core=None):
+        with open(path) as data:
+            document = json.load(data)
+            composite = cls(
+                document,
+                core=core)
+
+        return composite
+
+
     def __init__(self, config=None, core=None):
         super().__init__(config, core)
 
@@ -714,11 +725,26 @@ class Composite(Process):
     def save(self,
              filename='one_cell_two_directions.json',
              outdir='out',
-             ):
-        serialized_doc = self.core.serialize(
-            schema=self.composition,
-            state=self.state,
-        )
+             include_schema=False):
+
+        serialized_state = self.core.serialize(
+            self.composition,
+            self.state)
+
+        document = {
+            'state': serialized_state}
+
+        if include_schema:
+            serialized_schema = self.core.serialize(
+                'schema',
+                self.composition)
+            document['composition'] = serialized_schema
+
+        # TODO: make this true
+        # copy_composite = Composite({
+        #     'state': self.state})
+
+        # assert copy_composite == self
 
         # save the dictionary to a JSON file
         if not os.path.exists(outdir):
@@ -727,7 +753,7 @@ class Composite(Process):
 
         # write the new data to the file
         with open(filename, 'w') as json_file:
-            json.dump(serialized_doc, json_file, indent=4)
+            json.dump(document, json_file, indent=4)
             print(f"Created new file: {filename}")
 
     def reset_step_state(self, step_paths):
