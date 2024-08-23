@@ -8,3 +8,4 @@ dist/
 build/
 
 process_bigraph.egg-info/
+out/

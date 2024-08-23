@@ -75,6 +75,9 @@ def serialize_process(schema, value, core):
     """Serialize a process to a JSON-safe representation."""
     # TODO -- need to get back the protocol: address and the config
     process = value.copy()
+    process['config'] = core.serialize(
+        process['instance'].config_schema,
+        process['config'])
     del process['instance']
     return process
 
@@ -169,7 +172,7 @@ process_types = {
         '_inherit': 'string'},
 
     # TODO: have the default enum be the first option
-    'emitter_mode': 'enum[none,all,paths,bridge,port]',
+    'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
 
     'interval': {
         '_type': 'interval',

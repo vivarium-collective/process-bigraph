@@ -465,20 +465,6 @@ def run_comets():
                 'fields': ['fields']
             }
         },
-        # 'emitter': {
-        #     '_type': 'step',
-        #     'address': 'local:ram-emitter',
-        #     'config': {
-        #         'emit': {
-        #             'fields': 'map',
-        #             'time': 'float',
-        #         }
-        #     },
-        #     'inputs': {
-        #         'fields': ['fields'],
-        #         'time': ['global_time']
-        #     }
-        # }
     }
 
     sim = Composite({
@@ -486,13 +472,10 @@ def run_comets():
         'emitter': {
             'mode': 'all'}}, core=core)
 
-    # TODO: this should fail validation
-    # sim = Composite({
-    #     'state': composite_state,
-    #     'emitter': {
-    #         'mode': 'pluto'}}, core=core)
+    # save the document
+    sim.save(filename='comets.json', outdir='out')
 
-    sim.update({}, 10.0)
+    sim.update({}, 100.0)
 
     results = sim.gather_results()
 

@@ -3,8 +3,9 @@
 Composite, Process, and Step classes
 ====================================
 """
-
+import os
 import copy
+import json
 import math
 import collections
 from typing import Dict
@@ -710,6 +711,24 @@ class Composite(Process):
 
         # self.run_steps(self.to_run)
 
+    def save(self,
+             filename='one_cell_two_directions.json',
+             outdir='out',
+             ):
+        serialized_doc = self.core.serialize(
+            schema=self.composition,
+            state=self.state,
+        )
+
+        # save the dictionary to a JSON file
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        filename = os.path.join(outdir, filename)
+
+        # write the new data to the file
+        with open(filename, 'w') as json_file:
+            json.dump(serialized_doc, json_file, indent=4)
+            print(f"Created new file: {filename}")
 
     def reset_step_state(self, step_paths):
         self.trigger_state = build_trigger_state(
