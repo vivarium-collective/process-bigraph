@@ -618,6 +618,7 @@ class Composite(Process):
     def load(cls, path, core=None):
         with open(path) as data:
             document = json.load(data)
+
             composite = cls(
                 document,
                 core=core)
