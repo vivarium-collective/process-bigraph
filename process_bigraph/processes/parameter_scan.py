@@ -36,16 +36,13 @@ class ToySystem(Process):
                 'kdeg': 'float',
                 'ksynth': 'float'}}}
 
-
     def inputs(self):
         return {
             'species': 'map[float]'}
 
-
     def outputs(self):
         return {
             'species': 'map[float]'}
-
 
     def update(self, inputs, interval):
         species = {
@@ -59,7 +56,6 @@ class ToySystem(Process):
 class ODE(Process):
     config_schema = 'ode_config'
 
-
     def __init__(self, config, core):
         super().__init__(config, core)
 
@@ -72,16 +68,13 @@ class ODE(Process):
             self.species_count,
             self.species_count)
 
-
     def inputs(self):
         return {
             'species': f'array[({self.species_count}), float]'}
 
-
     def outputs(self):
         return {
             'species': f'array[({self.species_count}), float]'}
-
 
     def update(self, state, interval):
         total = np.dot(
@@ -99,7 +92,6 @@ class RunProcess(Step):
         'observables': 'list[path]',
         'timestep': 'float',
         'runtime': 'float'}
-
 
     def __init__(self, config, core):
         super().__init__(config, core)
@@ -187,17 +179,14 @@ class RunProcess(Step):
 
         self.composite = Composite(composite_config, core=core)
 
-
     def inputs(self):
         return self.process.inputs()
-
 
     def outputs(self):
         return {
             'results': dict(
                 {'time': 'list[float]'},
                 **self.results_schema)}
-
 
     def update(self, inputs):
         # TODO: instead of the composite being a reference it is instead read through
@@ -264,7 +253,6 @@ class ParameterScan(Step):
         'observables': 'list[path]',
         'timestep': 'float',
         'runtime': 'float'}
-
 
     def __init__(self, config, core):
         super().__init__(config, core)
@@ -338,17 +326,14 @@ class ParameterScan(Step):
 
         self.results_schema = results_schema
 
-
     def first_process(self):
         for key, value in self.scan.state.items():
             if key.startswith('process_'):
                 return value['instance'].composite.state['process']['instance']
 
-
     def outputs(self):
         return {
             'results': self.results_schema}
-
 
     def update(self, inputs):
         results = self.scan.update({}, 0.0)

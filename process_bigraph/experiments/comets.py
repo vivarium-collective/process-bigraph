@@ -1,12 +1,11 @@
 import numpy as np
 from pathlib import Path
-import matplotlib.pyplot as plt
 from scipy.ndimage import convolve
 import cobra
 from cobra.io import load_model
 
 from process_bigraph import Process, ProcessTypes, Composite
-from process_bigraph.experiments.parameter_scan import RunProcess
+from process_bigraph.processes.parameter_scan import RunProcess
 
 
 # create new types
