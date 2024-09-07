@@ -2,7 +2,7 @@ import re
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.19'
+VERSION = '0.0.20'
 
 
 with open("README.md", "r") as readme:
@@ -26,7 +26,10 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     url="https://github.com/vivarium-collective/process-bigraph",
-    packages=find_packages(),
+    # packages=find_packages(),
+    packages=[
+        'process_bigraph',
+    ],
     classifiers=[
         "Development Status :: 3 - Alpha",
         "Intended Audience :: Developers",
