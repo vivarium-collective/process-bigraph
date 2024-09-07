@@ -171,6 +171,9 @@ process_types = {
         '_type': 'protocol',
         '_inherit': 'string'},
 
+    # TODO: have the default enum be the first option
+    'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
+
     'interval': {
         '_type': 'interval',
         '_inherit': 'float',
@@ -191,6 +194,7 @@ process_types = {
         'address': 'protocol',
         'config': 'tree[any]'},
 
+    # TODO: slice process to allow for navigating through a port
     'process': {
         '_type': 'process',
         '_inherit': 'edge',

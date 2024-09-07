@@ -1,31 +1,18 @@
 import numpy as np
-from process_bigraph import Process, ProcessTypes, Composite
-from process_bigraph.experiments.parameter_scan import RunProcess
+from pathlib import Path
 import matplotlib.pyplot as plt
 from scipy.ndimage import convolve
 import cobra
 from cobra.io import load_model
 
-core = ProcessTypes()
+from process_bigraph import Process, ProcessTypes, Composite
+from process_bigraph.experiments.parameter_scan import RunProcess
 
 
 # create new types
 def apply_non_negative(schema, current, update, core):
     new_value = current + update
     return max(0, new_value)
-
-positive_float = {
-    '_type': 'positive_float',
-    '_inherit': 'float',
-    '_apply': apply_non_negative
-}
-core.register('positive_float', positive_float)
-
-bounds_type = {
-    'lower': 'maybe[float]',
-    'upper': 'maybe[float]'
-}
-core.register_process('bounds', bounds_type)
 
 
 # TODO -- check the function signature of the apply method and report missing keys upon registration
@@ -74,7 +61,6 @@ class DynamicFBA(Process):
             # error handling
             raise ValueError('Invalid model file')
 
-
         for reaction_id, bounds in self.config['bounds'].items():
             if bounds['lower'] is not None:
                 self.model.reactions.get_by_id(reaction_id).lower_bound = bounds['lower']
@@ -122,9 +108,6 @@ class DynamicFBA(Process):
         return {
             'substrates': substrate_update,
         }
-
-core.register_process('DynamicFBA', DynamicFBA)
-
 
 # Laplacian for 2D diffusion
 LAPLACIAN_2D = np.array([[0, 1, 0],
@@ -244,9 +227,6 @@ class DiffusionAdvection(Process):
 
         return updated_state - state
 
-core.register_process('DiffusionAdvection', DiffusionAdvection)
-
-
 def dfba_config(
         model_file='textbook',
         kinetic_params={
@@ -290,6 +270,27 @@ def run_process(
 
     run = RunProcess(config, core_type)
     return run.update(initial_state)
+
+
+def register_types(core):
+    core.register('positive_float', {
+        '_type': 'positive_float',
+        '_inherit': 'float',
+        '_apply': apply_non_negative})
+
+    core.register('bounds', {
+        'lower': 'maybe[float]',
+        'upper': 'maybe[float]'})
+
+    core.register_process(
+        'DynamicFBA',
+        DynamicFBA)
+
+    core.register_process(
+        'DiffusionAdvection',
+        DiffusionAdvection)
+
+    return core
 
 
 def run_dfba_spatial():
@@ -394,7 +395,7 @@ def run_diffusion_process():
     print(data)
 
 
-def run_comets():
+def run_comets(core):
     n_bins = (6, 6)
 
     initial_glucose = np.random.uniform(low=0, high=20, size=n_bins)
@@ -465,36 +466,46 @@ def run_comets():
                 'fields': ['fields']
             }
         },
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'emit': {
-                    'fields': 'map',
-                    'time': 'float',
-                }
-            },
-            'inputs': {
-                'fields': ['fields'],
-                'time': ['global_time']
-            }
-        }
     }
 
-    sim = Composite({'state': composite_state}, core=core)
+    sim = Composite({
+        'state': composite_state,
+        'emitter': {
+            'mode': 'all'}}, core=core)
+
+    outdir = Path('out')
+    filename = 'comets.json'
 
     # save the document
-    sim.save(filename='comets.json', outdir='out')
+    sim.save(
+        filename=filename,
+        outdir=outdir,
+        include_schema=True)
 
     sim.update({}, 100.0)
 
     results = sim.gather_results()
+
+    load = Composite.load(
+        path=outdir/filename,
+        core=core)
+
+    load.update({}, 100.0)
+
+    other_results = load.gather_results()
+
+    np.testing.assert_equal(
+        results[('emitter',)][-1]['fields'],
+        other_results[('emitter',)][-1]['fields'])
 
     print(results)
 
 
 
 if __name__ == '__main__':
-    # run_dfba_spatial()
-    # run_diffusion_process()
-    run_comets()
+    core = ProcessTypes()
+    core = register_types(core)
+
+    # run_dfba_spatial(core)
+    # run_diffusion_process(core)
+    run_comets(core)

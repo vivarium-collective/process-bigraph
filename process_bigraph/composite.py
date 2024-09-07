@@ -311,6 +311,12 @@ class Process(Edge):
             self.config_schema,
             config)
 
+        # TODO: validate your config after filling, report if anything
+        #   is off
+        # print(self.core.validate_state(
+        #     self.config_schema,
+        #     config))
+
 
     def initial_state(self):
         return {}
@@ -595,8 +601,29 @@ class Composite(Process):
         'bridge': {
             'inputs': 'wires',
             'outputs': 'wires'},
-        'global_time_precision': 'maybe[float]',
-    }
+        'emitter': {
+            'path': {
+                '_type': 'path',
+                '_default': ['emitter']},
+            'address': {
+                '_type': 'string',
+                '_default': 'local:ram-emitter'},
+            'config': 'tree[any]',
+            'mode': 'emitter_mode',
+            'emit': 'wires'},
+        'global_time_precision': 'maybe[float]'}
+
+
+    @classmethod
+    def load(cls, path, core=None):
+        with open(path) as data:
+            document = json.load(data)
+
+            composite = cls(
+                document,
+                core=core)
+
+        return composite
 
 
     def __init__(self, config=None, core=None):
@@ -666,6 +693,11 @@ class Composite(Process):
         self.global_time_precision = self.config[
             'global_time_precision']
 
+        emitter_config = self.config.get('emitter')
+        if emitter_config and not emitter_config.get('mode', 'none') == 'none':
+            self.add_emitter(
+                emitter_config)
+
         self.step_triggers = {}
 
         for step_path, step in self.step_paths.items():
@@ -694,11 +726,26 @@ class Composite(Process):
     def save(self,
              filename='one_cell_two_directions.json',
              outdir='out',
-             ):
-        serialized_doc = self.core.serialize(
-            schema=self.composition,
-            state=self.state,
-        )
+             include_schema=False):
+
+        serialized_state = self.core.serialize(
+            self.composition,
+            self.state)
+
+        document = {
+            'state': serialized_state}
+
+        if include_schema:
+            serialized_schema = self.core.serialize(
+                'schema',
+                self.composition)
+            document['composition'] = serialized_schema
+
+        # TODO: make this true
+        # copy_composite = Composite({
+        #     'state': self.state})
+
+        # assert copy_composite == self
 
         # save the dictionary to a JSON file
         if not os.path.exists(outdir):
@@ -707,7 +754,7 @@ class Composite(Process):
 
         # write the new data to the file
         with open(filename, 'w') as json_file:
-            json.dump(serialized_doc, json_file, indent=4)
+            json.dump(document, json_file, indent=4)
             print(f"Created new file: {filename}")
 
     def reset_step_state(self, step_paths):
@@ -749,11 +796,67 @@ class Composite(Process):
         return self.process_schema.get('outputs', {})
 
 
+    def read_emitter_config(self, emitter_config):
+        address = emitter_config.get('address', 'local:ram-emitter')
+        config = emitter_config.get('config', {})
+        mode = emitter_config.get('mode', 'none')
+
+        if mode == 'all':
+            inputs = {
+                key: [emitter_config.get('inputs', {}).get(key, key)]
+                for key in self.state.keys()
+                if not is_schema_key(key)}
+
+        elif mode == 'none':
+            inputs = emitter_config.get('emit', {})
+
+        elif mode == 'bridge':
+            inputs = {}
+
+        elif mode == 'ports':
+            inputs = {}
+            
+        if not 'emit' in config:
+            config['emit'] = {
+                input: 'any'
+                for input in inputs}
+
+        return {
+            '_type': 'step',
+            'address': address,
+            'config': config,
+            'inputs': inputs}
+        
+
+    def add_emitter(self, emitter_config):
+        path = tuple(emitter_config['path'])
+        
+        step_config = self.read_emitter_config(emitter_config)
+        emitter = set_path(
+            {}, path, step_config)
+        self.merge(emitter)
+        _, instance = self.core.slice(
+            self.composition,
+            self.state,
+            path)
+
+        self.emitter_paths[path] = instance
+        self.step_paths[path] = instance
+
+
+    # TODO: merge needs to be schema aware,
+    #   and since the results of the merge may
+    #   entail a schema update, we need to return
+    #   the new schema
     def merge(self, initial_state):
         self.state = self.core.merge(
             self.composition,
             self.state,
             initial_state)
+
+        self.composition, self.state = self.core.complete(
+            self.composition,
+            self.state)
 
 
     def process_update(
@@ -1093,6 +1196,9 @@ class Composite(Process):
             emitter = get_path(self.state, path)
             results[path] = emitter['instance'].query(query)
 
+        # TODO: unnest the results?
+        # TODO: allow the results to be transposed
+
         return results
 
     def update(self, state, interval):
@@ -1180,6 +1286,9 @@ class RAMEmitter(Emitter):
             result = self.history
 
         return result
+
+
+# def StateEmitter(Emitter):
 
 
 # def test_emitter():
