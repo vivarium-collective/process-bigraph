@@ -53,6 +53,9 @@ class ToySystem(Process):
             'species': species}
 
 
+core.register_process('ToySystem', ToySystem)
+
+
 class ODE(Process):
     config_schema = 'ode_config'
 
@@ -83,6 +86,9 @@ class ODE(Process):
 
         delta = total - state['species']
         return delta
+
+
+core.register_process('ToyODE', ODE)
 
 
 class RunProcess(Step):
@@ -212,6 +218,9 @@ class RunProcess(Step):
         return {'results': all_results}
 
 
+core.register_process('RunProcess', RunProcess)
+
+
 def timeseries_from_history(history, observables):
     results = {}
     for moment in history:
@@ -287,7 +296,7 @@ class ParameterScan(Step):
 
             state[f'process_{parameters_key}'] = {
                 '_type': 'step',
-                'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
+                'address': 'local:RunProcess',
                 'config': {
                     'process_address': self.config['process_address'],
                     'process_config': parameters,
@@ -304,7 +313,8 @@ class ParameterScan(Step):
         # TODO: perform parallelization on the independent steps
         self.scan = Composite({
             'bridge': bridge,
-            'state': state})
+            'state': state},
+            core=core)
 
         results_schema = {}
         process = self.first_process()
@@ -361,31 +371,21 @@ class ParameterScan(Step):
             'results': update}
 
 
-# TODO: support dataframe type?
-#   something like this:
-
-# row_schema = {
-#     'first name': 'string',
-#     'age': 'integer'}
-
-# dataframe_schema = {
-#     '_type': 'list',
-#     '_element': row_schema}
+core.register_process('ParameterScan', ParameterScan)
 
 
 def test_run_process():
     timestep = 0.1
     runtime = 10.0
-
     initial_A = 11.11
 
     state = {
         'species': {'A': initial_A},
         'run': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
+            'address': 'local:RunProcess',
             'config': {
-                'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
+                'process_address': 'local:ToySystem',
                 'process_config': {
                     'rates': {
                         'A': {
@@ -402,7 +402,8 @@ def test_run_process():
         'bridge': {
             'outputs': {
                 'results': ['A_results']}},
-        'state': state})
+        'state': state},
+        core=core)
 
     results = process.update({}, 0.0)
 
@@ -413,16 +414,15 @@ def test_run_process():
 def test_nested_wires():
     timestep = 0.1
     runtime = 10.0
-
     initial_A = 11.11
 
     state = {
         'species': {'A': initial_A},
         'run': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.experiments.parameter_scan.RunProcess',
+            'address': 'local:RunProcess',
             'config': {
-                'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
+                'process_address': 'local:ToySystem',
                 'process_config': {
                     'rates': {
                         'A': {
@@ -439,7 +439,8 @@ def test_nested_wires():
         'bridge': {
             'outputs': {
                 'results': ['A_results']}},
-        'state': state})
+        'state': state},
+        core=core)
 
     results = process.update({}, 0.0)
 
@@ -454,11 +455,11 @@ def test_parameter_scan():
     state = {
         'scan': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.experiments.parameter_scan.ParameterScan',
+            'address': 'local:ParameterScan',
             'config': {
                 'parameter_ranges': [(
                     ['rates', 'A', 'kdeg'], [0.0, 0.1, 1.0, 10.0])],
-                'process_address': 'local:!process_bigraph.experiments.parameter_scan.ToySystem',
+                'process_address': 'local:ToySystem',
                 'process_config': {
                     'rates': {
                         'A': {
@@ -479,7 +480,8 @@ def test_parameter_scan():
         'bridge': {
             'outputs': {
                 'results': ['results']}},
-        'state': state})
+        'state': state},
+        core=core)
             
     # TODO: make a method so we can run it directly, provide some way to get the result out
     # result = scan.update({})
@@ -489,17 +491,6 @@ def test_parameter_scan():
 def test_composite_workflow():
     # TODO: Make a workflow with a composite inside
     pass
-
-
-# scan = {
-#     'scan': {
-#         '_type': 'step',
-#         'address': 'local:!process_bigraph.experiments.parameter_scan.ParameterScan'},
-
-#     'processes': {
-#         'process_0': {
-#                       '_type': 'step'}}
-# }
 
 
 if __name__ == '__main__':
