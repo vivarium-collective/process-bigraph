@@ -93,11 +93,14 @@ def deserialize_process(schema, encoded, core):
 
     :returns: The deserialized state with an instantiated process.
     """
+    encoded = encoded or {}
+    schema = schema or {}
     deserialized = encoded.copy()
-    if 'address' not in deserialized:
-        return deserialized
+    if schema.get('_type', {}) == 'process':
+        default = core.default(schema)
+        deserialized = deep_merge(default, deserialized)
 
-    protocol, address = encoded['address'].split(':', 1)
+    protocol, address = deserialized['address'].split(':', 1)
 
     if 'instance' in deserialized:
         instantiate = type(deserialized['instance'])
