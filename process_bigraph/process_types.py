@@ -95,10 +95,14 @@ def deserialize_process(schema, encoded, core):
     """
     encoded = encoded or {}
     schema = schema or {}
-    deserialized = encoded.copy()
-    if schema.get('_type', {}) == 'process':
-        default = core.default(schema)
-        deserialized = deep_merge(default, deserialized)
+
+    if not encoded:
+        deserialized = core.default(schema)
+    else:
+        deserialized = encoded.copy()
+
+    if not deserialized.get('address'):
+        return deserialized
 
     protocol, address = deserialized['address'].split(':', 1)
 
