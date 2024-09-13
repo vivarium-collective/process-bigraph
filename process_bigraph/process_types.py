@@ -119,14 +119,17 @@ def deserialize_process(schema, encoded, core):
 
     config = core.deserialize(
         instantiate.config_schema,
-        encoded.get('config', {}))
+        deserialized.get('config', {}))
 
     interval = core.deserialize(
         'interval',
-        encoded.get('interval'))
+        deserialized.get('interval'))
 
     if not 'instance' in deserialized:
-        process = instantiate(config, core=core)
+        process = instantiate(
+            config,
+            core=core)
+
         deserialized['instance'] = process
 
     deserialized['config'] = config
