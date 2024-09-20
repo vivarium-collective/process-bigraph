@@ -76,125 +76,6 @@ class ProcessTypes(TypeSystem):
         self.process_registry.register(name, process_data)
 
 
-    def infer_schema(
-            self,
-            schema,
-            state,
-            top_state=None,
-            path=None
-    ):
-        """
-        Given a schema fragment and an existing state with _type keys,
-        return the full schema required to describe that state,
-        and whatever state was hydrated (processes/steps) during this process
-        """
-
-        schema = schema or {}
-        # TODO: deal with this
-        if schema == '{}':
-            schema = {}
-
-        top_state = top_state or state
-        path = path or ()
-
-        if isinstance(state, dict):
-            if '_type' in state:
-                state_type = {
-                    key: value
-                    for key, value in state.items()
-                    if key.startswith('_')}
-
-                state_schema = self.access(
-                    state_type)
-
-                hydrated_state = self.deserialize(
-                    state_schema,
-                    state)
-
-                schema, top_state = self.set_slice(
-                    schema,
-                    top_state,
-                    path,
-                    state_schema,
-                    hydrated_state)
-
-                # TODO: fix is_descendant
-                # if core.type_registry.is_descendant('process', state_schema) or core.registry.is_descendant('step', state_schema):
-                if state_type['_type'] == 'process' or state_type['_type'] == 'step':
-                    port_schema = hydrated_state['instance'].interface()
-                    assert_interface(
-                        port_schema)
-
-                    for port_key in ['inputs', 'outputs']:
-                        subschema = port_schema.get(
-                            port_key, {})
-
-                        schema = set_path(
-                            schema,
-                            path + (f'_{port_key}',),
-                            subschema)
-
-                        ports = hydrated_state.get(
-                            port_key, {})
-
-                        schema = self.infer_wires(
-                            subschema,
-                            hydrated_state,
-                            ports,
-                            top_schema=schema,
-                            path=path)
-
-            elif '_type' in schema:
-                hydrated_state = self.deserialize(schema, state)
-                top_state = set_path(
-                    top_state,
-                    path,
-                    hydrated_state)
-            else:
-                for key, value in state.items():
-                    inner_path = path + (key,)
-                    if get_path(schema, inner_path) is None or get_path(state, inner_path) is None or (
-                            isinstance(value, dict) and '_type' in value):
-                        schema, top_state = self.infer_schema(
-                            schema,
-                            value,
-                            top_state=top_state,
-                            path=inner_path)
-
-        elif isinstance(state, str):
-            pass
-
-        else:
-            schema, top_state = super().infer_schema(
-                schema,
-                state,
-                top_state,
-                path)
-
-        return schema, top_state
-
-    def infer_edge(self, schema, wires):
-        """
-        Infer the schema for an edge based by projecting the schema with the wires.
-        """
-
-        schema = schema or {}
-        edge = {}
-
-        if isinstance(wires, str):
-            import ipdb; ipdb.set_trace()
-
-        for port_key, wire in wires.items():
-            if isinstance(wire, dict):
-                edge[port_key] = self.infer_edge(
-                    schema.get(port_key, {}),
-                    wire)
-            else:
-                subschema = get_path(schema, wire)
-                edge[port_key] = subschema
-
-        return edge
-
     def initialize_edge_state(self, schema, path, edge):
         """
         Initialize the state for an edge based on the schema and the edge.
@@ -686,7 +567,7 @@ class Composite(Process):
 
         self.process_schema = {}
         for port in ['inputs', 'outputs']:
-            self.process_schema[port] = self.core.infer_edge(
+            self.process_schema[port], defaults = self.core.infer_edge(
                 self.composition,
                 self.bridge[port])
 
