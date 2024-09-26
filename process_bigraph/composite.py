@@ -605,21 +605,31 @@ class Composite(Process):
         # self.run_steps(self.to_run)
 
     def save(self,
-             filename='one_cell_two_directions.json',
+             filename='composite.json',
              outdir='out',
-             include_schema=False):
+             schema=False,
+             state=False):
 
-        serialized_state = self.core.serialize(
-            self.composition,
-            self.state)
+        document = {}
 
-        document = {
-            'state': serialized_state}
+        if not schema and not state:
+            schema = state = True
 
-        if include_schema:
-            serialized_schema = self.core.serialize(
-                'schema',
+        if state:
+            serialized_state = self.core.serialize(
+                self.composition,
+                self.state)
+
+            document['state'] = serialized_state
+
+        if schema:
+            # serialized_schema = self.core.serialize(
+            #     'schema',
+            #     self.composition)
+
+            serialized_schema = self.core.representation(
                 self.composition)
+
             document['composition'] = serialized_schema
 
         # TODO: make this true
@@ -629,6 +639,7 @@ class Composite(Process):
         # assert copy_composite == self
 
         # save the dictionary to a JSON file
+
         if not os.path.exists(outdir):
             os.makedirs(outdir)
         filename = os.path.join(outdir, filename)
