@@ -10,8 +10,7 @@ import math
 import collections
 from typing import Dict
 
-from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge
-from bigraph_schema.registry import Registry, is_schema_key, hierarchy_depth, strip_schema_keys
+from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth
 
 from process_bigraph.process_types import process_types
 from process_bigraph.protocols import local_lookup, local_lookup_module

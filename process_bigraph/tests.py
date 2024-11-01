@@ -6,12 +6,16 @@ import random
 import pytest
 
 from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
+from process_bigraph.experiments.minimal_gillespie import EXPORT as gillespie_types
 # from process_bigraph.type_system import ProcessTypes
 
 
 @pytest.fixture
 def core():
-    return ProcessTypes()
+    types = ProcessTypes()
+    types.import_types(gillespie_types)
+
+    return types
 
 
 class IncreaseProcess(Process):
@@ -54,11 +58,6 @@ def test_merge_collections(core):
     c = merge_collections(a, b)
 
     assert c[('what',)] == [1, 2, 3, 4, 5, 11]
-
-
-@pytest.fixture
-def core():
-    return ProcessTypes()
 
 
 def test_process(core):
@@ -446,6 +445,7 @@ def test_emitter(core):
 
 if __name__ == '__main__':
     core = ProcessTypes()
+    core.import_types(gillespie_types)
 
     test_default_config(core)
     test_merge_collections(core)
