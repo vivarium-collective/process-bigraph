@@ -610,6 +610,10 @@ class Composite(Process):
              schema=False,
              state=False):
 
+        # TODO: add in dependent packages and version
+        #   maybe packagename.typename?
+        # TODO: add in dependent types
+
         document = {}
 
         if not schema and not state:
