@@ -124,6 +124,12 @@ def deserialize_process(schema, encoded, core):
         'interval',
         deserialized.get('interval'))
 
+    if interval is None:
+        interval = core.default(
+            schema.get(
+                'interval',
+                'interval'))
+
     if not 'instance' in deserialized:
         process = instantiate(
             config,
@@ -141,6 +147,13 @@ def deserialize_process(schema, encoded, core):
 
 def deserialize_step(schema, encoded, core):
     deserialized = encoded.copy()
+    if not encoded['address']:
+        return encoded
+
+    protocol = encoded['address'].split(':', 1)
+    if len(protocol) == 1:
+        return encoded
+
     protocol, address = encoded['address'].split(':', 1)
 
     if 'instance' in deserialized:

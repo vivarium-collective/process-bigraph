@@ -519,18 +519,18 @@ class Composite(Process):
         if 'global_time' not in initial_state:
             initial_state['global_time'] = 0.0
 
-        composition, state = self.core.complete(
+        self.composition, self.state = self.core.generate(
             initial_composition,
             initial_state)
 
-        self.composition = copy.deepcopy(
-            self.core.access(composition))
+        # self.composition = copy.deepcopy(
+        #     self.core.access(composition))
 
         # TODO: add flag to self.core.access(copy=True)
         self.bridge = self.config.get('bridge', {})
 
         self.find_instance_paths(
-            state)
+            self.state)
 
         # merge the processes and steps into a single "edges" dict
         self.edge_paths = self.process_paths.copy()
@@ -553,11 +553,13 @@ class Composite(Process):
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
 
-        state = deep_merge(state, edge_state)
+        self.state = deep_merge(
+            self.state,
+            edge_state)
 
-        self.state = self.core.deserialize(
-            self.composition,
-            state)
+        # self.state = self.core.deserialize(
+        #     self.composition,
+        #     self.state)
 
         # TODO: call validate on this composite, not just check
         # assert self.core.validate(
@@ -602,6 +604,7 @@ class Composite(Process):
         self.to_run = self.cycle_step_state()
 
         # self.run_steps(self.to_run)
+
 
     def save(self,
              filename='composite.json',
@@ -729,7 +732,11 @@ class Composite(Process):
         step_config = self.read_emitter_config(emitter_config)
         emitter = set_path(
             {}, path, step_config)
-        self.merge(emitter)
+
+        self.merge(
+            {},
+            emitter)
+
         _, instance = self.core.slice(
             self.composition,
             self.state,
@@ -743,13 +750,14 @@ class Composite(Process):
     #   and since the results of the merge may
     #   entail a schema update, we need to return
     #   the new schema
-    def merge(self, initial_state):
-        self.state = self.core.merge(
+    def merge(self, schema, state):
+        self.composition, self.state = self.core.merge(
             self.composition,
             self.state,
-            initial_state)
+            schema,
+            state)
 
-        self.composition, self.state = self.core.complete(
+        self.composition, self.state = self.core.generate(
             self.composition,
             self.state)
 
@@ -1001,23 +1009,23 @@ class Composite(Process):
                 force_complete = False
 
 
-    def determine_steps(self):
-        to_run = []
-        for step_key, wires in trigger_state['steps']:
-            fulfilled = True
-            for input in wires['input_paths']:
-                if len(trigger_state['states'][tuple(input)]) > 0:
-                    fulfilled = False
-                    break
-            if fulfilled:
-                to_run.append(step_key)
+    # def determine_steps(self):
+    #     to_run = []
+    #     for step_key, wires in trigger_state['steps']:
+    #         fulfilled = True
+    #         for input in wires['input_paths']:
+    #             if len(trigger_state['states'][tuple(input)]) > 0:
+    #                 fulfilled = False
+    #                 break
+    #         if fulfilled:
+    #             to_run.append(step_key)
 
-        for step_key in to_run:
-            wires = trigger_state['steps'][step_key]
-            for output in wires['output_paths']:
-                trigger_state['states'][tuple(output)].remove(step_key)
+    #     for step_key in to_run:
+    #         wires = trigger_state['steps'][step_key]
+    #         for output in wires['output_paths']:
+    #             trigger_state['states'][tuple(output)].remove(step_key)
 
-        return to_run, trigger_state
+    #     return to_run, trigger_state
 
 
     def run_steps(self, step_paths):
@@ -1106,6 +1114,7 @@ class Composite(Process):
             state)
 
         self.merge(
+            {},
             projection)
 
         self.run(interval)
