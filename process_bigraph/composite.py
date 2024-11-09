@@ -746,20 +746,14 @@ class Composite(Process):
         self.step_paths[path] = instance
 
 
-    # TODO: merge needs to be schema aware,
-    #   and since the results of the merge may
-    #   entail a schema update, we need to return
-    #   the new schema
-    def merge(self, schema, state):
+    def merge(self, schema, state, path=None):
+        path = path or []
         self.composition, self.state = self.core.merge(
             self.composition,
             self.state,
+            path,
             schema,
             state)
-
-        self.composition, self.state = self.core.generate(
-            self.composition,
-            self.state)
 
 
     def process_update(
