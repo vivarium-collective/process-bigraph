@@ -193,7 +193,6 @@ process_types = {
         '_type': 'protocol',
         '_inherit': 'string'},
 
-    # TODO: have the default enum be the first option
     'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
 
     'interval': {

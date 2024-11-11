@@ -2,30 +2,7 @@ import copy
 import numpy as np
 
 from bigraph_schema import get_path, set_path, transform_path
-from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
-
-
-core = ProcessTypes()
-
-
-core.register('scannable_process', {
-    '_inherit': ['process'],
-    '_inputs': {
-        'species': {
-            '_type': 'array',
-            '_data': 'float'}},
-    '_outputs': {
-        'species': {
-            '_type': 'array',
-            '_data': 'float'}}})
-
-
-core.register('ode_config', {
-    'stoichiometry': {
-        '_type': 'array',
-        '_data': 'integer'},
-    'rates': 'map[float]',
-    'species': 'map[float]'})
+from process_bigraph.composite import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
 class ToySystem(Process):
@@ -51,9 +28,6 @@ class ToySystem(Process):
 
         return {
             'species': species}
-
-
-core.register_process('ToySystem', ToySystem)
 
 
 class ODE(Process):
@@ -86,9 +60,6 @@ class ODE(Process):
 
         delta = total - state['species']
         return delta
-
-
-core.register_process('ToyODE', ODE)
 
 
 class RunProcess(Step):
@@ -216,9 +187,6 @@ class RunProcess(Step):
             all_results = deep_merge(all_results, timeseries)
 
         return {'results': all_results}
-
-
-core.register_process('RunProcess', RunProcess)
 
 
 def timeseries_from_history(history, observables):
@@ -371,129 +339,3 @@ class ParameterScan(Step):
             'results': update}
 
 
-core.register_process('ParameterScan', ParameterScan)
-
-
-def test_run_process():
-    timestep = 0.1
-    runtime = 10.0
-    initial_A = 11.11
-
-    state = {
-        'species': {'A': initial_A},
-        'run': {
-            '_type': 'step',
-            'address': 'local:RunProcess',
-            'config': {
-                'process_address': 'local:ToySystem',
-                'process_config': {
-                    'rates': {
-                        'A': {
-                            'kdeg': 1.1,
-                            'ksynth': 0.9}}},
-                'observables': [['species']],
-                'timestep': timestep,
-                'runtime': runtime},
-            # '_outputs': {'results': {'_emit': True}},
-            'inputs': {'species': ['species']},
-            'outputs': {'results': ['A_results']}}}
-
-    process = Composite({
-        'bridge': {
-            'outputs': {
-                'results': ['A_results']}},
-        'state': state},
-        core=core)
-
-    results = process.update({}, 0.0)
-
-    assert results[0]['results']['time'][-1] == runtime
-    assert results[0]['results']['species'][0]['A'] == initial_A
-
-
-def test_nested_wires():
-    timestep = 0.1
-    runtime = 10.0
-    initial_A = 11.11
-
-    state = {
-        'species': {'A': initial_A},
-        'run': {
-            '_type': 'step',
-            'address': 'local:RunProcess',
-            'config': {
-                'process_address': 'local:ToySystem',
-                'process_config': {
-                    'rates': {
-                        'A': {
-                            'kdeg': 1.1,
-                            'ksynth': 0.9}}},
-                'observables': [['species', 'A']],
-                'timestep': timestep,
-                'runtime': runtime},
-            # '_outputs': {'results': {'_emit': True}},
-            'inputs': {'species': ['species']},
-            'outputs': {'results': ['A_results']}}}
-
-    process = Composite({
-        'bridge': {
-            'outputs': {
-                'results': ['A_results']}},
-        'state': state},
-        core=core)
-
-    results = process.update({}, 0.0)
-
-    assert results[0]['results']['time'][-1] == runtime
-    assert results[0]['results']['species']['A'][0] == initial_A
-
-
-def test_parameter_scan():
-    # TODO: make a parameter scan with a biosimulator process,
-    #   ie - Copasi
-
-    state = {
-        'scan': {
-            '_type': 'step',
-            'address': 'local:ParameterScan',
-            'config': {
-                'parameter_ranges': [(
-                    ['rates', 'A', 'kdeg'], [0.0, 0.1, 1.0, 10.0])],
-                'process_address': 'local:ToySystem',
-                'process_config': {
-                    'rates': {
-                        'A': {
-                            'ksynth': 1.0}}},
-                'observables': [
-                    ['species', 'A']],
-                'initial_state': {
-                    'species': {
-                        'A': 13.3333}},
-                'timestep': 1.0,
-                'runtime': 10},
-            'outputs': {
-                'results': ['results']}}}
-
-    # TODO: make a Workflow class that is a Step-composite
-    # scan = Workflow({
-    scan = Composite({
-        'bridge': {
-            'outputs': {
-                'results': ['results']}},
-        'state': state},
-        core=core)
-            
-    # TODO: make a method so we can run it directly, provide some way to get the result out
-    # result = scan.update({})
-    result = scan.update({}, 0.0)
-
-
-def test_composite_workflow():
-    # TODO: Make a workflow with a composite inside
-    pass
-
-
-if __name__ == '__main__':
-    test_run_process()
-    test_nested_wires()
-    test_parameter_scan()

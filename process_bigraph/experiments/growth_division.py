@@ -1,5 +1,5 @@
 import pytest
-from process_bigraph import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
+from process_bigraph.composite import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
 
 
 class Grow(Process):
@@ -170,39 +170,3 @@ def grow_divide_agent(config=None, state=None, path=None):
     return composite
 
 
-def test_grow_divide(core):
-    initial_mass = 1.0
-
-    grow_divide = grow_divide_agent(
-        {'grow': {'rate': 0.03}},
-        {'mass': initial_mass},
-        ['environment', '0'])
-
-    environment = {
-        'environment': {
-            '0': {
-                'mass': initial_mass,
-                'grow_divide': grow_divide}}}
-
-    composite = Composite({
-        'state': environment},
-        core=core)
-
-    updates = composite.update({}, 100.0)
-    assert '0_0_0_0_0' in composite.state['environment']
-
-
-@pytest.fixture
-def core():
-    core = ProcessTypes()
-    core.register_process('grow', Grow)
-    core.register_process('divide', Divide)
-    return core
-
-
-if __name__ == '__main__':
-    core = ProcessTypes()
-    core.register_process('grow', Grow)
-    core.register_process('divide', Divide)
-
-    test_grow_divide(core)

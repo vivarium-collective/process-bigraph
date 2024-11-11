@@ -5,17 +5,8 @@ Tests for Process Bigraph
 import random
 import pytest
 
+from process_bigraph import register_types
 from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
-from process_bigraph.experiments.minimal_gillespie import EXPORT as gillespie_types
-# from process_bigraph.type_system import ProcessTypes
-
-
-@pytest.fixture
-def core():
-    types = ProcessTypes()
-    types.import_types(gillespie_types)
-
-    return types
 
 
 class IncreaseProcess(Process):
@@ -441,11 +432,290 @@ def test_emitter(core):
     # TODO: support omit as well as emit
     
 
+def test_run_process():
+    timestep = 0.1
+    runtime = 10.0
+    initial_A = 11.11
+
+    state = {
+        'species': {'A': initial_A},
+        'run': {
+            '_type': 'step',
+            'address': 'local:RunProcess',
+            'config': {
+                'process_address': 'local:ToySystem',
+                'process_config': {
+                    'rates': {
+                        'A': {
+                            'kdeg': 1.1,
+                            'ksynth': 0.9}}},
+                'observables': [['species']],
+                'timestep': timestep,
+                'runtime': runtime},
+            # '_outputs': {'results': {'_emit': True}},
+            'inputs': {'species': ['species']},
+            'outputs': {'results': ['A_results']}}}
+
+    process = Composite({
+        'bridge': {
+            'outputs': {
+                'results': ['A_results']}},
+        'state': state},
+        core=core)
+
+    results = process.update({}, 0.0)
+
+    assert results[0]['results']['time'][-1] == runtime
+    assert results[0]['results']['species'][0]['A'] == initial_A
+
+
+def test_nested_wires():
+    timestep = 0.1
+    runtime = 10.0
+    initial_A = 11.11
+
+    state = {
+        'species': {'A': initial_A},
+        'run': {
+            '_type': 'step',
+            'address': 'local:RunProcess',
+            'config': {
+                'process_address': 'local:ToySystem',
+                'process_config': {
+                    'rates': {
+                        'A': {
+                            'kdeg': 1.1,
+                            'ksynth': 0.9}}},
+                'observables': [['species', 'A']],
+                'timestep': timestep,
+                'runtime': runtime},
+            # '_outputs': {'results': {'_emit': True}},
+            'inputs': {'species': ['species']},
+            'outputs': {'results': ['A_results']}}}
+
+    process = Composite({
+        'bridge': {
+            'outputs': {
+                'results': ['A_results']}},
+        'state': state},
+        core=core)
+
+    results = process.update({}, 0.0)
+
+    assert results[0]['results']['time'][-1] == runtime
+    assert results[0]['results']['species']['A'][0] == initial_A
+
+
+def test_parameter_scan():
+    # TODO: make a parameter scan with a biosimulator process,
+    #   ie - Copasi
+
+    state = {
+        'scan': {
+            '_type': 'step',
+            'address': 'local:ParameterScan',
+            'config': {
+                'parameter_ranges': [(
+                    ['rates', 'A', 'kdeg'], [0.0, 0.1, 1.0, 10.0])],
+                'process_address': 'local:ToySystem',
+                'process_config': {
+                    'rates': {
+                        'A': {
+                            'ksynth': 1.0}}},
+                'observables': [
+                    ['species', 'A']],
+                'initial_state': {
+                    'species': {
+                        'A': 13.3333}},
+                'timestep': 1.0,
+                'runtime': 10},
+            'outputs': {
+                'results': ['results']}}}
+
+    # TODO: make a Workflow class that is a Step-composite
+    # scan = Workflow({
+    scan = Composite({
+        'bridge': {
+            'outputs': {
+                'results': ['results']}},
+        'state': state},
+        core=core)
+            
+    # TODO: make a method so we can run it directly, provide some way to get the result out
+    # result = scan.update({})
+    result = scan.update({}, 0.0)
+
+
+def test_composite_workflow():
+    # TODO: Make a workflow with a composite inside
+    pass
+
+
+def test_grow_divide(core):
+    initial_mass = 1.0
+
+    grow_divide = grow_divide_agent(
+        {'grow': {'rate': 0.03}},
+        {'mass': initial_mass},
+        ['environment', '0'])
+
+    environment = {
+        'environment': {
+            '0': {
+                'mass': initial_mass,
+                'grow_divide': grow_divide}}}
+
+    composite = Composite({
+        'state': environment},
+        core=core)
+
+    updates = composite.update({}, 100.0)
+    assert '0_0_0_0_0' in composite.state['environment']
+
+
+def test_gillespie_composite(core):
+    composite_schema = {
+        # This all gets inferred -------------
+        # ==================================
+        # 'composition': {
+        #     'interval': {
+        #         '_type': 'step',
+        #         '_ports': {
+        #             'inputs': {
+        #                 'DNA': {
+        #                     'G': 'float'},
+        #                 'mRNA': {
+        #                     'C': 'float'}},
+        #             'outputs': {
+        #                 'interval': 'float'}}},
+        #     'event': {
+        #         '_type': 'process',
+        #         '_ports': {
+        #             'DNA': {
+        #                 'G': 'float'},
+        #             'mRNA': {
+        #                 'C': 'float'}},
+        #             'interval': 'float'}}},
+        #     'emitter': {
+        #         '_type': 'step',
+        #         '_ports': {
+        #             'inputs': {
+        #                 'DNA': {
+        #                     'G': 'float'},
+        #                 'mRNA': {
+        #                     'C': 'float'}}},
+        #     'DNA': {
+        #         'G': 'float'},
+        #     'mRNA': {
+        #         'C': 'float'}},
+        # 'schema': {
+        #     'DNA': {
+        #         'G': 'float'},
+        #     'mRNA': {
+        #         'C': 'float'}},
+
+        'bridge': {
+            'inputs': {
+                'DNA': ['DNA'],
+                'mRNA': ['mRNA']},
+            'outputs': {
+                'DNA': ['DNA'],
+                'mRNA': ['mRNA']}},
+
+        'state': {
+            'interval': {
+                '_type': 'step',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieInterval',
+                'config': {'ktsc': '6e0'},
+                'inputs': {
+                    'DNA': ['DNA'],
+                    'mRNA': ['mRNA']},
+                'outputs': {
+                    'interval': ['event', 'interval']}},
+
+            'event': {
+                '_type': 'process',
+                'address': 'local:!process_bigraph.experiments.minimal_gillespie.GillespieEvent',
+                'config': {'ktsc': 6e0},
+                'inputs': {
+                    'DNA': ['DNA'],
+                    'mRNA': ['mRNA']},
+                'outputs': {
+                    'mRNA': ['mRNA']},
+                'interval': '3.0'},
+
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:ram-emitter',
+                'config': {
+                    'emit': {
+                        'time': 'float',
+                        'mRNA': 'map[float]',
+                        'interval': 'interval'}},
+                'inputs': {
+                    'time': ['global_time'],
+                    'mRNA': ['mRNA'],
+                    'interval': ['event', 'interval']}}}}
+
+                #     'emit': 'any'},
+                # 'inputs': ()}}}
+
+
+            # TODO: provide a way to emit everything:
+            # 'emitter': emit_all(
+            #     'console-emitter',
+            #     exclusions={'DNA': {}}),
+
+            # TODO: make us able to wire to the top with '**'
+            # 'ram': {
+            #     '_type': 'step',
+            #     'address': 'local:ram-emitter',
+            #     'config': {
+            #         'ports': {
+            #             'inputs': 'tree[any]'}},
+            #     'wires': {
+            #         'inputs': '**'}}}}
+
+            # 'DNA': {
+            #     'G': 13.0},
+
+            # 'mRNA': {
+            #     'C': '21.0'}}}
+
+    gillespie = Composite(
+        composite_schema,
+        core=core)
+
+    updates = gillespie.update({
+        'DNA': {
+            'A gene': 11.0,
+            'B gene': 5.0},
+        'mRNA': {
+            'A mRNA': 33.3,
+            'B mRNA': 2.1}},
+        1000.0)
+
+    # TODO: make this work
+    results = gillespie.gather_results()
+
+    assert 'mRNA' in updates[0]
+
+
+def test_union_tree(core):
+    tree_union = core.access('list[string]~tree[list[string]]')
+    assert core.check(
+        tree_union,
+        {'a': ['what', 'is', 'happening']})
+
+
+def test_stochastic_deterministic_composite(core):
+    # TODO make the demo for a hybrid stochastic/deterministic simulator
+    pass
 
 
 if __name__ == '__main__':
     core = ProcessTypes()
-    core.import_types(gillespie_types)
+    core = register_types(core)
 
     test_default_config(core)
     test_merge_collections(core)
@@ -456,3 +726,6 @@ if __name__ == '__main__':
     test_dependencies(core)
     test_emitter(core)
     # test_reaction()
+    test_gillespie_composite(core)
+    test_union_tree(core)
+
