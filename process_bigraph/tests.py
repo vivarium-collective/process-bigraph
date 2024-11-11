@@ -7,6 +7,7 @@ import pytest
 
 from process_bigraph import register_types
 from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
+from process_bigraph.experiments.growth_division import grow_divide_agent
 
 
 class IncreaseProcess(Process):
@@ -565,11 +566,16 @@ def test_grow_divide(core):
                 'mass': initial_mass,
                 'grow_divide': grow_divide}}}
 
+    import ipdb; ipdb.set_trace()
+
     composite = Composite({
         'state': environment},
         core=core)
 
-    updates = composite.update({}, 100.0)
+    updates = composite.update(
+        {},
+        100.0)
+
     assert '0_0_0_0_0' in composite.state['environment']
 
 
