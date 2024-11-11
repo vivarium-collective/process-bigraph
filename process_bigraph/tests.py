@@ -725,7 +725,12 @@ if __name__ == '__main__':
     test_step_initialization(core)
     test_dependencies(core)
     test_emitter(core)
-    # test_reaction()
-    test_gillespie_composite(core)
     test_union_tree(core)
 
+    test_gillespie_composite(core)
+    test_grow_divide(core)
+    test_run_process(core)
+    test_nested_wires(core)
+    test_parameter_scan(core)
+
+    test_stochastic_deterministic_composite(core)

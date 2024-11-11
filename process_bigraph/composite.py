@@ -555,7 +555,9 @@ def find_leaves(tree_structure, path=None):
     leaves = []
     path = ()
 
-    if isinstance(tree_structure, list):
+    if tree_structure is None:
+        pass
+    elif isinstance(tree_structure, list):
         leaves = tree_structure
     elif isinstance(tree_structure, tuple):
         leaves.append(tree_structure)
