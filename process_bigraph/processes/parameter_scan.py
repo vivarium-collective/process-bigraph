@@ -169,6 +169,7 @@ class RunProcess(Step):
         # TODO: instead of the composite being a reference it is instead read through
         #   some port and lives in the state of the simulation (??)
         self.composite.merge(
+            self.inputs(),
             inputs)
 
         self.composite.run(
@@ -325,7 +326,7 @@ class ParameterScan(Step):
 
             for observable in self.config['observables']:
                 subschema = self.results_schema[key]
-                value_schema, value = core.slice(
+                value_schema, value = self.core.slice(
                     subschema,
                     values,
                     observable)

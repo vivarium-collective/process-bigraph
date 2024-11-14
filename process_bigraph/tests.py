@@ -433,7 +433,7 @@ def test_emitter(core):
     # TODO: support omit as well as emit
     
 
-def test_run_process():
+def test_run_process(core):
     timestep = 0.1
     runtime = 10.0
     initial_A = 11.11
@@ -470,7 +470,7 @@ def test_run_process():
     assert results[0]['results']['species'][0]['A'] == initial_A
 
 
-def test_nested_wires():
+def test_nested_wires(core):
     timestep = 0.1
     runtime = 10.0
     initial_A = 11.11
@@ -507,7 +507,7 @@ def test_nested_wires():
     assert results[0]['results']['species']['A'][0] == initial_A
 
 
-def test_parameter_scan():
+def test_parameter_scan(core):
     # TODO: make a parameter scan with a biosimulator process,
     #   ie - Copasi
 
@@ -547,7 +547,7 @@ def test_parameter_scan():
     result = scan.update({}, 0.0)
 
 
-def test_composite_workflow():
+def test_composite_workflow(core):
     # TODO: Make a workflow with a composite inside
     pass
 
@@ -565,8 +565,6 @@ def test_grow_divide(core):
             '0': {
                 'mass': initial_mass,
                 'grow_divide': grow_divide}}}
-
-    import ipdb; ipdb.set_trace()
 
     composite = Composite({
         'state': environment},
