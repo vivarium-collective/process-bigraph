@@ -161,7 +161,7 @@ def grow_divide_agent(config=None, state=None, path=None):
         state)
 
     composite = generate_bridge({
-        'inputs': {},
+        'inputs': {'mass': ['mass']},
         'outputs': agent_schema},
         grow_divide_state)
 

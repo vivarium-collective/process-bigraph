@@ -557,7 +557,8 @@ def test_grow_divide(core):
 
     grow_divide = grow_divide_agent(
         {'grow': {'rate': 0.03}},
-        {'mass': initial_mass},
+        {},
+        # {'mass': initial_mass},
         ['environment', '0'])
 
     environment = {
@@ -567,14 +568,26 @@ def test_grow_divide(core):
                 'grow_divide': grow_divide}}}
 
     composite = Composite({
-        'state': environment},
+        'state': environment,
+        'bridge': {
+            'inputs': {
+                'environment': ['environment']}}},
         core=core)
 
-    updates = composite.update(
-        {},
+    import ipdb; ipdb.set_trace()
+
+    updates = composite.update({
+        'environment': {
+            '0': {
+                'mass': 1.1}}},
         100.0)
 
-    assert '0_0_0_0_0' in composite.state['environment']
+    import ipdb; ipdb.set_trace()
+
+    # TODO: mass is not synchronized between inside and outside the composite?
+
+    assert '0_0_0_0_1' in composite.state['environment']
+    assert composite.state['environment']['0_0_0_0_1']['mass'] == composite.state['environment']['0_0_0_0_1']['grow_divide']['instance'].state['mass']
 
 
 def test_gillespie_composite(core):
