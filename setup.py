@@ -30,6 +30,7 @@ setup(
     packages=[
         'process_bigraph',
         'process_bigraph.processes',
+        'process_bigraph.experiments'
     ],
     classifiers=[
         "Development Status :: 3 - Alpha",
