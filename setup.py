@@ -49,7 +49,7 @@ setup(
     install_requires=[
         "bigraph-schema",
         "numpy",
-        "pytest<8.0",
+        "pytest",
         "orjson",
         "matplotlib"
     ]
