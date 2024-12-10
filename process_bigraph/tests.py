@@ -1,9 +1,8 @@
 """
 Tests for Process Bigraph
 """
-
-import random
 import pytest
+import random
 
 from process_bigraph import register_types
 from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
