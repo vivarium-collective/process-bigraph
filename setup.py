@@ -49,8 +49,7 @@ setup(
     install_requires=[
         "bigraph-schema",
         "numpy",
-        "pytest>=6.2.5",
-        "pymongo",
+        "pytest",
         "orjson",
         "matplotlib"
     ]

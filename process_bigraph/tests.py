@@ -1,13 +1,18 @@
 """
 Tests for Process Bigraph
 """
-
-import random
 import pytest
+import random
 
 from process_bigraph import register_types
 from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
 from process_bigraph.experiments.growth_division import grow_divide_agent
+
+
+@pytest.fixture
+def core():
+    core = ProcessTypes()
+    return register_types(core)
 
 
 class IncreaseProcess(Process):
@@ -574,15 +579,11 @@ def test_grow_divide(core):
                 'environment': ['environment']}}},
         core=core)
 
-    import ipdb; ipdb.set_trace()
-
     updates = composite.update({
         'environment': {
             '0': {
                 'mass': 1.1}}},
         100.0)
-
-    import ipdb; ipdb.set_trace()
 
     # TODO: mass is not synchronized between inside and outside the composite?
 
