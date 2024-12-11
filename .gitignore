@@ -6,6 +6,7 @@ dist/
 .DS_Store
 .empty
 build/
+.venv/
 
 process_bigraph.egg-info/
 out/
