@@ -348,7 +348,10 @@ class Step(Edge):
 
 
     def __init__(self, config=None, core=None):
-        self.core = core or ProcessTypes()
+        if core is None:
+            raise Exception('must provide a core')
+
+        self.core = core
 
         if config is None:
             config = {}
@@ -392,7 +395,10 @@ class Process(Edge):
     config_schema = {}
 
     def __init__(self, config=None, core=None):
-        self.core = core or ProcessTypes()
+        if core is None:
+            raise Exception('must provide a core')
+
+        self.core = core
 
         if config is None:
             config = {}
@@ -431,6 +437,34 @@ class Process(Edge):
     # TODO: should we include run(interval) here?
     #   process would have to maintain state
 
+
+class ProcessEnsemble(Process):
+    def __init__(self, config=None, core=None):
+        self.__init__(config, core)
+
+        
+    def union_interface(self):
+        union_inputs = {}
+        union_outputs = {}
+
+        for self_key in dir(self):
+            if self_key.startswith('inputs_'):
+                inputs = self.getattr(self_key)()
+                union_inputs = self.core.resolve_schemas(
+                    union_inputs,
+                    inputs)
+
+            if self_key.startswith('outputs_'):
+                outputs = self.getattr(self_key)()
+                union_outputs = self.core.resolve_schemas(
+                    union_outputs,
+                    outputs)
+
+        return {
+            'inputs': union_inputs,
+            'outputs': union_outputs}
+
+        
 
 class Defer:
     """Allows for delayed application of a function to an update.
