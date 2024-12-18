@@ -731,6 +731,13 @@ def test_stochastic_deterministic_composite(core):
     pass
 
 
+def test_singleton_core():
+    from process_bigraph import core
+    from process_bigraph import ProcessTypes
+    core2 = ProcessTypes()  # This should point to the singleton instance
+    assert core is core2, "ProcessTypes is not behaving like a singleton."
+
+
 if __name__ == '__main__':
     core = ProcessTypes()
     core = register_types(core)
