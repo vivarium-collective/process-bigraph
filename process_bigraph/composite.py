@@ -12,6 +12,7 @@ from typing import Dict
 
 from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth, visit_method
 
+from process_bigraph import process_types_registry
 from process_bigraph.protocols import local_lookup, local_lookup_module
 
 
@@ -758,7 +759,8 @@ class Composite(Process):
         return composite
 
 
-    def __init__(self, config=None, core=None):
+    def __init__(self, config=None, core_type='core'):
+        core = process_types_registry.access(core_type)
         super().__init__(config, core)
 
         # insert global_time into schema if not present
