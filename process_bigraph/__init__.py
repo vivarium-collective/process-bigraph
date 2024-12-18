@@ -3,8 +3,10 @@ from bigraph_schema.registry import deep_merge, default
 from process_bigraph.processes import register_processes
 from process_bigraph.composite import Process, Step, Composite, ProcessTypes, interval_time_precision
 
-
 pretty = pprint.PrettyPrinter(indent=2)
+
+# make the singleton instance of the ProcessTypes class
+core = ProcessTypes()
 
 
 def pp(x):

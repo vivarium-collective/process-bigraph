@@ -251,18 +251,27 @@ class ProcessTypes(TypeSystem):
     It maintains a registry of process types and provides methods to register
     new process types, protocols, and emitters.
     """
+    _instance = None  # Class-level private variable for the singleton instance
+
+    def __new__(cls, *args, **kwargs):
+        if cls._instance is None:
+            cls._instance = super(ProcessTypes, cls).__new__(cls)
+            # Initialize the instance
+            cls._instance._is_initialized = False
+        return cls._instance
 
     def __init__(self):
-        super().__init__()
-        self.process_registry = Registry()
-        self.protocol_registry = Registry()
+        if not self._is_initialized:  # Prevent re-initialization
+            super().__init__()
+            self.process_registry = Registry()
+            self.protocol_registry = Registry()
 
-        self.register_types(PROCESS_TYPES)
-        self.register_protocols(BASE_PROTOCOLS)
-        self.register_processes(BASE_EMITTERS)
+            self.register_types(PROCESS_TYPES)
+            self.register_protocols(BASE_PROTOCOLS)
+            self.register_processes(BASE_EMITTERS)
 
-        self.register_process('composite', Composite)
-
+            self.register_process('composite', Composite)
+            self._is_initialized = True
 
     def register_protocols(self, protocols):
         """Register protocols with the core"""
