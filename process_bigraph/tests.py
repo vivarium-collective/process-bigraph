@@ -6,7 +6,7 @@ import random
 
 from process_bigraph import register_types
 from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
-from process_bigraph.experiments.growth_division import grow_divide_agent
+from process_bigraph.processes.growth_division import grow_divide_agent
 
 
 @pytest.fixture
