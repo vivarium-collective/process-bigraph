@@ -2,7 +2,7 @@ import copy
 import numpy as np
 
 from bigraph_schema import get_path, set_path, transform_path
-from process_bigraph.composite import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
+from process_bigraph.composite import Step, Process, Composite, interval_time_precision, deep_merge
 
 
 class ToySystem(Process):

@@ -1,5 +1,4 @@
-import pytest
-from process_bigraph.composite import Step, Process, Composite, ProcessTypes, interval_time_precision, deep_merge
+from process_bigraph.composite import Step, Process, deep_merge
 
 
 class Grow(Process):
