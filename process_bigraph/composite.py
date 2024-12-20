@@ -153,7 +153,8 @@ def deserialize_process(schema, encoded, core_type='core', core=None):
     if not 'instance' in deserialized:
         # assign the process a core and initialize
         # TODO -- how do we assign core to process...?
-        process = instantiate(config, core_type=core_type)
+        instantiate.core = core
+        process = instantiate(config)
 
         deserialized['instance'] = process
 
@@ -192,7 +193,8 @@ def deserialize_step(schema, encoded, core):
         deserialized.get('config', {}))
 
     if not 'instance' in deserialized:
-        process = instantiate(config, core_type=core_type)
+        instantiate.core = core
+        process = instantiate(config)
         deserialized['instance'] = process
 
     deserialized['config'] = config
