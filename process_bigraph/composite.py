@@ -645,6 +645,9 @@ def build_step_network(steps):
                 nodes[path]['after'].add(step_key)
 
             for output in output_paths:
+                if output in input_paths:
+                    continue
+
                 path = tuple(output)
                 if not path in nodes:
                     nodes[path] = {
@@ -702,8 +705,10 @@ def determine_steps(steps, remaining, fulfilled):
         step_outputs = steps[step_path]['output_paths']
         if step_outputs is None:
             step_outputs = []
+
         for output in step_outputs:
-            fulfilled[output].remove(step_path)
+            if output in fulfilled and step_path in fulfilled[output]:
+                fulfilled[output].remove(step_path)
 
     return to_run, remaining, fulfilled
 
@@ -852,7 +857,9 @@ class Composite(Process):
         self.step_dependencies, self.node_dependencies = build_step_network(
             self.step_paths)
 
-        self.reset_step_state(self.step_paths)
+        self.reset_step_state(
+            self.step_paths)
+
         self.to_run = self.cycle_step_state()
 
         # self.run_steps(self.to_run)
