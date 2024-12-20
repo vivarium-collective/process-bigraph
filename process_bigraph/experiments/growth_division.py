@@ -7,8 +7,8 @@ class Grow(Process):
         'rate': 'float'}
 
 
-    def __init__(self, config, core=None):
-        super().__init__(config, core)
+    def __init__(self, config):
+        super().__init__(config)
 
 
     def inputs(self):
@@ -41,8 +41,8 @@ class Divide(Step):
             '_default': 2}}
 
 
-    def __init__(self, config, core=None):
-        super().__init__(config, core)
+    def __init__(self, config):
+        super().__init__(config)
 
 
     def inputs(self):

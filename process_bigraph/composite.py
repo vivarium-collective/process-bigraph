@@ -97,7 +97,7 @@ def serialize_process(schema, value, core):
     return process
 
 
-def deserialize_process(schema, encoded, core):
+def deserialize_process(schema, encoded, core_type='core', core=None):
     """Deserialize a process from a serialized state.
 
     This function is used by the type system to deserialize a process.
@@ -148,9 +148,8 @@ def deserialize_process(schema, encoded, core):
 
     if not 'instance' in deserialized:
         # assign the process a core and initialize
-        instantiate.core = core
-        process = instantiate(
-            config)
+        # TODO -- how do we assign core to process...?
+        process = instantiate(config, core_type=core_type)
 
         deserialized['instance'] = process
 
@@ -189,8 +188,7 @@ def deserialize_step(schema, encoded, core):
         deserialized.get('config', {}))
 
     if not 'instance' in deserialized:
-        instantiate.core = core  # TODO -- check this works
-        process = instantiate(config)
+        process = instantiate(config, core_type=core_type)
         deserialized['instance'] = process
 
     deserialized['config'] = config
@@ -350,11 +348,8 @@ class Step(Edge):
     config_schema = {}
 
 
-    def __init__(self, config=None, core=None):
-        if core is None:
-            raise Exception('must provide a core')
-
-        self.core = core
+    def __init__(self, config=None, core_type='core'):
+        self.core = process_types_registry.access(core_type)
 
         if config is None:
             config = {}
@@ -397,11 +392,8 @@ class Process(Edge):
     """
     config_schema = {}
 
-    def __init__(self, config=None, core=None):
-        if core is None:
-            raise Exception('must provide a core')
-
-        self.core = core
+    def __init__(self, config=None, core_type='core'):
+        self.core = process_types_registry.access(core_type)
 
         if config is None:
             config = {}
