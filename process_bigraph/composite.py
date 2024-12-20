@@ -352,10 +352,11 @@ class Step(Edge):
     """
     # TODO: support trigger every time as well as dependency trigger
     config_schema = {}
-    core = process_types_registry.access('core')
+    core = None
 
     def __init__(self, config=None, core_type='core'):
-        self.core = process_types_registry.access(core_type)
+        if not self.core:
+            self.core = process_types_registry.access(core_type)
 
         if config is None:
             config = {}
@@ -397,10 +398,11 @@ class Process(Edge):
               also contain the following special keys (TODO):
     """
     config_schema = {}
-    core = process_types_registry.access('core')
+    core = None
 
     def __init__(self, config=None, core_type='core'):
-        self.core = process_types_registry.access(core_type)
+        if not self.core:
+            self.core = process_types_registry.access(core_type)
 
         if config is None:
             config = {}
