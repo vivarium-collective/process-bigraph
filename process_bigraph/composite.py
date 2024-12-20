@@ -11,6 +11,7 @@ import collections
 from typing import Dict
 
 from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth, visit_method
+from sympy.testing.pytest import RaisesContext
 
 from process_bigraph.process_types import process_types_registry
 from process_bigraph.protocols import local_lookup, local_lookup_module
@@ -124,6 +125,9 @@ def deserialize_process(schema, encoded, core_type='core', core=None):
     if 'instance' in deserialized:
         instantiate = type(deserialized['instance'])
     else:
+        if core is None:
+            Exception('core not found')
+
         process_lookup = core.protocol_registry.access(protocol)
         if not process_lookup:
             raise Exception(f'protocol "{protocol}" not implemented')
@@ -346,7 +350,7 @@ class Step(Edge):
     """
     # TODO: support trigger every time as well as dependency trigger
     config_schema = {}
-
+    core = process_types_registry.access('core')
 
     def __init__(self, config=None, core_type='core'):
         self.core = process_types_registry.access(core_type)
@@ -391,6 +395,7 @@ class Process(Edge):
               also contain the following special keys (TODO):
     """
     config_schema = {}
+    core = process_types_registry.access('core')
 
     def __init__(self, config=None, core_type='core'):
         self.core = process_types_registry.access(core_type)
@@ -402,6 +407,9 @@ class Process(Edge):
         # for key in config.keys():
         #     if key not in self.config_schema:
         #         raise Exception(f'config key {key} not in config_schema for {self.__class__.__name__}')
+
+        if self.core is None:
+            raise Exception(f'core {core_type} not found')
 
         # fill in defaults for config
         self.config = self.core.fill(
@@ -753,8 +761,7 @@ class Composite(Process):
 
 
     def __init__(self, config=None, core_type='core'):
-        core = process_types_registry.access(core_type)
-        super().__init__(config, core)
+        super().__init__(config, core_type=core_type)
 
         # insert global_time into schema if not present
         initial_composition = self.config.get('composition', {})
