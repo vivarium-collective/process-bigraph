@@ -43,7 +43,7 @@ class IncreaseProcess(Process):
 
 
 def test_default_config(core):
-    process = IncreaseProcess(core=core)
+    process = IncreaseProcess()
 
     assert process.config['rate'] == 0.1
 
@@ -58,7 +58,7 @@ def test_merge_collections(core):
 
 
 def test_process(core):
-    process = IncreaseProcess({'rate': 0.2}, core=core)
+    process = IncreaseProcess({'rate': 0.2})
     interface = process.interface()
     state = core.fill(interface['inputs'])
     state = core.fill(interface['outputs'])
@@ -100,7 +100,7 @@ def test_composite(core):
                 'interval': 1.0,
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core=core)
+            'value': '11.11'}})
 
     initial_state = {'exchange': 3.33}
 
@@ -124,7 +124,7 @@ def test_infer(core):
                 'config': {'rate': '0.3'},
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core=core)
+            'value': '11.11'}})
 
     assert composite.composition['value']['_type'] == 'float'
     assert composite.state['value'] == 4.4
@@ -188,7 +188,7 @@ def test_step_initialization(core):
                     'a': ['B'],
                     'b': ['C']},
                 'outputs': {
-                    'c': ['D']}}}}, core=core)
+                    'c': ['D']}}}})
 
     composite.run(0.0)
     assert composite.state['D'] == (13 + 21) * 21
@@ -252,8 +252,7 @@ def test_dependencies(core):
                 'c': ['i']}}}
 
     composite = Composite(
-        {'state': operation},
-        core=core)
+        {'state': operation})
 
     composite.run(0.0)
 
@@ -418,9 +417,7 @@ def test_emitter(core):
                 'mRNA': ['mRNA'],
                 'interval': ['event', 'interval']}}}
 
-    gillespie = Composite(
-        composite_schema,
-        core=core)
+    gillespie = Composite(composite_schema)
 
     updates = gillespie.update({
         'DNA': {
@@ -466,8 +463,7 @@ def test_run_process(core):
         'bridge': {
             'outputs': {
                 'results': ['A_results']}},
-        'state': state},
-        core=core)
+        'state': state})
 
     results = process.update({}, 0.0)
 
@@ -503,8 +499,7 @@ def test_nested_wires(core):
         'bridge': {
             'outputs': {
                 'results': ['A_results']}},
-        'state': state},
-        core=core)
+        'state': state})
 
     results = process.update({}, 0.0)
 
@@ -544,8 +539,7 @@ def test_parameter_scan(core):
         'bridge': {
             'outputs': {
                 'results': ['results']}},
-        'state': state},
-        core=core)
+        'state': state})
             
     # TODO: make a method so we can run it directly, provide some way to get the result out
     # result = scan.update({})
@@ -576,8 +570,7 @@ def test_grow_divide(core):
         'state': environment,
         'bridge': {
             'inputs': {
-                'environment': ['environment']}}},
-        core=core)
+                'environment': ['environment']}}})
 
     updates = composite.update({
         'environment': {
@@ -700,9 +693,7 @@ def test_gillespie_composite(core):
             # 'mRNA': {
             #     'C': '21.0'}}}
 
-    gillespie = Composite(
-        composite_schema,
-        core=core)
+    gillespie = Composite(composite_schema)
 
     updates = gillespie.update({
         'DNA': {

@@ -5,6 +5,10 @@ This module contains the process methods for the process bigraph schema.
 import copy
 
 from bigraph_schema import Edge, deep_merge, visit_method
+from bigraph_schema.registry import Registry
+
+
+process_types_registry = Registry()
 
 
 def apply_process(schema, current, update, core):

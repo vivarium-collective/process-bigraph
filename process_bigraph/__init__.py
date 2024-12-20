@@ -1,13 +1,11 @@
 import pprint
-from bigraph_schema.registry import deep_merge, default, Registry
 from process_bigraph.processes import register_processes
 from process_bigraph.composite import Process, Step, Composite, ProcessTypes, interval_time_precision
+from process_bigraph.process_types import process_types_registry
 
 
 pretty = pprint.PrettyPrinter(indent=2)
 
-
-process_types_registry = Registry()
 
 
 def pp(x):
@@ -43,11 +41,12 @@ def register_types(core):
         'rates': 'map[float]',
         'species': 'map[float]'})
 
-    core = register_processes(
-        core)
-
-    process_types_registry.register('core', core)
+    core = register_processes(core)
 
     return core
 
 
+# Make the core process types
+process_types_core = ProcessTypes()
+process_types_core = register_types(process_types_core)
+process_types_registry.register('core', process_types_core)

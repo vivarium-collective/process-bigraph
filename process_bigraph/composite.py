@@ -12,7 +12,7 @@ from typing import Dict
 
 from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth, visit_method
 
-from process_bigraph import process_types_registry
+from process_bigraph.process_types import process_types_registry
 from process_bigraph.protocols import local_lookup, local_lookup_module
 
 
@@ -147,9 +147,10 @@ def deserialize_process(schema, encoded, core):
                 'interval'))
 
     if not 'instance' in deserialized:
+        # assign the process a core and initialize
+        instantiate.core = core
         process = instantiate(
-            config,
-            core=core)
+            config)
 
         deserialized['instance'] = process
 
@@ -188,7 +189,8 @@ def deserialize_step(schema, encoded, core):
         deserialized.get('config', {}))
 
     if not 'instance' in deserialized:
-        process = instantiate(config, core=core)
+        instantiate.core = core  # TODO -- check this works
+        process = instantiate(config)
         deserialized['instance'] = process
 
     deserialized['config'] = config
@@ -748,13 +750,12 @@ class Composite(Process):
 
 
     @classmethod
-    def load(cls, path, core=None):
+    def load(cls, path, core_type='core'):
         with open(path) as data:
             document = json.load(data)
 
             composite = cls(
-                document,
-                core=core)
+                document, core_type=core_type)
 
         return composite
 
