@@ -87,9 +87,7 @@ class GillespieEvent(Process):
             '_default': '1e-1'}}
 
 
-    def __init__(self, config=None, core=None):
-        super().__init__(config, core)
-
+    def initialize(self, config=None):
         self.stoichiometry = np.array([[0, 1], [0, -1]])
 
 

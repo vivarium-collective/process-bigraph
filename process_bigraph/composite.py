@@ -328,6 +328,40 @@ class ProcessTypes(TypeSystem):
         return state
 
 
+class Vivarium():
+    def __init__(self, document=None):
+        self.document = document
+        self.require = document.pop('require', [])
+        self.core = ProcessTypes()
+
+        for require in self.require:
+            package = self.find_package(require)
+            self.core.register_types(
+                package.get('types', {}))
+
+        self.composite = Composite(
+            self.document,
+            core=self.core)
+
+
+def example_package():
+    return {
+        'name': 'sbml',
+        'version': '1.1.33',
+        'types': {
+            'modelfile': 'string'}}
+
+
+def example_document():
+    return {
+        'require': [
+            'sbml==1.1.33'],
+        'composition': {
+            'hello': 'string'},
+        'state': {
+            'hello': 'world!'}}
+
+
 class SyncUpdate():
     def __init__(self, update):
         self.update = update
@@ -344,25 +378,31 @@ class Step(Edge):
     like a workflow.
     """
     # TODO: support trigger every time as well as dependency trigger
-    config_schema = {}
+    # config_schema = {}
 
 
-    def __init__(self, config=None, core=None):
-        if core is None:
-            raise Exception('must provide a core')
+    # def __init__(self, config=None, core=None):
+    #     if core is None:
+    #         raise Exception('must provide a core')
 
-        self.core = core
+    #     self.core = core
 
-        if config is None:
-            config = {}
+    #     if config is None:
+    #         config = {}
 
-        self.config = self.core.fill(
-            self.config_schema,
-            config)
+    #     self.config = self.core.fill(
+    #         self.config_schema,
+    #         config)
+
+    #     self.initialize(self.config)
 
 
-    def initial_state(self):
-        return {}
+    # def initialize(self, config):
+    #     pass
+
+
+    # def initial_state(self):
+    #     return {}
 
 
     def invoke(self, state, _=None):
@@ -392,36 +432,36 @@ class Process(Edge):
           config: Override the class defaults. This dictionary may
               also contain the following special keys (TODO):
     """
-    config_schema = {}
+    # config_schema = {}
 
-    def __init__(self, config=None, core=None):
-        if core is None:
-            raise Exception('must provide a core')
+    # def __init__(self, config=None, core=None):
+    #     if core is None:
+    #         raise Exception('must provide a core')
 
-        self.core = core
+    #     self.core = core
 
-        if config is None:
-            config = {}
+    #     if config is None:
+    #         config = {}
 
-        # # check that all keywords in config are in config_schema
-        # for key in config.keys():
-        #     if key not in self.config_schema:
-        #         raise Exception(f'config key {key} not in config_schema for {self.__class__.__name__}')
+    #     # # check that all keywords in config are in config_schema
+    #     # for key in config.keys():
+    #     #     if key not in self.config_schema:
+    #     #         raise Exception(f'config key {key} not in config_schema for {self.__class__.__name__}')
 
-        # fill in defaults for config
-        self.config = self.core.fill(
-            self.config_schema,
-            config)
+    #     # fill in defaults for config
+    #     self.config = self.core.fill(
+    #         self.config_schema,
+    #         config)
 
-        # TODO: validate your config after filling, report if anything
-        #   is off
-        # print(self.core.validate_state(
-        #     self.config_schema,
-        #     config))
+    #     # TODO: validate your config after filling, report if anything
+    #     #   is off
+    #     # print(self.core.validate_state(
+    #     #     self.config_schema,
+    #     #     config))
 
 
-    def initial_state(self):
-        return {}
+    # def initial_state(self):
+    #     return {}
 
 
     def invoke(self, state, interval):
@@ -763,8 +803,7 @@ class Composite(Process):
         return composite
 
 
-    def __init__(self, config=None, core=None):
-        super().__init__(config, core)
+    def initialize(self, config=None):
 
         # insert global_time into schema if not present
         initial_composition = self.config.get('composition', {})
