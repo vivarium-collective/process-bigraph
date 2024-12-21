@@ -11,6 +11,17 @@ from bigraph_schema import is_schema_key
 
 
 class Vivarium:
+    """
+    Vivarium is a controlled virtual environment for composite process-bigraph simulations.
+
+    It manages packages and sets up the conditions for running simulations, and collects results through emitters.
+
+    Attributes:
+        document (dict): The configuration document for the simulation.
+        core (ProcessTypes): The core process types manager.
+        composite (Composite): The composite object managing the simulation.
+        require (list): List of required packages for the simulation.
+    """
     def __init__(self,
                  document=None,
                  processes=None,

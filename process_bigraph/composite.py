@@ -835,7 +835,7 @@ class Composite(Process):
              schema=False,
              state=False):
 
-        # add upcoming deprecation warning
+        # upcoming deprecation warning
         print("Warning: save() is deprecated and will be removed in a future version. "
               "Use use Vivarium for managing simulations instead of Composite.")
 
@@ -902,6 +902,11 @@ class Composite(Process):
 
 
     def read_emitter_config(self, emitter_config):
+
+        # upcoming deprecation warning
+        print("Warning: read_emitter_config() is deprecated and will be removed in a future version. "
+              "Use use Vivarium for managing simulations and emitters instead of Composite.")
+
         address = emitter_config.get('address', 'local:ram-emitter')
         config = emitter_config.get('config', {})
         mode = emitter_config.get('mode', 'none')
