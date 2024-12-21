@@ -33,9 +33,7 @@ class ToySystem(Process):
 class ODE(Process):
     config_schema = 'ode_config'
 
-    def __init__(self, config, core):
-        super().__init__(config, core)
-
+    def initialize(self, config=None):
         self.reactions_count = len(self.config['rates'])
 
         self.species_count = len(
@@ -70,10 +68,9 @@ class RunProcess(Step):
         'timestep': 'float',
         'runtime': 'float'}
 
-    def __init__(self, config, core):
-        super().__init__(config, core)
+    def initialize(self, config):
 
-        self.process = core.deserialize('process', {
+        self.process = self.core.deserialize('process', {
             '_type': 'process',
             'address': self.config['process_address'],
             'config': self.config['process_config'],
@@ -154,7 +151,7 @@ class RunProcess(Step):
                         **self.inputs_config),
                     'outputs': {}}}}
 
-        self.composite = Composite(composite_config, core=core)
+        self.composite = Composite(composite_config, core=self.core)
 
     def inputs(self):
         return self.process.inputs()
@@ -232,8 +229,7 @@ class ParameterScan(Step):
         'timestep': 'float',
         'runtime': 'float'}
 
-    def __init__(self, config, core):
-        super().__init__(config, core)
+    def initialize(self, config=None):
 
         self.steps_count = int(
             self.config['runtime'] / self.config['timestep']) + 1
@@ -283,7 +279,7 @@ class ParameterScan(Step):
         self.scan = Composite({
             'bridge': bridge,
             'state': state},
-            core=core)
+            core=self.core)
 
         results_schema = {}
         process = self.first_process()
@@ -338,5 +334,4 @@ class ParameterScan(Step):
 
         return {
             'results': update}
-
 

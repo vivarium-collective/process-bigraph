@@ -3,16 +3,19 @@ from process_bigraph.processes.growth_division import Grow, Divide
 # from process_bigraph.experiments.minimal_gillespie import GillespieInterval, GillespieEvent
 
 
+TOY_PROCESSES = {
+    'ToySystem': ToySystem,
+    'ToyODE': ODE,
+    'RunProcess': RunProcess,
+    'ParameterScan': ParameterScan,
+    'grow': Grow,
+    'divide': Divide,
+    # 'GillespieInterval': GillespieInterval,
+    # 'GillespieEvent': GillespieEvent
+}
+
+
 def register_processes(core):
-    core.register_process('ToySystem', ToySystem)
-    core.register_process('ToyODE', ODE)
-    core.register_process('RunProcess', RunProcess)
-    core.register_process('ParameterScan', ParameterScan)
-
-    core.register_process('grow', Grow)
-    core.register_process('divide', Divide)
-
-    # core.register_process('GillespieInterval', GillespieInterval)
-    # core.register_process('GillespieEvent', GillespieEvent)
-
+    for name, process in TOY_PROCESSES.items():
+        core.register_process(name, process)
     return core
