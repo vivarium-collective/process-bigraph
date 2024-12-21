@@ -1,51 +1,136 @@
 """
 Vivarium is a simulation environment that runs composites in the process bigraph.
 """
+import os
+import json
 
 from process_bigraph import ProcessTypes, Composite
 from process_bigraph.processes import TOY_PROCESSES
 from process_bigraph.processes.growth_division import grow_divide_agent
+from bigraph_schema import is_schema_key
 
 
 class Vivarium:
     def __init__(self,
                  document=None,
                  processes=None,
+                 emitter_config=None,
                  ):
         processes = processes or {}
+        emitter_config = emitter_config or {"mode": "all"}
 
         self.document = document
 
-        # add emitter
-        if 'emitter' not in self.document:
-            self.document['emitter'] = {'mode': 'all'}
-
         # make the core
         self.core = ProcessTypes()
+
+        # register processes
         self.core.register_processes(processes)
 
-        # packages
+        # register other packages
         self.require = document.pop('require', [])
         for require in self.require:
             package = self.find_package(require)
             self.core.register_types(package.get('types', {}))
 
+        # add emitter
+        if 'emitter' not in self.document:
+            # self.add_emitter(emitter_config)
+            self.document['emitter'] = emitter_config
+
+        # make the composite
         self.composite = Composite(
             self.document,
             core=self.core)
 
+    # TODO -- replace Composite's add emitter with this
+    # def add_emitter(self, emitter_config=None):
+    #     address = emitter_config.get('address', 'local:ram-emitter')
+    #     config = emitter_config.get('config', {})
+    #     mode = emitter_config.get('mode', 'none')
+    #
+    #     if mode == 'all':
+    #         inputs = {
+    #             key: [emitter_config.get('inputs', {}).get(key, key)]
+    #             for key in self.composite.state.keys()
+    #             if not is_schema_key(key)}
+    #
+    #     elif mode == 'none':
+    #         inputs = emitter_config.get('emit', {})
+    #
+    #     elif mode == 'bridge':
+    #         inputs = {}
+    #
+    #     elif mode == 'ports':
+    #         inputs = {}
+    #
+    #     if not 'emit' in config:
+    #         config['emit'] = {
+    #             input: 'any'
+    #             for input in inputs}
+    #
+    #     return {
+    #         '_type': 'step',
+    #         'address': address,
+    #         'config': config,
+    #         'inputs': inputs}
+
+
+    def get_document(self,
+                     schema=False,
+                     ):
+        document = {}
+
+        document['state'] = self.core.serialize(
+            self.composite.composition,
+            self.composite.state)
+
+        # if schema:
+        #     serialized_schema = self.core.representation(
+        #         self.composite.composition)
+        #     document['composition'] = serialized_schema
+
+        return document
+
+
+    def save(self,
+             filename='simulation.json',
+             outdir='out',
+             schema=True,
+             ):
+        # TODO: add in dependent packages and version
+        #   maybe packagename.typename?
+        # TODO: add in dependent types
+
+        document = self.get_document(schema=schema)
+
+        # save the dictionary to a JSON file
+        if not os.path.exists(outdir):
+            os.makedirs(outdir)
+        filename = os.path.join(outdir, filename)
+
+        # write the new data to the file
+        with open(filename, 'w') as json_file:
+            json.dump(document, json_file, indent=4)
+            print(f"Created new file: {filename}")
+
+
     def find_package(self, package):
         pass
+
 
     def run(self, interval):
         self.composite.run(interval)
 
+
     def step(self):
         self.composite.update({}, 0)
+
 
     def get_results(self, queries=None):
         results = self.composite.gather_results(queries=queries)
         return results[('emitter',)]
+
 
     def get_timeseries(self, queries=None):
         results = self.composite.gather_results(queries=queries)
@@ -116,6 +201,8 @@ def test_vivarium():
     results = sim.get_timeseries()
 
     print(results)
+
+    sim.save('test_vivarium.json')
 
 
 if __name__ == '__main__':

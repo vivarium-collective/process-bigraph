@@ -824,6 +824,10 @@ class Composite(Process):
 
         # self.run_steps(self.to_run)
 
+    def serialize_state(self):
+        return self.core.serialize(
+            self.composition,
+            self.state)
 
     def save(self,
              filename='composite.json',
@@ -831,9 +835,9 @@ class Composite(Process):
              schema=False,
              state=False):
 
-        # TODO: add in dependent packages and version
-        #   maybe packagename.typename?
-        # TODO: add in dependent types
+        # add upcoming deprecation warning
+        print("Warning: save() is deprecated and will be removed in a future version. "
+              "Use use Vivarium for managing simulations instead of Composite.")
 
         document = {}
 
@@ -841,27 +845,13 @@ class Composite(Process):
             schema = state = True
 
         if state:
-            serialized_state = self.core.serialize(
-                self.composition,
-                self.state)
-
+            serialized_state = self.serialize_state()
             document['state'] = serialized_state
 
         if schema:
-            # serialized_schema = self.core.serialize(
-            #     'schema',
-            #     self.composition)
-
             serialized_schema = self.core.representation(
                 self.composition)
-
             document['composition'] = serialized_schema
-
-        # TODO: make this true
-        # copy_composite = Composite({
-        #     'state': self.state})
-
-        # assert copy_composite == self
 
         # save the dictionary to a JSON file
         if not os.path.exists(outdir):
@@ -872,6 +862,7 @@ class Composite(Process):
         with open(filename, 'w') as json_file:
             json.dump(document, json_file, indent=4)
             print(f"Created new file: {filename}")
+
 
     def reset_step_state(self, step_paths):
         self.trigger_state = build_trigger_state(
