@@ -1,12 +1,13 @@
+"""
+Vivarium is a simulation environment that runs composites in the process bigraph.
+"""
+
 from process_bigraph import ProcessTypes, Composite
 from process_bigraph.processes import TOY_PROCESSES
 from process_bigraph.processes.growth_division import grow_divide_agent
 
 
-
-
-
-class Vivarium():
+class Vivarium:
     def __init__(self,
                  document=None,
                  processes=None,

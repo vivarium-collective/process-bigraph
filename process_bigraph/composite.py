@@ -16,12 +16,234 @@ from process_bigraph.protocols import local_lookup, local_lookup_module
 
 
 
+# =========================
+# Process Utility Functions
+# =========================
+
 def assert_interface(interface: Dict):
     """Ensure that an interface dict has the required keys"""
     required_keys = ['inputs', 'outputs']
     existing_keys = set(interface.keys())
     assert existing_keys == set(required_keys), f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
 
+
+def find_instances(state, instance_type='process_bigraph.composite.Process'):
+    process_class = local_lookup_module(instance_type)
+    found = {}
+
+    for key, inner in state.items():
+        if isinstance(inner, dict):
+            if isinstance(inner.get('instance'), process_class):
+                found[key] = inner
+            elif not is_schema_key(key):
+                inner_instances = find_instances(
+                    inner,
+                    instance_type=instance_type)
+
+                if inner_instances:
+                    found[key] = inner_instances
+    return found
+
+
+def find_instance_paths(state, instance_type='process_bigraph.composite.Process'):
+    instances = find_instances(state, instance_type)
+    return hierarchy_depth(instances)
+
+
+def find_step_triggers(path, step):
+    prefix = tuple(path[:-1])
+    triggers = {}
+    wire_paths = find_leaves(
+        step['inputs'])
+
+    for wire in wire_paths:
+        trigger_path = tuple(prefix) + tuple(wire)
+        if trigger_path not in triggers:
+            triggers[trigger_path] = []
+        triggers[trigger_path].append(path)
+
+    return triggers
+
+
+def explode_path(path):
+    explode = ()
+    paths = [explode]
+
+    for node in path:
+        explode = explode + (node,)
+        paths.append(explode)
+
+    return paths
+
+
+def merge_collections(existing, new):
+    if existing is None:
+        existing = {}
+    if new is None:
+        new = {}
+    for key, value in new.items():
+        if key in existing:
+            if isinstance(existing[key], dict) and isinstance(new[key], collections.abc.Mapping):
+                merge_collections(existing[key], new[key])
+            elif isinstance(existing[key], list) and isinstance(new[key], collections.abc.Sequence):
+                existing[key].extend(new[key])
+            else:
+                raise Exception(
+                    f'cannot merge collections as they do not match:\n{existing}\n{new}')
+        else:
+            existing[key] = value
+
+    return existing
+
+
+def empty_front(time):
+    return {
+        'time': time,
+        'update': {}
+    }
+
+
+def find_leaves(tree_structure, path=None):
+    leaves = []
+    path = ()
+
+    if tree_structure is None:
+        pass
+    elif isinstance(tree_structure, list):
+        leaves = tree_structure
+    elif isinstance(tree_structure, tuple):
+        leaves.append(tree_structure)
+    else:
+        for key, value in tree_structure.items():
+            if isinstance(value, dict):
+                subleaves = find_leaves(value, path + (key,))
+                leaves.extend(subleaves)
+            else:
+                leaves.append(path + tuple(value))
+
+    return leaves
+
+
+def build_step_network(steps):
+    ancestors = {
+        step_key: {
+            'input_paths': None,
+            'output_paths': None}
+        for step_key in steps}
+
+    nodes = {}
+
+    for step_key, step in steps.items():
+        for other_key, other_step in steps.items():
+            if step_key == other_key:
+                continue
+
+            schema = step['instance'].interface()
+            other_schema = other_step['instance'].interface()
+
+            assert_interface(schema)
+            assert_interface(other_schema)
+
+            if ancestors[step_key]['input_paths'] is None:
+                ancestors[step_key]['input_paths'] = find_leaves(
+                    step['inputs'])
+            input_paths = ancestors[step_key]['input_paths']
+
+            if ancestors[step_key]['output_paths'] is None:
+                ancestors[step_key]['output_paths'] = find_leaves(
+                    step.get('outputs', {}))
+            output_paths = ancestors[step_key]['output_paths']
+
+            for input in input_paths:
+                path = tuple(input)
+                if not path in nodes:
+                    nodes[path] = {
+                        'before': set([]),
+                        'after': set([])}
+                nodes[path]['after'].add(step_key)
+
+            for output in output_paths:
+                if output in input_paths:
+                    continue
+
+                path = tuple(output)
+                if not path in nodes:
+                    nodes[path] = {
+                        'before': set([]),
+                        'after': set([])}
+                nodes[path]['before'].add(step_key)
+
+    return ancestors, nodes
+
+
+def build_trigger_state(nodes):
+    return {
+        key: value['before'].copy()
+        for key, value in nodes.items()}
+
+
+def find_downstream(steps, nodes, upstream):
+    downstream = set(upstream)
+    visited = set([])
+    previous_len = -1
+
+    while len(downstream) > len(visited) and len(visited) > previous_len:
+        previous_len = len(visited)
+        down = set([])
+        for step_path in downstream:
+            if step_path not in visited:
+                step_outputs = steps[step_path]['output_paths']
+                if step_outputs is None:
+                    step_outputs = []  # Ensure step_outputs is always an iterable
+                for output in step_outputs:
+                    for dependent in nodes[output]['after']:
+                        down.add(dependent)
+                visited.add(step_path)
+        downstream |= down
+
+    return downstream
+
+
+def determine_steps(steps, remaining, fulfilled):
+    to_run = []
+    for step_path in remaining:
+        step_inputs = steps[step_path]['input_paths']
+        if step_inputs is None:
+            step_inputs = []
+        all_fulfilled = True
+        for input in step_inputs:
+            if len(fulfilled[input]) > 0:
+                all_fulfilled = False
+        if all_fulfilled:
+            to_run.append(step_path)
+
+    for step_path in to_run:
+        remaining.remove(step_path)
+        step_outputs = steps[step_path]['output_paths']
+        if step_outputs is None:
+            step_outputs = []
+
+        for output in step_outputs:
+            if output in fulfilled and step_path in fulfilled[output]:
+                fulfilled[output].remove(step_path)
+
+    return to_run, remaining, fulfilled
+
+
+def interval_time_precision(timestep):
+    # get number of decimal places to set global time precision
+    timestep_str = str(timestep)
+    global_time_precision = 0
+    if '.' in timestep_str:
+        _, decimals = timestep_str.split('.')
+        global_time_precision = len(decimals)
+
+    return global_time_precision
+
+
+# ======================
+# Process Type Functions
+# ======================
 
 def apply_process(schema, current, update, core):
     """Apply an update to a process."""
@@ -246,6 +468,10 @@ BASE_PROTOCOLS = {
     'local': local_lookup}
 
 
+# ===================
+# Process Type System
+# ===================
+
 class ProcessTypes(TypeSystem):
     """
     ProcessTypes class extends the TypeSystem class to include process types.
@@ -329,6 +555,10 @@ class ProcessTypes(TypeSystem):
         return state
 
 
+# ===============
+# Process Classes
+# ===============
+
 class SyncUpdate():
     def __init__(self, update):
         self.update = update
@@ -345,32 +575,6 @@ class Step(Edge):
     like a workflow.
     """
     # TODO: support trigger every time as well as dependency trigger
-    # config_schema = {}
-
-
-    # def __init__(self, config=None, core=None):
-    #     if core is None:
-    #         raise Exception('must provide a core')
-
-    #     self.core = core
-
-    #     if config is None:
-    #         config = {}
-
-    #     self.config = self.core.fill(
-    #         self.config_schema,
-    #         config)
-
-    #     self.initialize(self.config)
-
-
-    # def initialize(self, config):
-    #     pass
-
-
-    # def initial_state(self):
-    #     return {}
-
 
     def invoke(self, state, _=None):
         update = self.update(state)
@@ -399,37 +603,6 @@ class Process(Edge):
           config: Override the class defaults. This dictionary may
               also contain the following special keys (TODO):
     """
-    # config_schema = {}
-
-    # def __init__(self, config=None, core=None):
-    #     if core is None:
-    #         raise Exception('must provide a core')
-
-    #     self.core = core
-
-    #     if config is None:
-    #         config = {}
-
-    #     # # check that all keywords in config are in config_schema
-    #     # for key in config.keys():
-    #     #     if key not in self.config_schema:
-    #     #         raise Exception(f'config key {key} not in config_schema for {self.__class__.__name__}')
-
-    #     # fill in defaults for config
-    #     self.config = self.core.fill(
-    #         self.config_schema,
-    #         config)
-
-    #     # TODO: validate your config after filling, report if anything
-    #     #   is off
-    #     # print(self.core.validate_state(
-    #     #     self.config_schema,
-    #     #     config))
-
-
-    # def initial_state(self):
-    #     return {}
-
 
     def invoke(self, state, interval):
         update = self.update(state, interval)
@@ -439,10 +612,6 @@ class Process(Edge):
 
     def update(self, state, interval):
         return {}
-
-
-    # TODO: should we include run(interval) here?
-    #   process would have to maintain state
 
 
 class ProcessEnsemble(Process):
@@ -514,221 +683,6 @@ class Defer:
         return self.f(
             self.defer.get(),
             self.args)
-
-
-def find_instances(state, instance_type='process_bigraph.composite.Process'):
-    process_class = local_lookup_module(instance_type)
-    found = {}
-
-    for key, inner in state.items():
-        if isinstance(inner, dict):
-            if isinstance(inner.get('instance'), process_class):
-                found[key] = inner
-            elif not is_schema_key(key):
-                inner_instances = find_instances(
-                    inner,
-                    instance_type=instance_type)
-
-                if inner_instances:
-                    found[key] = inner_instances
-    return found
-
-
-def find_instance_paths(state, instance_type='process_bigraph.composite.Process'):
-    instances = find_instances(state, instance_type)
-    return hierarchy_depth(instances)
-
-
-def find_step_triggers(path, step):
-    prefix = tuple(path[:-1])
-    triggers = {}
-    wire_paths = find_leaves(
-        step['inputs'])
-
-    for wire in wire_paths:
-        trigger_path = tuple(prefix) + tuple(wire)
-        if trigger_path not in triggers:
-            triggers[trigger_path] = []
-        triggers[trigger_path].append(path)
-
-    return triggers
-
-
-def explode_path(path):
-    explode = ()
-    paths = [explode]
-
-    for node in path:
-        explode = explode + (node,)
-        paths.append(explode)
-
-    return paths
-
-
-def merge_collections(existing, new):
-    if existing is None:
-        existing = {}
-    if new is None:
-        new = {}
-    for key, value in new.items():
-        if key in existing:
-            if isinstance(existing[key], dict) and isinstance(new[key], collections.abc.Mapping):
-                merge_collections(existing[key], new[key])
-            elif isinstance(existing[key], list) and isinstance(new[key], collections.abc.Sequence):
-                existing[key].extend(new[key])
-            else:
-                raise Exception(
-                    f'cannot merge collections as they do not match:\n{existing}\n{new}')
-        else:
-            existing[key] = value
-
-    return existing
-
-
-def empty_front(time):
-    return {
-        'time': time,
-        'update': {}
-    }
-
-
-def find_leaves(tree_structure, path=None):
-    leaves = []
-    path = ()
-
-    if tree_structure is None:
-        pass
-    elif isinstance(tree_structure, list):
-        leaves = tree_structure
-    elif isinstance(tree_structure, tuple):
-        leaves.append(tree_structure)
-    else:
-        for key, value in tree_structure.items():
-            if isinstance(value, dict):
-                subleaves = find_leaves(value, path + (key,))
-                leaves.extend(subleaves)
-            else:
-                leaves.append(path + tuple(value))
-
-    return leaves
-
-
-def build_step_network(steps):
-    ancestors = {
-        step_key: {
-            'input_paths': None,
-            'output_paths': None}
-        for step_key in steps}
-
-    nodes = {}
-
-    for step_key, step in steps.items():
-        for other_key, other_step in steps.items():
-            if step_key == other_key:
-                continue
-
-            schema = step['instance'].interface()
-            other_schema = other_step['instance'].interface()
-
-            assert_interface(schema)
-            assert_interface(other_schema)
-
-            if ancestors[step_key]['input_paths'] is None:
-                ancestors[step_key]['input_paths'] = find_leaves(
-                    step['inputs'])
-            input_paths = ancestors[step_key]['input_paths']
-
-            if ancestors[step_key]['output_paths'] is None:
-                ancestors[step_key]['output_paths'] = find_leaves(
-                    step.get('outputs', {}))
-            output_paths = ancestors[step_key]['output_paths']
-
-            for input in input_paths:
-                path = tuple(input)
-                if not path in nodes:
-                    nodes[path] = {
-                        'before': set([]),
-                        'after': set([])}
-                nodes[path]['after'].add(step_key)
-
-            for output in output_paths:
-                if output in input_paths:
-                    continue
-
-                path = tuple(output)
-                if not path in nodes:
-                    nodes[path] = {
-                        'before': set([]),
-                        'after': set([])}
-                nodes[path]['before'].add(step_key)
-
-    return ancestors, nodes
-
-
-
-def build_trigger_state(nodes):
-    return {
-        key: value['before'].copy()
-        for key, value in nodes.items()}
-
-
-def find_downstream(steps, nodes, upstream):
-    downstream = set(upstream)
-    visited = set([])
-    previous_len = -1
-
-    while len(downstream) > len(visited) and len(visited) > previous_len:
-        previous_len = len(visited)
-        down = set([])
-        for step_path in downstream:
-            if step_path not in visited:
-                step_outputs = steps[step_path]['output_paths']
-                if step_outputs is None:
-                    step_outputs = []  # Ensure step_outputs is always an iterable
-                for output in step_outputs:
-                    for dependent in nodes[output]['after']:
-                        down.add(dependent)
-                visited.add(step_path)
-        downstream |= down
-
-    return downstream
-
-
-def determine_steps(steps, remaining, fulfilled):
-    to_run = []
-    for step_path in remaining:
-        step_inputs = steps[step_path]['input_paths']
-        if step_inputs is None:
-            step_inputs = []
-        all_fulfilled = True
-        for input in step_inputs:
-            if len(fulfilled[input]) > 0:
-                all_fulfilled = False
-        if all_fulfilled:
-            to_run.append(step_path)
-
-    for step_path in to_run:
-        remaining.remove(step_path)
-        step_outputs = steps[step_path]['output_paths']
-        if step_outputs is None:
-            step_outputs = []
-
-        for output in step_outputs:
-            if output in fulfilled and step_path in fulfilled[output]:
-                fulfilled[output].remove(step_path)
-
-    return to_run, remaining, fulfilled
-
-
-def interval_time_precision(timestep):
-    # get number of decimal places to set global time precision
-    timestep_str = str(timestep)
-    global_time_precision = 0
-    if '.' in timestep_str:
-        _, decimals = timestep_str.split('.')
-        global_time_precision = len(decimals)
-
-    return global_time_precision
 
 
 class Composite(Process):
@@ -910,7 +864,6 @@ class Composite(Process):
         # assert copy_composite == self
 
         # save the dictionary to a JSON file
-
         if not os.path.exists(outdir):
             os.makedirs(outdir)
         filename = os.path.join(outdir, filename)
@@ -923,7 +876,6 @@ class Composite(Process):
     def reset_step_state(self, step_paths):
         self.trigger_state = build_trigger_state(
             self.node_dependencies)
-
         self.steps_remaining = set(step_paths)
 
 
@@ -932,7 +884,6 @@ class Composite(Process):
             self.step_dependencies,
             self.steps_remaining,
             self.trigger_state)
-
         return to_run
 
 
@@ -1268,25 +1219,6 @@ class Composite(Process):
                 force_complete = False
 
 
-    # def determine_steps(self):
-    #     to_run = []
-    #     for step_key, wires in trigger_state['steps']:
-    #         fulfilled = True
-    #         for input in wires['input_paths']:
-    #             if len(trigger_state['states'][tuple(input)]) > 0:
-    #                 fulfilled = False
-    #                 break
-    #         if fulfilled:
-    #             to_run.append(step_key)
-
-    #     for step_key in to_run:
-    #         wires = trigger_state['steps'][step_key]
-    #         for output in wires['output_paths']:
-    #             trigger_state['states'][tuple(output)].remove(step_key)
-
-    #     return to_run, trigger_state
-
-
     def run_steps(self, step_paths):
         if len(step_paths) > 0:
             updates = []
@@ -1363,6 +1295,7 @@ class Composite(Process):
 
         return results
 
+
     def update(self, state, interval):
         # do everything
 
@@ -1384,13 +1317,11 @@ class Composite(Process):
         return updates
 
 
-
-"""
-Emitters
---------
-Emitters are steps that observe the state of the system and emit it to an external source. 
-This could be to a database, to a file, or to the console.
-"""
+# ========
+# Emitters
+# ========
+# Emitters are steps that observe the state of the system and emit it to an external source.
+# This could be to a database, to a file, or to the console.
 
 class Emitter(Step):
     """Base emitter class.
@@ -1454,16 +1385,3 @@ class RAMEmitter(Emitter):
 BASE_EMITTERS = {
     'console-emitter': ConsoleEmitter,
     'ram-emitter': RAMEmitter}
-
-
-# def StateEmitter(Emitter):
-
-
-# def test_emitter():
-#     composite = Composite({})
-
-#     composite.add_emitter(['emitters', 'ram'], 'ram-emitter')
-#     composite.emit_port(
-#         ['emitters', 'ram'],
-#         ['processes', 'translation'],
-#         ['outputs', 'protein'])
