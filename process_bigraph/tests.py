@@ -6,8 +6,9 @@ import random
 
 from process_bigraph import register_types
 from process_bigraph.composite import (
-    Process, Step, Composite, Vivarium, merge_collections, ProcessTypes
+    Process, Step, Composite, merge_collections, ProcessTypes
 )
+from process_bigraph.vivarium import Vivarium, test_vivarium
 from process_bigraph.processes.growth_division import grow_divide_agent
 from process_bigraph.processes import TOY_PROCESSES
 
@@ -678,34 +679,6 @@ def test_stochastic_deterministic_composite(core):
     pass
 
 
-def test_vivarium():
-    initial_mass = 1.0
-
-    grow_divide = grow_divide_agent(
-        {'grow': {'rate': 0.03}},
-        {},
-        ['environment', '0'])
-
-    environment = {
-        'environment': {
-            '0': {
-                'mass': initial_mass,
-                'grow_divide': grow_divide}}}
-
-    document = {
-        'state': environment,
-    }
-        # 'bridge': {
-        #     'inputs': {
-        #         'environment': ['environment']}}}
-
-    sim = Vivarium(document=document, processes=TOY_PROCESSES)
-    sim.run(interval=100.0)
-    results = sim.get_results()
-
-    print(results)
-
-
 if __name__ == '__main__':
     core = ProcessTypes()
     core = register_types(core)
@@ -728,4 +701,3 @@ if __name__ == '__main__':
 
     test_stochastic_deterministic_composite(core)
 
-    test_vivarium()

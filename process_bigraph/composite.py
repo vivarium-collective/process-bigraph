@@ -329,65 +329,6 @@ class ProcessTypes(TypeSystem):
         return state
 
 
-class Vivarium():
-    def __init__(self,
-                 document=None,
-                 processes=None,
-                 ):
-        processes = processes or {}
-
-        self.document = document
-
-        # add emitter
-        if 'emitter' not in self.document:
-            self.document['emitter'] = {'mode': 'all'}
-
-        # make the core
-        self.core = ProcessTypes()
-        self.core.register_processes(processes)
-
-        # packages
-        self.require = document.pop('require', [])
-        for require in self.require:
-            package = self.find_package(require)
-            self.core.register_types(package.get('types', {}))
-
-        self.composite = Composite(
-            self.document,
-            core=self.core)
-
-    def find_package(self, package):
-        pass
-
-    def run(self, interval):
-        self.composite.run(interval)
-
-    def step(self):
-        self.composite.update({}, 0)
-
-    def get_results(self, queries=None):
-        results = self.composite.gather_results(queries=queries)
-        return results[('emitter',)]
-
-
-def example_package():
-    return {
-        'name': 'sbml',
-        'version': '1.1.33',
-        'types': {
-            'modelfile': 'string'}}
-
-
-def example_document():
-    return {
-        'require': [
-            'sbml==1.1.33'],
-        'composition': {
-            'hello': 'string'},
-        'state': {
-            'hello': 'world!'}}
-
-
 class SyncUpdate():
     def __init__(self, update):
         self.update = update
