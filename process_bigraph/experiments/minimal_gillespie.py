@@ -71,7 +71,7 @@ class GillespieInterval(Step):
         output = {
             'interval': interval}
 
-        print(f'produced interval: {output}')
+        # print(f'produced interval: {output}')
 
         return output
 
@@ -149,7 +149,7 @@ class GillespieEvent(Process):
             'mRNA': {
                 'A mRNA': d_c}}
 
-        print(f'received interval: {interval}')
+        # print(f'received interval: {interval}')
 
         return update
 

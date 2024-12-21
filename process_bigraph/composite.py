@@ -331,17 +331,30 @@ class ProcessTypes(TypeSystem):
 class Vivarium():
     def __init__(self, document=None):
         self.document = document
-        self.require = document.pop('require', [])
-        self.core = ProcessTypes()
 
+        # add emitter
+        if 'emitter' not in self.document:
+            self.document['emitter'] = {'mode': 'all'}
+
+        # make the core
+        self.core = ProcessTypes()
+        self.require = document.pop('require', [])
         for require in self.require:
             package = self.find_package(require)
-            self.core.register_types(
-                package.get('types', {}))
+            self.core.register_types(package.get('types', {}))
 
         self.composite = Composite(
             self.document,
             core=self.core)
+
+        x=0
+
+    def run(self, interval):
+        self.composite.run(interval)
+
+    def get_results(self, queries=None):
+        results = self.composite.gather_results(queries=queries)
+        return results[('emitter',)]
 
 
 def example_package():

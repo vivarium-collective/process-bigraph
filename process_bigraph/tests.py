@@ -5,7 +5,7 @@ import pytest
 import random
 
 from process_bigraph import register_types
-from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
+from process_bigraph.composite import Process, Step, Composite, Vivarium, merge_collections, ProcessTypes
 from process_bigraph.processes.growth_division import grow_divide_agent
 
 
@@ -731,24 +731,54 @@ def test_stochastic_deterministic_composite(core):
     pass
 
 
+def test_vivarium():
+    initial_mass = 1.0
+
+    grow_divide = grow_divide_agent(
+        {'grow': {'rate': 0.03}},
+        {},
+        ['environment', '0'])
+
+    environment = {
+        'environment': {
+            '0': {
+                'mass': initial_mass,
+                'grow_divide': grow_divide}}}
+
+    document = {
+        'state': environment,
+    }
+        # 'bridge': {
+        #     'inputs': {
+        #         'environment': ['environment']}}}
+
+    sim = Vivarium(document=document)
+    sim.run(interval=100.0)
+    results = sim.get_results()
+
+    print(results)
+
+
 if __name__ == '__main__':
     core = ProcessTypes()
     core = register_types(core)
 
-    test_default_config(core)
-    test_merge_collections(core)
-    test_process(core)
-    test_composite(core)
-    test_infer(core)
-    test_step_initialization(core)
-    test_dependencies(core)
-    test_emitter(core)
-    test_union_tree(core)
+    # test_default_config(core)
+    # test_merge_collections(core)
+    # test_process(core)
+    # test_composite(core)
+    # test_infer(core)
+    # test_step_initialization(core)
+    # test_dependencies(core)
+    # test_emitter(core)
+    # test_union_tree(core)
+    #
+    # test_gillespie_composite(core)
+    # test_grow_divide(core)
+    # test_run_process(core)
+    # test_nested_wires(core)
+    # test_parameter_scan(core)
+    #
+    # test_stochastic_deterministic_composite(core)
 
-    test_gillespie_composite(core)
-    test_grow_divide(core)
-    test_run_process(core)
-    test_nested_wires(core)
-    test_parameter_scan(core)
-
-    test_stochastic_deterministic_composite(core)
+    test_vivarium()
