@@ -334,6 +334,8 @@ class Vivarium():
                  document=None,
                  processes=None,
                  ):
+        processes = processes or {}
+
         self.document = document
 
         # add emitter
@@ -359,6 +361,9 @@ class Vivarium():
 
     def run(self, interval):
         self.composite.run(interval)
+
+    def step(self):
+        self.composite.update({}, 0)
 
     def get_results(self, queries=None):
         results = self.composite.gather_results(queries=queries)
