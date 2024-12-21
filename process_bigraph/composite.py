@@ -15,6 +15,7 @@ from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge, is_
 from process_bigraph.protocols import local_lookup, local_lookup_module
 
 
+
 def assert_interface(interface: Dict):
     """Ensure that an interface dict has the required keys"""
     required_keys = ['inputs', 'outputs']
@@ -329,7 +330,10 @@ class ProcessTypes(TypeSystem):
 
 
 class Vivarium():
-    def __init__(self, document=None):
+    def __init__(self,
+                 document=None,
+                 processes=None,
+                 ):
         self.document = document
 
         # add emitter
@@ -338,6 +342,9 @@ class Vivarium():
 
         # make the core
         self.core = ProcessTypes()
+        self.core.register_processes(processes)
+
+        # packages
         self.require = document.pop('require', [])
         for require in self.require:
             package = self.find_package(require)
@@ -347,7 +354,8 @@ class Vivarium():
             self.document,
             core=self.core)
 
-        x=0
+    def find_package(self, package):
+        pass
 
     def run(self, interval):
         self.composite.run(interval)
@@ -530,7 +538,7 @@ class Defer:
         defer: An object with a ``.get_command_result()`` method
             whose output will be passed to the function. For
             example, the object could be an
-            :py:class:`vivarium.core.process.Process` object whose
+            :Process` object whose
             ``.get_command_result()`` method will return the process
             update.
         function: The function. For example,

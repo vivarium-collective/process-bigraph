@@ -7,6 +7,7 @@ import random
 from process_bigraph import register_types
 from process_bigraph.composite import Process, Step, Composite, Vivarium, merge_collections, ProcessTypes
 from process_bigraph.processes.growth_division import grow_divide_agent
+from process_bigraph.processes import TOY_PROCESSES
 
 
 @pytest.fixture
@@ -752,7 +753,7 @@ def test_vivarium():
         #     'inputs': {
         #         'environment': ['environment']}}}
 
-    sim = Vivarium(document=document)
+    sim = Vivarium(document=document, processes=TOY_PROCESSES)
     sim.run(interval=100.0)
     results = sim.get_results()
 
