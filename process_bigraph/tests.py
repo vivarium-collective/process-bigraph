@@ -5,7 +5,10 @@ import pytest
 import random
 
 from process_bigraph import register_types
-from process_bigraph.composite import Process, Step, Composite, merge_collections, ProcessTypes
+from process_bigraph.composite import (
+    Process, Step, Composite, merge_collections, ProcessTypes
+)
+
 from process_bigraph.processes.growth_division import grow_divide_agent
 
 
@@ -538,15 +541,13 @@ def test_parameter_scan(core):
             'outputs': {
                 'results': ['results']}}}
 
-    # TODO: make a Workflow class that is a Step-composite
-    # scan = Workflow({
     scan = Composite({
         'bridge': {
             'outputs': {
                 'results': ['results']}},
         'state': state},
         core=core)
-            
+
     # TODO: make a method so we can run it directly, provide some way to get the result out
     # result = scan.update({})
     result = scan.update({}, 0.0)
