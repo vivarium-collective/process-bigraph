@@ -2,7 +2,6 @@ import pprint
 from bigraph_schema.registry import deep_merge, default
 from process_bigraph.processes import register_processes
 from process_bigraph.composite import Process, Step, Composite, ProcessTypes, interval_time_precision
-from process_bigraph.vivarium import Vivarium
 
 
 pretty = pprint.PrettyPrinter(indent=2)
