@@ -8,8 +8,8 @@ from process_bigraph import register_types
 from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, ProcessTypes
 )
-
 from process_bigraph.processes.growth_division import grow_divide_agent
+from process_bigraph.processes import TOY_PROCESSES
 
 
 @pytest.fixture
@@ -337,9 +337,6 @@ class SimpleCompartment(Process):
         return update
 
 
-# TODO: create reaction registry, register this under "divide"
-
-
 def engulf_reaction(config):
     return {
         'redex': {},
@@ -594,45 +591,6 @@ def test_grow_divide(core):
 
 def test_gillespie_composite(core):
     composite_schema = {
-        # This all gets inferred -------------
-        # ==================================
-        # 'composition': {
-        #     'interval': {
-        #         '_type': 'step',
-        #         '_ports': {
-        #             'inputs': {
-        #                 'DNA': {
-        #                     'G': 'float'},
-        #                 'mRNA': {
-        #                     'C': 'float'}},
-        #             'outputs': {
-        #                 'interval': 'float'}}},
-        #     'event': {
-        #         '_type': 'process',
-        #         '_ports': {
-        #             'DNA': {
-        #                 'G': 'float'},
-        #             'mRNA': {
-        #                 'C': 'float'}},
-        #             'interval': 'float'}}},
-        #     'emitter': {
-        #         '_type': 'step',
-        #         '_ports': {
-        #             'inputs': {
-        #                 'DNA': {
-        #                     'G': 'float'},
-        #                 'mRNA': {
-        #                     'C': 'float'}}},
-        #     'DNA': {
-        #         'G': 'float'},
-        #     'mRNA': {
-        #         'C': 'float'}},
-        # 'schema': {
-        #     'DNA': {
-        #         'G': 'float'},
-        #     'mRNA': {
-        #         'C': 'float'}},
-
         'bridge': {
             'inputs': {
                 'DNA': ['DNA'],
@@ -675,31 +633,6 @@ def test_gillespie_composite(core):
                     'time': ['global_time'],
                     'mRNA': ['mRNA'],
                     'interval': ['event', 'interval']}}}}
-
-                #     'emit': 'any'},
-                # 'inputs': ()}}}
-
-
-            # TODO: provide a way to emit everything:
-            # 'emitter': emit_all(
-            #     'console-emitter',
-            #     exclusions={'DNA': {}}),
-
-            # TODO: make us able to wire to the top with '**'
-            # 'ram': {
-            #     '_type': 'step',
-            #     'address': 'local:ram-emitter',
-            #     'config': {
-            #         'ports': {
-            #             'inputs': 'tree[any]'}},
-            #     'wires': {
-            #         'inputs': '**'}}}}
-
-            # 'DNA': {
-            #     'G': 13.0},
-
-            # 'mRNA': {
-            #     'C': '21.0'}}}
 
     gillespie = Composite(
         composite_schema,
@@ -753,3 +686,4 @@ if __name__ == '__main__':
     test_parameter_scan(core)
 
     test_stochastic_deterministic_composite(core)
+

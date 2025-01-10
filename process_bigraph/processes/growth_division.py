@@ -5,20 +5,13 @@ class Grow(Process):
     config_schema = {
         'rate': 'float'}
 
-
-    def __init__(self, config, core=None):
-        super().__init__(config, core)
-
-
     def inputs(self):
         return {
             'mass': 'float'}
 
-
     def outputs(self):
         return {
             'mass': 'float'}
-
 
     def update(self, state, interval):
         # this calculates a delta

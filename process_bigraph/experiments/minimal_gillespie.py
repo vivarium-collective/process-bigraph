@@ -71,7 +71,7 @@ class GillespieInterval(Step):
         output = {
             'interval': interval}
 
-        print(f'produced interval: {output}')
+        # print(f'produced interval: {output}')
 
         return output
 
@@ -87,9 +87,7 @@ class GillespieEvent(Process):
             '_default': '1e-1'}}
 
 
-    def __init__(self, config=None, core=None):
-        super().__init__(config, core)
-
+    def initialize(self, config=None):
         self.stoichiometry = np.array([[0, 1], [0, -1]])
 
 
@@ -151,7 +149,7 @@ class GillespieEvent(Process):
             'mRNA': {
                 'A mRNA': d_c}}
 
-        print(f'received interval: {interval}')
+        # print(f'received interval: {interval}')
 
         return update
 
