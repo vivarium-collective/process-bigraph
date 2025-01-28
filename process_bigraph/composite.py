@@ -797,8 +797,19 @@ class Composite(Process):
             self.add_emitter(
                 emitter_config)
 
-        self.step_triggers = {}
+        self.front: Dict = {
+            path: empty_front(self.state['global_time'])
+            for path in self.process_paths}
 
+        self.bridge_updates = []
+
+        # build the step network
+        self.build_step_network()
+
+        # self.run_steps(self.to_run)
+
+    def build_step_network(self):
+        self.step_triggers = {}
         for step_path, step in self.step_paths.items():
             step_triggers = find_step_triggers(
                 step_path, step)
@@ -808,12 +819,6 @@ class Composite(Process):
 
         self.steps_run = set([])
 
-        self.front: Dict = {
-            path: empty_front(self.state['global_time'])
-            for path in self.process_paths}
-
-        self.bridge_updates = []
-
         self.step_dependencies, self.node_dependencies = build_step_network(
             self.step_paths)
 
@@ -821,8 +826,6 @@ class Composite(Process):
             self.step_paths)
 
         self.to_run = self.cycle_step_state()
-
-        # self.run_steps(self.to_run)
 
     def serialize_state(self):
         return self.core.serialize(
