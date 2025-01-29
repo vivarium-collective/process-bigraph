@@ -2,7 +2,7 @@ import re
 from setuptools import setup, find_packages
 
 
-VERSION = '0.0.24'
+VERSION = '0.0.25'
 
 
 with open("README.md", "r") as readme:
