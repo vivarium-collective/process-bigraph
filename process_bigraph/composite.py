@@ -484,7 +484,7 @@ class ProcessTypes(TypeSystem):
         self.process_registry = Registry()
         self.protocol_registry = Registry()
 
-        self.register_types(PROCESS_TYPES)
+        self.update_types(PROCESS_TYPES)
         self.register_protocols(BASE_PROTOCOLS)
         self.register_processes(BASE_EMITTERS)
 
