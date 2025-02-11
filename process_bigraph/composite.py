@@ -872,6 +872,10 @@ class Composite(Process):
             print(f"Created new file: {filename}")
 
 
+    def __repr__(self):
+        return self.core.representation(self.composition)
+
+
     def reset_step_state(self, step_paths):
         self.trigger_state = build_trigger_state(
             self.node_dependencies)
