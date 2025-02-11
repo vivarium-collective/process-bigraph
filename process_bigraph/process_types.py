@@ -98,7 +98,7 @@ def deserialize_process(schema, encoded, core):
     if not encoded:
         deserialized = core.default(schema)
     else:
-        deserialized = encoded.copy()
+        deserialized = encoded
 
     if not deserialized.get('address'):
         return deserialized
@@ -139,8 +139,10 @@ def deserialize_process(schema, encoded, core):
 
     deserialized['config'] = config
     deserialized['interval'] = interval
-    deserialized['_inputs'] = deserialized['instance'].inputs()
-    deserialized['_outputs'] = deserialized['instance'].outputs()
+    deserialized['_inputs'] = copy.deepcopy(
+        deserialized['instance'].inputs())
+    deserialized['_outputs'] = copy.deepcopy(
+        deserialized['instance'].outputs())
 
     return deserialized
 

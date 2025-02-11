@@ -336,7 +336,7 @@ def deserialize_process(schema, encoded, core):
     if not encoded:
         deserialized = core.default(schema)
     else:
-        deserialized = encoded.copy()
+        deserialized = encoded
 
     if not deserialized.get('address'):
         return deserialized
@@ -377,8 +377,10 @@ def deserialize_process(schema, encoded, core):
 
     deserialized['config'] = config
     deserialized['interval'] = interval
-    deserialized['_inputs'] = deserialized['instance'].inputs()
-    deserialized['_outputs'] = deserialized['instance'].outputs()
+    deserialized['_inputs'] = copy.deepcopy(
+        deserialized['instance'].inputs())
+    deserialized['_outputs'] = copy.deepcopy(
+        deserialized['instance'].outputs())
 
     return deserialized
 
@@ -387,7 +389,7 @@ def deserialize_step(schema, encoded, core):
     if not encoded:
         deserialized = core.default(schema)
     else:
-        deserialized = encoded.copy()
+        deserialized = copy.deepcopy(encoded)
 
     if not deserialized['address']:
         return deserialized
@@ -414,8 +416,10 @@ def deserialize_step(schema, encoded, core):
         deserialized['instance'] = process
 
     deserialized['config'] = config
-    deserialized['_inputs'] = deserialized['instance'].inputs()
-    deserialized['_outputs'] = deserialized['instance'].outputs()
+    deserialized['_inputs'] = copy.deepcopy(
+        deserialized['instance'].inputs())
+    deserialized['_outputs'] = copy.deepcopy(
+        deserialized['instance'].outputs())
 
     return deserialized
 
@@ -526,8 +530,8 @@ class ProcessTypes(TypeSystem):
         if not initial_state:
             return initial_state
 
-        input_ports = get_path(schema, path + ('_inputs',))
-        output_ports = get_path(schema, path + ('_outputs',))
+        input_ports = copy.deepcopy(get_path(schema, path + ('_inputs',)))
+        output_ports = copy.deepcopy(get_path(schema, path + ('_outputs',)))
         ports = {
             '_inputs': input_ports,
             '_outputs': output_ports}
@@ -784,8 +788,9 @@ class Composite(Process):
         #     self.state)
 
         self.process_schema = {}
+
         for port in ['inputs', 'outputs']:
-            self.process_schema[port], defaults = self.core.infer_edge(
+            self.process_schema[port] = self.core.wire_schema(
                 self.composition,
                 self.bridge[port])
 
