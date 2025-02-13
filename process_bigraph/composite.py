@@ -1379,15 +1379,25 @@ class RAMEmitter(Emitter):
 
 
     def query(self, query=None):
+        """
+        Query the history of the emitter.
+        :param query: a list of paths to query from the history. If None, the entire history is returned.
+        :return: results of the query in a list
+        """
         if isinstance(query, list):
-            result = {}
-            for path in query:
-                element = get_path(self.history, path)
-                result = set_path(result, path, element)
+            results = []
+            for t in self.history:
+                result = {}
+                for path in query:
+                    element = get_path(t, path)
+                    result = set_path(result, path, element)
+                results.append(result)
+                # element = get_path(self.history, path)
+                # result = set_path(result, path, element)
         else:
-            result = self.history
+            results = self.history
 
-        return result
+        return results
 
 
 BASE_EMITTERS = {
