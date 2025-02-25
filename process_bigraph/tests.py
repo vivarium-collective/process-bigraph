@@ -4,12 +4,17 @@ Tests for Process Bigraph
 import pytest
 import random
 
+from bigraph_schema import get_path
+
 from process_bigraph import register_types
 from process_bigraph.composite import (
-    Process, Step, Composite, merge_collections, ProcessTypes
+    Process, Step, Composite, merge_collections,
+    find_instance_paths
 )
 from process_bigraph.processes.growth_division import grow_divide_agent
 from process_bigraph.processes import TOY_PROCESSES
+from process_bigraph.process_types import ProcessTypes
+from process_bigraph.emitter import gather_results
 
 
 @pytest.fixture
@@ -411,12 +416,18 @@ def test_emitter(core):
                 'outputs': {
                     'mRNA': ['mRNA']},
                 'interval': '3.0'}},
-
-        'emitter': {
-            'emit': {
-                'time': ['global_time'],
-                'mRNA': ['mRNA'],
-                'interval': ['event', 'interval']}}}
+            'emitter': {
+                '_type': 'step',
+                'address': 'local:ram-emitter',
+                'inputs': {
+                    'time': ['global_time'],
+                    'mRNA': ['mRNA'],
+                    'interval': ['event', 'interval']},
+                'config': {
+                    'emit': {
+                        'time': 'any',
+                        'mRNA': 'any',
+                        'interval': 'any'}}}}
 
     gillespie = Composite(
         composite_schema,
@@ -432,7 +443,7 @@ def test_emitter(core):
         1000.0)
 
     # TODO: make this work
-    results = gillespie.gather_results()
+    results = gather_results(gillespie)
 
     assert 'mRNA' in updates[0]
     # TODO: support omit as well as emit
@@ -650,7 +661,7 @@ def test_gillespie_composite(core):
         1000.0)
 
     # TODO: make this work
-    results = gillespie.gather_results()
+    results = gather_results(gillespie)
 
     assert 'mRNA' in updates[0]
 

@@ -4,8 +4,14 @@ This module contains the process methods for the process bigraph schema.
 
 import copy
 
-from bigraph_schema import Edge, deep_merge, visit_method
+from bigraph_schema import Registry, Edge, TypeSystem, deep_merge, visit_method, get_path
+from process_bigraph.protocols import local_lookup, local_lookup_module
+from process_bigraph.composite import Composite
+from process_bigraph.emitter import BASE_EMITTERS
 
+# ======================
+# Process Type Functions
+# ======================
 
 def apply_process(schema, current, update, core):
     """Apply an update to a process."""
@@ -148,15 +154,15 @@ def deserialize_process(schema, encoded, core):
 
 
 def deserialize_step(schema, encoded, core):
-    deserialized = encoded.copy()
-    if not encoded['address']:
-        return encoded
+    if not encoded:
+        deserialized = core.default(schema)
+    else:
+        deserialized = copy.deepcopy(encoded)
 
-    protocol = encoded['address'].split(':', 1)
-    if len(protocol) == 1:
-        return encoded
+    if not deserialized['address']:
+        return deserialized
 
-    protocol, address = encoded['address'].split(':', 1)
+    protocol, address = deserialized['address'].split(':', 1)
 
     if 'instance' in deserialized:
         instantiate = type(deserialized['instance'])
@@ -171,26 +177,22 @@ def deserialize_step(schema, encoded, core):
 
     config = core.deserialize(
         instantiate.config_schema,
-        encoded.get('config', {}))
+        deserialized.get('config', {}))
 
     if not 'instance' in deserialized:
         process = instantiate(config, core=core)
         deserialized['instance'] = process
 
     deserialized['config'] = config
-    deserialized['_inputs'] = deserialized['instance'].inputs()
-    deserialized['_outputs'] = deserialized['instance'].outputs()
+    deserialized['_inputs'] = copy.deepcopy(
+        deserialized['instance'].inputs())
+    deserialized['_outputs'] = copy.deepcopy(
+        deserialized['instance'].outputs())
 
     return deserialized
 
 
-"""
-Process Types
--------------
-This section contains the process types schema
-"""
-
-process_types = {
+PROCESS_TYPES = {
     'protocol': {
         '_type': 'protocol',
         '_inherit': 'string'},
@@ -215,7 +217,7 @@ process_types = {
         '_description': '',
         # TODO: support reference to type parameters from other states
         'address': 'protocol',
-        'config': 'tree[any]'},
+        'config': 'quote'},
 
     # TODO: slice process to allow for navigating through a port
     'process': {
@@ -231,5 +233,97 @@ process_types = {
         # TODO: support reference to type parameters from other states
         'interval': 'interval',
         'address': 'protocol',
-        'config': 'tree[any]'},
-}
+        'config': 'quote'}}
+
+
+BASE_PROTOCOLS = {
+    'local': local_lookup}
+
+
+# ===================
+# Process Type System
+# ===================
+
+class ProcessTypes(TypeSystem):
+    """
+    ProcessTypes class extends the TypeSystem class to include process types.
+    It maintains a registry of process types and provides methods to register
+    new process types, protocols, and emitters.
+    """
+
+    def __init__(self):
+        super().__init__()
+        self.process_registry = Registry()
+        self.protocol_registry = Registry()
+
+        self.update_types(PROCESS_TYPES)
+        self.register_protocols(BASE_PROTOCOLS)
+        self.register_processes(BASE_EMITTERS)
+
+        self.register_process('composite', Composite)
+
+
+    def register_protocols(self, protocols):
+        """Register protocols with the core"""
+        self.protocol_registry.register_multiple(protocols)
+
+
+    def register_process(
+            self,
+            name,
+            process_data
+    ):
+        """
+        Registers a new process type in the process registry.
+
+        Args:
+            name (str): The name of the process type.
+            process_data: The data associated with the process type.
+        """
+        self.process_registry.register(name, process_data)
+
+
+    def register_processes(self, processes):
+        for process_key, process_data in processes.items():
+            self.register_process(
+                process_key,
+                process_data)
+
+
+    def initialize_edge_state(self, schema, path, edge):
+        """
+        Initialize the state for an edge based on the schema and the edge.
+        """
+        initial_state = edge['instance'].initial_state()
+        if not initial_state:
+            return initial_state
+
+        input_ports = copy.deepcopy(get_path(schema, path + ('_inputs',)))
+        output_ports = copy.deepcopy(get_path(schema, path + ('_outputs',)))
+        ports = {
+            '_inputs': input_ports,
+            '_outputs': output_ports}
+
+        input_state = {}
+        if input_ports:
+            input_state = self.project_edge(
+                ports,
+                edge,
+                path[:-1],
+                initial_state,
+                ports_key='inputs')
+
+        output_state = {}
+        if output_ports:
+            output_state = self.project_edge(
+                ports,
+                edge,
+                path[:-1],
+                initial_state,
+                ports_key='outputs')
+
+        state = deep_merge(input_state, output_state)
+
+        return state
+
+
