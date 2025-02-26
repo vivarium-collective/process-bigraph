@@ -18,9 +18,9 @@ from bigraph_schema import get_path, set_path, is_schema_key
 from process_bigraph.composite import Composite, Step, find_instance_paths
 
 
-def generate_emitter_state(composite, emitter_config):
+def generate_emitter_state(composite, emitter_config, address="local:ram-emitter"):
     """Return the emitter state."""
-    address = emitter_config.get("address", "local:ram-emitter")
+    address = emitter_config.get("address", address)
     config = emitter_config.get("config", {})
     mode = emitter_config.get("mode", "all")
 
@@ -169,9 +169,9 @@ class JSONEmitter(Emitter):
     """
     config_schema = {
         **Emitter.config_schema,
-        'filepath': {
+        'file_path': {
             '_type': 'string',
-            '_default': '/out'
+            '_default': './out'  # Changed to a writable directory
         },
         'simulation_id': {
             '_type': 'string',
@@ -182,50 +182,50 @@ class JSONEmitter(Emitter):
     def __init__(self, config, core):
         super().__init__(config, core)
         self.simulation_id = config.get('simulation_id') or str(uuid.uuid4())
-        self.file_path = config.get('file_path', '/out')
+        self.file_path = config.get('file_path', './out')  # Changed default to a writable path
         os.makedirs(self.file_path, exist_ok=True)
         self.filepath = os.path.join(self.file_path, f"history_{self.simulation_id}.json")
 
-        # Ensure the file exists
+        # Ensure the file exists and initialize properly
         if not os.path.exists(self.filepath):
             with open(self.filepath, 'w') as f:
-                f.write('[')  # Start JSON array
+                json.dump([], f)  # Initialize with an empty list
 
     def update(self, state) -> dict:
         """Appends the deep-copied state to the JSON file efficiently."""
-        with open(self.filepath, 'a') as f:
-            if os.path.getsize(self.filepath) > 1:
-                f.write(',\n')  # Add a comma separator
-            json.dump(copy.deepcopy(state), f)
-        return {}
+        with open(self.filepath, 'r+') as f:
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                data = []
 
-    def finalize(self):
-        """Closes the JSON array properly at the end of execution."""
-        with open(self.filepath, 'a') as f:
-            f.write(']')
+            data.append(copy.deepcopy(state))
+            f.seek(0)
+            json.dump(data, f, indent=4)
+        return {}
 
     def query(self, query=None):
         """Queries the JSON history by streaming the file to avoid memory overhead."""
-        results = []
+        if not os.path.exists(self.filepath):
+            return []
+
         with open(self.filepath, 'r') as f:
-            f.seek(0, os.SEEK_END)
-            if f.tell() <= 1:  # Empty or only the opening bracket
-                return results
+            try:
+                data = json.load(f)
+            except json.JSONDecodeError:
+                return []
 
-            f.seek(0)
-            data = json.loads(f.read() + ']')  # Ensure JSON format
+        if isinstance(query, list):
+            results = []
+            for t in data:
+                result = {}
+                for path in query:
+                    element = get_path(t, path)
+                    result = set_path(result, path, element)
+                results.append(result)
+            return results
 
-            if isinstance(query, list):
-                for t in data:
-                    result = {}
-                    for path in query:
-                        element = get_path(t, path)
-                        result = set_path(result, path, element)
-                    results.append(result)
-            else:
-                results = data
-
-        return results
+        return data
 
 
 BASE_EMITTERS = {
@@ -240,22 +240,16 @@ def core():
     core = ProcessTypes()
     return register_types(core)
 
-
-def test_emitter(core):
-    composite_spec = {
-        'increase': {
-            '_type': 'process',
-            'address': 'local:!process_bigraph.tests.IncreaseProcess',
-            'config': {'rate': 0.3},
-            'interval': 1.0,
-            'inputs': {'level': ['value']},
-            'outputs': {'level': ['value']}},
-    }
-    composite = Composite({'state': composite_spec}, core)
-
+def add_emitter(composite,
+                core,
+                emitter_config,
+                address="local:ram-emitter"
+                ):
     # add an emitter
     path = ('emitter',)
-    emitter_state = generate_emitter_state(composite, emitter_config={"mode": "all"})
+    emitter_state = generate_emitter_state(composite,
+                                           emitter_config=emitter_config,
+                                           address=address)
     emitter_state = set_path({}, path, emitter_state)
     composite.merge({}, emitter_state)
     # TODO -- this is a hack to get the emitter to show up in the state
@@ -266,12 +260,58 @@ def test_emitter(core):
     # add to steps and rebuild
     composite.step_paths[path] = instance
     composite.build_step_network()
+    return composite
+
+
+def test_ram_emitter(core):
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'config': {'rate': 0.3},
+            'interval': 1.0,
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}},
+    }
+    composite = Composite({'state': composite_spec}, core)
+    composite = add_emitter(composite,
+                            core,
+                            emitter_config={'mode': 'all'},
+                            address='local:ram-emitter')
 
     # run the simulation
     composite.run(10)
 
     # query the emitter
-    results = instance['instance'].query()
+    results = composite.state['emitter']['instance'].query()
+    assert len(results) == 11
+    assert results[-1]['global_time'] == 10
+    print(results)
+
+
+def test_json_emitter(core):
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'config': {'rate': 0.3},
+            'interval': 1.0,
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}},
+    }
+    composite = Composite({'state': composite_spec}, core)
+    composite = add_emitter(composite,
+                            core,
+                            emitter_config={'mode': 'all',
+                                            # 'file_path': '/tmp'
+                                            },
+                            address='local:json-emitter')
+
+    # run the simulation
+    composite.run(10)
+
+    # query the emitter
+    results = composite.state['emitter']['instance'].query()
     assert len(results) == 11
     assert results[-1]['global_time'] == 10
     print(results)
@@ -281,4 +321,6 @@ if __name__ == '__main__':
     from process_bigraph import register_types, ProcessTypes
     core = ProcessTypes()
     core = register_types(core)
-    test_emitter(core)
+
+    test_ram_emitter(core)
+    test_json_emitter(core)
