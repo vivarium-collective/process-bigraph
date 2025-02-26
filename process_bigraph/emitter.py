@@ -6,12 +6,59 @@ Emitters
 Emitters are steps that observe the state of the system and emit it to an external source.
 This could be to a database, to a file, or to the console.
 """
+import os
+import json
 import copy
+import uuid
 from typing import Dict
 
-from bigraph_schema import get_path, set_path
+from bigraph_schema import get_path, set_path, is_schema_key
 
 from process_bigraph.composite import Step, find_instance_paths
+
+
+def emitter_config(composite, emitter_config):
+    """Return the emitter configuration schema."""
+    address = emitter_config.get("address", "local:ram-emitter")
+    config = emitter_config.get("config", {})
+    mode = emitter_config.get("mode", "all")
+
+    valid_modes = {"all", "none"}
+    if mode not in valid_modes:
+        raise ValueError(f"Invalid mode: {mode}. Expected one of {valid_modes}.")
+
+    inputs_config = emitter_config.get("inputs", {})
+    process_paths = find_instance_paths(composite.state, 'process_bigraph.composite.Process')
+    step_paths = find_instance_paths(composite.state, 'process_bigraph.composite.Step')
+
+    def collect_input_ports(state, prefix=""):
+        input_ports = {}
+        for key, value in state.items():
+            full_key = f"{prefix}.{key}" if prefix else key
+            if is_schema_key(key):  # skip schema keys
+                continue
+            if composite.core.inherits_from(composite.composition.get(key, {}), "edge"):  # skip edges
+                continue
+            if full_key in process_paths or full_key in step_paths:  # skip processes
+                continue
+            if isinstance(value, dict):  # recurse into nested dictionaries
+                input_ports.update(collect_input_ports(value, full_key))
+            else:
+                input_ports[full_key] = [inputs_config.get(full_key, full_key)]
+        return input_ports
+
+    input_ports = collect_input_ports(composite.state) if mode == "all" else emitter_config.get("emit", {})
+
+    if "emit" not in config:
+        config["emit"] = {
+            input_port: "any"
+            for input_port in input_ports}
+
+    return {
+        "_type": "step",
+        "address": address,
+        "config": config,
+        "inputs": input_ports}
 
 
 class Emitter(Step):
@@ -84,9 +131,9 @@ class RAMEmitter(Emitter):
 
 
 def gather_results(composite, queries=None):
-    '''
+    """
     a map of paths to emitter --> queries for the emitter at that path
-    '''
+    """
 
     emitter_paths = find_instance_paths(
         composite.state,
@@ -108,6 +155,74 @@ def gather_results(composite, queries=None):
     return results
 
 
+class JSONEmitter(Emitter):
+    """JSON emitter class.
+
+    This emitter logs the state to a JSON file efficiently by appending to it.
+    """
+    config_schema = {
+        **Emitter.config_schema,
+        'filepath': {
+            '_type': 'string',
+            '_default': '/out'
+        },
+        'simulation_id': {
+            '_type': 'string',
+            '_default': None
+        }
+    }
+
+    def __init__(self, config, core):
+        super().__init__(config, core)
+        self.simulation_id = config.get('simulation_id') or str(uuid.uuid4())
+        self.file_path = config.get('file_path', '/out')
+        os.makedirs(self.file_path, exist_ok=True)
+        self.filepath = os.path.join(self.file_path, f"history_{self.simulation_id}.json")
+
+        # Ensure the file exists
+        if not os.path.exists(self.filepath):
+            with open(self.filepath, 'w') as f:
+                f.write('[')  # Start JSON array
+
+    def update(self, state) -> dict:
+        """Appends the deep-copied state to the JSON file efficiently."""
+        with open(self.filepath, 'a') as f:
+            if os.path.getsize(self.filepath) > 1:
+                f.write(',\n')  # Add a comma separator
+            json.dump(copy.deepcopy(state), f)
+        return {}
+
+    def finalize(self):
+        """Closes the JSON array properly at the end of execution."""
+        with open(self.filepath, 'a') as f:
+            f.write(']')
+
+    def query(self, query=None):
+        """Queries the JSON history by streaming the file to avoid memory overhead."""
+        results = []
+        with open(self.filepath, 'r') as f:
+            f.seek(0, os.SEEK_END)
+            if f.tell() <= 1:  # Empty or only the opening bracket
+                return results
+
+            f.seek(0)
+            data = json.loads(f.read() + ']')  # Ensure JSON format
+
+            if isinstance(query, list):
+                for t in data:
+                    result = {}
+                    for path in query:
+                        element = get_path(t, path)
+                        result = set_path(result, path, element)
+                    results.append(result)
+            else:
+                results = data
+
+        return results
+
+
 BASE_EMITTERS = {
     'console-emitter': ConsoleEmitter,
-    'ram-emitter': RAMEmitter}
+    'ram-emitter': RAMEmitter,
+    'json-emitter': JSONEmitter,
+}
