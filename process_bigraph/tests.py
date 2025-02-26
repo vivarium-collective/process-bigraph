@@ -4,15 +4,10 @@ Tests for Process Bigraph
 import pytest
 import random
 
-from bigraph_schema import get_path
-
 from process_bigraph import register_types
-from process_bigraph.composite import (
-    Process, Step, Composite, merge_collections,
-    find_instance_paths
-)
+from process_bigraph.composite import Process, Step, Composite, merge_collections
+
 from process_bigraph.processes.growth_division import grow_divide_agent
-from process_bigraph.processes import TOY_PROCESSES
 from process_bigraph.process_types import ProcessTypes
 from process_bigraph.emitter import gather_results
 

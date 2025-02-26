@@ -1,13 +1,21 @@
 """
-This module contains the process methods for the process bigraph schema.
-"""
+=============
+Process Types
+=============
 
+This module contains the process methods and types for the process bigraph schema.
+Additionally, it defines the `ProcessTypes` class, which extends the `TypeSystem`
+class to include process types, and maintains a registry of process types, protocols,
+and emitters.
+"""
 import copy
 
 from bigraph_schema import Registry, Edge, TypeSystem, deep_merge, visit_method, get_path
+
 from process_bigraph.protocols import local_lookup, local_lookup_module
 from process_bigraph.composite import Composite
 from process_bigraph.emitter import BASE_EMITTERS
+
 
 # ======================
 # Process Type Functions
@@ -192,54 +200,6 @@ def deserialize_step(schema, encoded, core):
     return deserialized
 
 
-PROCESS_TYPES = {
-    'protocol': {
-        '_type': 'protocol',
-        '_inherit': 'string'},
-
-    'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
-
-    'interval': {
-        '_type': 'interval',
-        '_inherit': 'float',
-        '_apply': 'set',
-        '_default': '1.0'},
-
-    'step': {
-        '_type': 'step',
-        '_inherit': 'edge',
-        '_apply': apply_process,
-        '_serialize': serialize_process,
-        '_deserialize': deserialize_step,
-        '_check': check_process,
-        '_fold': fold_visit,
-        '_divide': divide_process,
-        '_description': '',
-        # TODO: support reference to type parameters from other states
-        'address': 'protocol',
-        'config': 'quote'},
-
-    # TODO: slice process to allow for navigating through a port
-    'process': {
-        '_type': 'process',
-        '_inherit': 'edge',
-        '_apply': apply_process,
-        '_serialize': serialize_process,
-        '_deserialize': deserialize_process,
-        '_check': check_process,
-        '_fold': fold_visit,
-        '_divide': divide_process,
-        '_description': '',
-        # TODO: support reference to type parameters from other states
-        'interval': 'interval',
-        'address': 'protocol',
-        'config': 'quote'}}
-
-
-BASE_PROTOCOLS = {
-    'local': local_lookup}
-
-
 # ===================
 # Process Type System
 # ===================
@@ -326,4 +286,51 @@ class ProcessTypes(TypeSystem):
 
         return state
 
+
+PROCESS_TYPES = {
+    'protocol': {
+        '_type': 'protocol',
+        '_inherit': 'string'},
+
+    'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
+
+    'interval': {
+        '_type': 'interval',
+        '_inherit': 'float',
+        '_apply': 'set',
+        '_default': '1.0'},
+
+    'step': {
+        '_type': 'step',
+        '_inherit': 'edge',
+        '_apply': apply_process,
+        '_serialize': serialize_process,
+        '_deserialize': deserialize_step,
+        '_check': check_process,
+        '_fold': fold_visit,
+        '_divide': divide_process,
+        '_description': '',
+        # TODO: support reference to type parameters from other states
+        'address': 'protocol',
+        'config': 'quote'},
+
+    # TODO: slice process to allow for navigating through a port
+    'process': {
+        '_type': 'process',
+        '_inherit': 'edge',
+        '_apply': apply_process,
+        '_serialize': serialize_process,
+        '_deserialize': deserialize_process,
+        '_check': check_process,
+        '_fold': fold_visit,
+        '_divide': divide_process,
+        '_description': '',
+        # TODO: support reference to type parameters from other states
+        'interval': 'interval',
+        'address': 'protocol',
+        'config': 'quote'}}
+
+
+BASE_PROTOCOLS = {
+    'local': local_lookup}
 

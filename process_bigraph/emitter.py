@@ -1,14 +1,16 @@
-# ========
-# Emitters
-# ========
-# Emitters are steps that observe the state of the system and emit it to an external source.
-# This could be to a database, to a file, or to the console.
+"""
+========
+Emitters
+========
 
-
+Emitters are steps that observe the state of the system and emit it to an external source.
+This could be to a database, to a file, or to the console.
+"""
 import copy
 from typing import Dict
 
-from bigraph_schema import get_path
+from bigraph_schema import get_path, set_path
+
 from process_bigraph.composite import Step, find_instance_paths
 
 
@@ -88,7 +90,7 @@ def gather_results(composite, queries=None):
 
     emitter_paths = find_instance_paths(
         composite.state,
-        'process_bigraph.emitter.Emitter')
+        instance_type='process_bigraph.emitter.Emitter')
 
     if queries is None:
         queries = {
@@ -109,4 +111,3 @@ def gather_results(composite, queries=None):
 BASE_EMITTERS = {
     'console-emitter': ConsoleEmitter,
     'ram-emitter': RAMEmitter}
-

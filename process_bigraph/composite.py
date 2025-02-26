@@ -10,10 +10,10 @@ import math
 import collections
 from typing import Dict
 
-from bigraph_schema import Edge, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth, visit_method
+from bigraph_schema import (
+    Edge, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth, visit_method)
 
 from process_bigraph.protocols import local_lookup, local_lookup_module
-
 
 
 # =========================
@@ -24,7 +24,8 @@ def assert_interface(interface: Dict):
     """Ensure that an interface dict has the required keys"""
     required_keys = ['inputs', 'outputs']
     existing_keys = set(interface.keys())
-    assert existing_keys == set(required_keys), f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
+    assert existing_keys == set(required_keys), \
+        f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
 
 
 def find_instances(state, instance_type='process_bigraph.composite.Process'):
