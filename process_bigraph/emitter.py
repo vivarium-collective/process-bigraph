@@ -67,6 +67,34 @@ def generate_emitter_state(composite, emitter_config, address="local:ram-emitter
         "config": config,
         "inputs": input_ports}
 
+def gather_results(composite, queries=None):
+    """
+    a map of paths to emitter --> queries for the emitter at that path
+    """
+
+    emitter_paths = find_instance_paths(
+        composite.state,
+        instance_type='process_bigraph.emitter.Emitter')
+
+    if queries is None:
+        queries = {
+            path: None
+            for path in emitter_paths.keys()}
+
+    results = {}
+    for path, query in queries.items():
+        emitter = get_path(composite.state, path)
+        results[path] = emitter['instance'].query(query)
+
+        # TODO: unnest the results?
+        # TODO: allow the results to be transposed
+
+    return results
+
+
+# =========
+# Emitters
+# =========
 
 class Emitter(Step):
     """Base emitter class.
@@ -135,31 +163,6 @@ class RAMEmitter(Emitter):
             results = self.history
 
         return results
-
-
-def gather_results(composite, queries=None):
-    """
-    a map of paths to emitter --> queries for the emitter at that path
-    """
-
-    emitter_paths = find_instance_paths(
-        composite.state,
-        instance_type='process_bigraph.emitter.Emitter')
-
-    if queries is None:
-        queries = {
-            path: None
-            for path in emitter_paths.keys()}
-
-    results = {}
-    for path, query in queries.items():
-        emitter = get_path(composite.state, path)
-        results[path] = emitter['instance'].query(query)
-
-        # TODO: unnest the results?
-        # TODO: allow the results to be transposed
-
-    return results
 
 
 class JSONEmitter(Emitter):
@@ -234,11 +237,16 @@ BASE_EMITTERS = {
     'json-emitter': JSONEmitter,
 }
 
+# ======
+# Tests
+# ======
+
 @pytest.fixture
 def core():
     from process_bigraph import register_types, ProcessTypes
     core = ProcessTypes()
     return register_types(core)
+
 
 def add_emitter(composite,
                 core,
