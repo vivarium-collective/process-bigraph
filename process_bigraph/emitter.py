@@ -11,10 +11,11 @@ import json
 import copy
 import uuid
 from typing import Dict
+import pytest
 
 from bigraph_schema import get_path, set_path, is_schema_key
 
-from process_bigraph.composite import Step, find_instance_paths
+from process_bigraph.composite import Composite, Step, find_instance_paths
 
 
 def emitter_config(composite, emitter_config):
@@ -34,7 +35,8 @@ def emitter_config(composite, emitter_config):
     def collect_input_ports(state, prefix=""):
         input_ports = {}
         for key, value in state.items():
-            full_key = f"{prefix}.{key}" if prefix else key
+            full_key = f"{prefix}/{key}" if prefix else key
+            full_path = [prefix, key] if prefix else [key]
             if is_schema_key(key):  # skip schema keys
                 continue
             if composite.core.inherits_from(composite.composition.get(key, {}), "edge"):  # skip edges
@@ -44,7 +46,7 @@ def emitter_config(composite, emitter_config):
             if isinstance(value, dict):  # recurse into nested dictionaries
                 input_ports.update(collect_input_ports(value, full_key))
             else:
-                input_ports[full_key] = [inputs_config.get(full_key, full_key)]
+                input_ports[full_key] = full_path
         return input_ports
 
     input_ports = collect_input_ports(composite.state) if mode == "all" else emitter_config.get("emit", {})
@@ -226,3 +228,50 @@ BASE_EMITTERS = {
     'ram-emitter': RAMEmitter,
     'json-emitter': JSONEmitter,
 }
+
+@pytest.fixture
+def core():
+    from process_bigraph import register_types, ProcessTypes
+    core = ProcessTypes()
+    return register_types(core)
+
+
+def test_emitter(core):
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'config': {'rate': 0.3},
+            'interval': 1.0,
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}},
+    }
+    composite = Composite({'state': composite_spec}, core)
+
+    # add an emitter
+    path = ('emitter',)
+    emitter_state = emitter_config(composite, emitter_config={"mode": "all"})
+    emitter_state = set_path({}, path, emitter_state)
+    composite.merge({}, emitter_state)
+    # TODO -- this is a hack to get the emitter to show up in the state
+    _, instance = core.slice(
+        composite.composition,
+        composite.state,
+        path)
+    # add to steps and rebuild
+    composite.step_paths[path] = instance
+    composite.build_step_network()
+
+    # run the simulation
+    composite.run(10)
+
+    # query the emitter
+    results = instance['instance'].query()
+    print(results)
+
+
+if __name__ == '__main__':
+    from process_bigraph import register_types, ProcessTypes
+    core = ProcessTypes()
+    core = register_types(core)
+    test_emitter(core)
