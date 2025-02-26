@@ -25,4 +25,3 @@ def local_lookup(core, address):
     else:
         instantiate = local_lookup_registry(core, address)
     return instantiate
-
