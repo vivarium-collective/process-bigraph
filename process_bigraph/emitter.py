@@ -18,8 +18,8 @@ from bigraph_schema import get_path, set_path, is_schema_key
 from process_bigraph.composite import Composite, Step, find_instance_paths
 
 
-def emitter_config(composite, emitter_config):
-    """Return the emitter configuration schema."""
+def generate_emitter_state(composite, emitter_config):
+    """Return the emitter state."""
     address = emitter_config.get("address", "local:ram-emitter")
     config = emitter_config.get("config", {})
     mode = emitter_config.get("mode", "all")
@@ -32,24 +32,29 @@ def emitter_config(composite, emitter_config):
     process_paths = find_instance_paths(composite.state, 'process_bigraph.composite.Process')
     step_paths = find_instance_paths(composite.state, 'process_bigraph.composite.Step')
 
-    def collect_input_ports(state, prefix=""):
+    def collect_input_ports(state, path=None):
+        path = path or ()
         input_ports = {}
         for key, value in state.items():
-            full_key = f"{prefix}/{key}" if prefix else key
-            full_path = [prefix, key] if prefix else [key]
+            full_path = path + (key,) if path else (key,)
+            full_key = '/'.join(full_path)
+
             if is_schema_key(key):  # skip schema keys
                 continue
             if composite.core.inherits_from(composite.composition.get(key, {}), "edge"):  # skip edges
                 continue
-            if full_key in process_paths or full_key in step_paths:  # skip processes
+            if full_path in process_paths.keys() or full_path in step_paths.keys():  # skip processes
                 continue
             if isinstance(value, dict):  # recurse into nested dictionaries
-                input_ports.update(collect_input_ports(value, full_key))
+                input_ports.update(collect_input_ports(value, full_path))
             else:
-                input_ports[full_key] = full_path
+                input_ports[full_key] = list(full_path)
         return input_ports
 
-    input_ports = collect_input_ports(composite.state) if mode == "all" else emitter_config.get("emit", {})
+    if mode == "all":
+        input_ports = collect_input_ports(composite.state)
+    elif mode == "none":
+        input_ports = emitter_config.get("emit", {})
 
     if "emit" not in config:
         config["emit"] = {
@@ -250,7 +255,7 @@ def test_emitter(core):
 
     # add an emitter
     path = ('emitter',)
-    emitter_state = emitter_config(composite, emitter_config={"mode": "all"})
+    emitter_state = generate_emitter_state(composite, emitter_config={"mode": "all"})
     emitter_state = set_path({}, path, emitter_state)
     composite.merge({}, emitter_state)
     # TODO -- this is a hack to get the emitter to show up in the state
@@ -267,6 +272,8 @@ def test_emitter(core):
 
     # query the emitter
     results = instance['instance'].query()
+    assert len(results) == 11
+    assert results[-1]['global_time'] == 10
     print(results)
 
 

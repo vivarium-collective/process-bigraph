@@ -41,7 +41,6 @@ class IncreaseProcess(Process):
 
 
     def update(self, state, interval):
-
         return {
             'level': state['level'] * self.config['rate']}
 
