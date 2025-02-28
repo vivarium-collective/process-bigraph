@@ -65,7 +65,7 @@ class IncreaseRate(Step):
         # TODO: this is ludicrous.... never do this
         #   probably this feature should only be used for reading
         self.instance.accelerate(
-            self.config['acceleration'])
+            self.config['acceleration'] * state['level'])
 
 
 def test_default_config(core):
@@ -705,7 +705,7 @@ def test_shared_steps(core):
             'shared': {
                 'accelerate': {
                     'address': 'local:!process_bigraph.tests.IncreaseRate',
-                    'config': {'acceleration': '0.000003'},
+                    'config': {'acceleration': '3e-20'},
                     'inputs': {'level': ['..', '..', 'value']}}}},
         'emitter': emitter({
             'level': ['value']})}
