@@ -151,6 +151,20 @@ def deserialize_process(schema, encoded, core):
 
         deserialized['instance'] = process
 
+    # TODO: this mutating the original value directly into
+    #   the return value is weird (?)
+    shared = deserialized.get('shared', {})
+    if shared:
+        deserialized['shared'] = {}
+        for step_id, step_config in shared.items():
+            step = deserialize_step(
+                'step',
+                step_config,
+                core)
+            step.register_shared(instance)
+
+            deserialized['shared'][step_id] = step
+
     deserialized['config'] = config
     deserialized['interval'] = interval
     deserialized['_inputs'] = copy.deepcopy(
@@ -328,9 +342,10 @@ PROCESS_TYPES = {
         # TODO: support reference to type parameters from other states
         'interval': 'interval',
         'address': 'protocol',
-        'config': 'quote'}}
+        'config': 'quote',
+        'shared': 'map[step]'},
+}
 
 
 BASE_PROTOCOLS = {
     'local': local_lookup}
-

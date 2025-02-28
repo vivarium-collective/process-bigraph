@@ -269,6 +269,10 @@ class Step(Edge):
         return sync
 
 
+    def register_shared(self, instance):
+        self.instance = instance
+
+
     def update(self, state):
         return {}
 
