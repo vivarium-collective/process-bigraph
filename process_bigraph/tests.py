@@ -11,7 +11,7 @@ from process_bigraph.composite import Process, Step, Composite, merge_collection
 
 from process_bigraph.processes.growth_division import grow_divide_agent
 from process_bigraph.process_types import ProcessTypes
-from process_bigraph.emitter import gather_results
+from process_bigraph.emitter import emitter, gather_results
 
 
 @pytest.fixture
@@ -704,18 +704,20 @@ def test_shared_steps(core):
             'outputs': {'level': ['value']},
             'shared': {
                 'accelerate': {
-                    '_type': 'step',
                     'address': 'local:!process_bigraph.tests.IncreaseRate',
                     'config': {'acceleration': '0.000003'},
                     'inputs': {'level': ['..', '..', 'value']}}}},
-        'emitter': {
-            '_type': 'step',
-            'address': 'local:ram-emitter',
-            'config': {
-                'emit': {
-                    'level': 'float'}},
-            'inputs': {
-                'level': ['value']}}}
+        'emitter': emitter({
+            'level': ['value']})}
+
+        # 'emitter': {
+        #     '_type': 'step',
+        #     'address': 'local:ram-emitter',
+        #     'config': {
+        #         'emit': {
+        #             'level': 'float'}},
+        #     'inputs': {
+        #         'level': ['value']}}}
 
     shared = Composite(
         {'state': state},
