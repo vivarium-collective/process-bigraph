@@ -18,15 +18,15 @@ from bigraph_schema import get_path, set_path, is_schema_key
 from process_bigraph.composite import Composite, Step, find_instance_paths
 
 
-def generate_emitter_state(composite, emitter_config, address="local:ram-emitter"):
+def generate_emitter_state(composite,
+                           emitter_config,
+                           address="local:ram-emitter"
+                           ):
     """Return the emitter state."""
     address = emitter_config.get("address", address)
     config = emitter_config.get("config", {})
     mode = emitter_config.get("mode", "all")
 
-    valid_modes = {"all", "none"}
-    if mode not in valid_modes:
-        raise ValueError(f"Invalid mode: {mode}. Expected one of {valid_modes}.")
 
     inputs_config = emitter_config.get("inputs", {})
     process_paths = find_instance_paths(composite.state, 'process_bigraph.composite.Process')
@@ -36,13 +36,15 @@ def generate_emitter_state(composite, emitter_config, address="local:ram-emitter
         path = path or ()
         input_ports = {}
         for key, value in state.items():
+
+            # TODO -- make these full paths
             full_path = path + (key,) if path else (key,)
             full_key = '/'.join(full_path)
 
             if is_schema_key(key):  # skip schema keys
                 continue
-            if composite.core.inherits_from(composite.composition.get(key, {}), "edge"):  # skip edges
-                continue
+            # if composite.core.inherits_from(composite.composition.get(key, {}), "edge"):  # skip edges
+            #     continue
             if full_path in process_paths.keys() or full_path in step_paths.keys():  # skip processes
                 continue
             if isinstance(value, dict):  # recurse into nested dictionaries
@@ -55,6 +57,8 @@ def generate_emitter_state(composite, emitter_config, address="local:ram-emitter
         input_ports = collect_input_ports(composite.state)
     elif mode == "none":
         input_ports = emitter_config.get("emit", {})
+    else:
+        raise ValueError(f"Invalid mode: {mode}. Expected one of ['all', 'none']")
 
     if "emit" not in config:
         config["emit"] = {
