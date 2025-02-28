@@ -100,6 +100,18 @@ def gather_results(composite, queries=None):
 # Emitters
 # =========
 
+
+def anyize_paths(tree):
+    if isinstance(tree, dict):
+        result = {}
+        for key, value in tree.items():
+            result[key] = anyize_paths(value)
+    else:
+        result = 'any'
+
+    return result
+
+
 class Emitter(Step):
     """Base emitter class.
 
@@ -250,6 +262,15 @@ def core():
     from process_bigraph import register_types, ProcessTypes
     core = ProcessTypes()
     return register_types(core)
+
+
+def emitter(wires, address='local:ram-emitter'):
+    return {
+        '_type': 'step',
+        'address': address,
+        'config': {
+            'emit': anyize_paths(wires)},
+        'inputs': wires}
 
 
 def add_emitter(composite,

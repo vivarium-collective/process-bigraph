@@ -4,12 +4,14 @@ Tests for Process Bigraph
 import pytest
 import random
 
+from bigraph_schema import default
+
 from process_bigraph import register_types
 from process_bigraph.composite import Process, Step, Composite, merge_collections
 
 from process_bigraph.processes.growth_division import grow_divide_agent
 from process_bigraph.process_types import ProcessTypes
-from process_bigraph.emitter import gather_results
+from process_bigraph.emitter import emitter, gather_results
 
 
 @pytest.fixture
@@ -35,6 +37,10 @@ class IncreaseProcess(Process):
             'level': 'float'}
 
 
+    def accelerate(self, delta):
+        self.config['rate'] += delta
+
+
     def initial_state(self):
         return {
             'level': 4.4}
@@ -43,6 +49,23 @@ class IncreaseProcess(Process):
     def update(self, state, interval):
         return {
             'level': state['level'] * self.config['rate']}
+
+
+class IncreaseRate(Step):
+    config_schema = {
+        'acceleration': default('float', 0.001)}
+
+
+    def inputs(self):
+        return {
+            'level': 'float'}
+
+
+    def update(self, state):
+        # TODO: this is ludicrous.... never do this
+        #   probably this feature should only be used for reading
+        self.instance.accelerate(
+            self.config['acceleration'] * state['level'])
 
 
 def test_default_config(core):
@@ -668,6 +691,46 @@ def test_union_tree(core):
         {'a': ['what', 'is', 'happening']})
 
 
+def test_shared_steps(core):
+    initial_rate = 0.4
+
+    state = {
+        'value': 1.1,
+        'increase': {
+            '_type': 'process',
+            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'config': {'rate': initial_rate},
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']},
+            'shared': {
+                'accelerate': {
+                    'address': 'local:!process_bigraph.tests.IncreaseRate',
+                    'config': {'acceleration': '3e-20'},
+                    'inputs': {'level': ['..', '..', 'value']}}}},
+        'emitter': emitter({
+            'level': ['value']})}
+
+        # 'emitter': {
+        #     '_type': 'step',
+        #     'address': 'local:ram-emitter',
+        #     'config': {
+        #         'emit': {
+        #             'level': 'float'}},
+        #     'inputs': {
+        #         'level': ['value']}}}
+
+    shared = Composite(
+        {'state': state},
+        core=core)
+
+    shared.run(100)
+
+    results = gather_results(shared)
+
+    assert shared.state['increase']['shared']['accelerate']['instance'].instance.config['rate'] == shared.state['increase']['instance'].config['rate']
+    assert shared.state['increase']['instance'].config['rate'] > initial_rate
+
+
 def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
@@ -692,6 +755,7 @@ if __name__ == '__main__':
     test_run_process(core)
     test_nested_wires(core)
     test_parameter_scan(core)
+    test_shared_steps(core)
 
     test_stochastic_deterministic_composite(core)
 

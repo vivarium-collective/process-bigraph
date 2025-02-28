@@ -161,7 +161,9 @@ def deserialize_process(schema, encoded, core):
                 'step',
                 step_config,
                 core)
-            step.register_shared(instance)
+
+            step['instance'].register_shared(
+                process)
 
             deserialized['shared'][step_id] = step
 

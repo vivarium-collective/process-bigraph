@@ -11,7 +11,9 @@ import collections
 from typing import Dict
 
 from bigraph_schema import (
-    Edge, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth, visit_method)
+    Edge, Registry, 
+    get_path, resolve_path, hierarchy_depth, deep_merge,
+    is_schema_key, strip_schema_keys)
 
 from process_bigraph.protocols import local_lookup, local_lookup_module
 
@@ -58,7 +60,7 @@ def find_step_triggers(path, step):
         step['inputs'])
 
     for wire in wire_paths:
-        trigger_path = tuple(prefix) + tuple(wire)
+        trigger_path = resolve_path(tuple(prefix) + tuple(wire))
         if trigger_path not in triggers:
             triggers[trigger_path] = []
         triggers[trigger_path].append(path)
