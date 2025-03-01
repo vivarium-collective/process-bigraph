@@ -11,7 +11,7 @@ from process_bigraph.composite import Process, Step, Composite, merge_collection
 
 from process_bigraph.processes.growth_division import grow_divide_agent
 from process_bigraph.process_types import ProcessTypes
-from process_bigraph.emitter import emitter, gather_results
+from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
 
 
 @pytest.fixture
@@ -26,25 +26,20 @@ class IncreaseProcess(Process):
             '_type': 'float',
             '_default': '0.1'}}
 
-
     def inputs(self):
         return {
             'level': 'float'}
-
 
     def outputs(self):
         return {
             'level': 'float'}
 
-
     def accelerate(self, delta):
         self.config['rate'] += delta
-
 
     def initial_state(self):
         return {
             'level': 4.4}
-
 
     def update(self, state, interval):
         return {
@@ -55,11 +50,9 @@ class IncreaseRate(Step):
     config_schema = {
         'acceleration': default('float', 0.001)}
 
-
     def inputs(self):
         return {
             'level': 'float'}
-
 
     def update(self, state):
         # TODO: this is ludicrous.... never do this
@@ -461,7 +454,7 @@ def test_emitter(core):
         1000.0)
 
     # TODO: make this work
-    results = gather_results(gillespie)
+    results = gather_emitter_results(gillespie)
 
     assert 'mRNA' in updates[0]
     # TODO: support omit as well as emit
@@ -679,7 +672,7 @@ def test_gillespie_composite(core):
         1000.0)
 
     # TODO: make this work
-    results = gather_results(gillespie)
+    results = gather_emitter_results(gillespie)
 
     assert 'mRNA' in updates[0]
 
@@ -707,7 +700,7 @@ def test_shared_steps(core):
                     'address': 'local:!process_bigraph.tests.IncreaseRate',
                     'config': {'acceleration': '3e-20'},
                     'inputs': {'level': ['..', '..', 'value']}}}},
-        'emitter': emitter({
+        'emitter': emitter_from_wires({
             'level': ['value']})}
 
         # 'emitter': {
@@ -725,7 +718,7 @@ def test_shared_steps(core):
 
     shared.run(100)
 
-    results = gather_results(shared)
+    results = gather_emitter_results(shared)
 
     assert shared.state['increase']['shared']['accelerate']['instance'].instance.config['rate'] == shared.state['increase']['instance'].config['rate']
     assert shared.state['increase']['instance'].config['rate'] > initial_rate
