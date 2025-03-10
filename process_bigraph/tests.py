@@ -599,8 +599,6 @@ def test_grow_divide(core):
                 'environment': ['environment']}}},
         core=core)
 
-    print(str(composite))
-
     updates = composite.update({
         'environment': {
             '0': {
