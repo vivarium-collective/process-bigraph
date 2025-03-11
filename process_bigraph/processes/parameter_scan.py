@@ -3,6 +3,7 @@ import numpy as np
 
 from bigraph_schema import get_path, set_path, transform_path
 from process_bigraph.composite import Step, Process, Composite, interval_time_precision, deep_merge
+from process_bigraph.emitter import gather_emitter_results
 
 
 class ToySystem(Process):
@@ -172,7 +173,7 @@ class RunProcess(Step):
         self.composite.run(
             self.config['runtime'])
 
-        histories = self.composite.gather_results()
+        histories = gather_emitter_results(self.composite)
 
         results = {
             key: timeseries_from_history(

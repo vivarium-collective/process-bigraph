@@ -10,10 +10,12 @@ import math
 import collections
 from typing import Dict
 
-from bigraph_schema import Edge, TypeSystem, get_path, set_path, deep_merge, is_schema_key, strip_schema_keys, Registry, hierarchy_depth, visit_method
+from bigraph_schema import (
+    Edge, Registry, 
+    get_path, resolve_path, hierarchy_depth, deep_merge,
+    is_schema_key, strip_schema_keys)
 
 from process_bigraph.protocols import local_lookup, local_lookup_module
-
 
 
 # =========================
@@ -24,7 +26,8 @@ def assert_interface(interface: Dict):
     """Ensure that an interface dict has the required keys"""
     required_keys = ['inputs', 'outputs']
     existing_keys = set(interface.keys())
-    assert existing_keys == set(required_keys), f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
+    assert existing_keys == set(required_keys), \
+        f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
 
 
 def find_instances(state, instance_type='process_bigraph.composite.Process'):
@@ -57,7 +60,7 @@ def find_step_triggers(path, step):
         step['inputs'])
 
     for wire in wire_paths:
-        trigger_path = tuple(prefix) + tuple(wire)
+        trigger_path = resolve_path(tuple(prefix) + tuple(wire))
         if trigger_path not in triggers:
             triggers[trigger_path] = []
         triggers[trigger_path].append(path)
@@ -241,324 +244,6 @@ def interval_time_precision(timestep):
     return global_time_precision
 
 
-# ======================
-# Process Type Functions
-# ======================
-
-def apply_process(schema, current, update, core):
-    """Apply an update to a process."""
-    process_schema = schema.copy()
-    process_schema.pop('_apply')
-    return core.apply(
-        process_schema,
-        current,
-        update)
-
-
-def check_process(schema, state, core):
-    """Check if this is a process."""
-    return 'instance' in state and isinstance(
-        state['instance'],
-        Edge)
-
-
-def fold_visit(schema, state, method, values, core):
-    visit = visit_method(
-        schema,
-        state,
-        method,
-        values,
-        core)
-
-    return visit
-
-
-def divide_process(schema, state, values, core):
-    # daughter_configs must have a config per daughter
-
-    daughter_configs = values.get(
-        'daughter_configs',
-        [{} for index in range(values['divisions'])])
-
-    if 'config' not in state:
-        return daughter_configs
-
-    existing_config = state['config']
-
-    divisions = []
-    for index in range(values['divisions']):
-        daughter_config = copy.deepcopy(
-            existing_config)
-        daughter_config = deep_merge(
-            daughter_config,
-            daughter_configs[index])
-
-        # TODO: provide a way to override inputs and outputs
-        daughter_state = {
-            'address': state['address'],
-            'config': daughter_config,
-            'inputs': copy.deepcopy(state['inputs']),
-            'outputs': copy.deepcopy(state['outputs'])}
-
-        if 'interval' in state:
-            daughter_state['interval'] = state['interval']
-
-        divisions.append(daughter_state)
-
-    return divisions
-
-
-def serialize_process(schema, value, core):
-    """Serialize a process to a JSON-safe representation."""
-    # TODO -- need to get back the protocol: address and the config
-    process = value.copy()
-    process['config'] = core.serialize(
-        process['instance'].config_schema,
-        process['config'])
-    del process['instance']
-    return process
-
-
-def deserialize_process(schema, encoded, core):
-    """Deserialize a process from a serialized state.
-
-    This function is used by the type system to deserialize a process.
-
-    :param encoded: A JSON-safe representation of the process.
-    :param bindings: The bindings to use for deserialization.
-    :param core: The type system to use for deserialization.
-
-    :returns: The deserialized state with an instantiated process.
-    """
-    encoded = encoded or {}
-    schema = schema or {}
-
-    if not encoded:
-        deserialized = core.default(schema)
-    else:
-        deserialized = encoded
-
-    if not deserialized.get('address'):
-        return deserialized
-
-    protocol, address = deserialized['address'].split(':', 1)
-
-    if 'instance' in deserialized:
-        instantiate = type(deserialized['instance'])
-    else:
-        process_lookup = core.protocol_registry.access(protocol)
-        if not process_lookup:
-            raise Exception(f'protocol "{protocol}" not implemented')
-
-        instantiate = process_lookup(core, address)
-        if not instantiate:
-            raise Exception(f'process "{address}" not found')
-
-    config = core.deserialize(
-        instantiate.config_schema,
-        deserialized.get('config', {}))
-
-    interval = core.deserialize(
-        'interval',
-        deserialized.get('interval'))
-
-    if interval is None:
-        interval = core.default(
-            schema.get(
-                'interval',
-                'interval'))
-
-    if not 'instance' in deserialized:
-        process = instantiate(
-            config,
-            core=core)
-
-        deserialized['instance'] = process
-
-    deserialized['config'] = config
-    deserialized['interval'] = interval
-    deserialized['_inputs'] = copy.deepcopy(
-        deserialized['instance'].inputs())
-    deserialized['_outputs'] = copy.deepcopy(
-        deserialized['instance'].outputs())
-
-    return deserialized
-
-
-def deserialize_step(schema, encoded, core):
-    if not encoded:
-        deserialized = core.default(schema)
-    else:
-        deserialized = copy.deepcopy(encoded)
-
-    if not deserialized['address']:
-        return deserialized
-
-    protocol, address = deserialized['address'].split(':', 1)
-
-    if 'instance' in deserialized:
-        instantiate = type(deserialized['instance'])
-    else:
-        process_lookup = core.protocol_registry.access(protocol)
-        if not process_lookup:
-            raise Exception(f'protocol "{protocol}" not implemented')
-
-        instantiate = process_lookup(core, address)
-        if not instantiate:
-            raise Exception(f'process "{address}" not found')
-
-    config = core.deserialize(
-        instantiate.config_schema,
-        deserialized.get('config', {}))
-
-    if not 'instance' in deserialized:
-        process = instantiate(config, core=core)
-        deserialized['instance'] = process
-
-    deserialized['config'] = config
-    deserialized['_inputs'] = copy.deepcopy(
-        deserialized['instance'].inputs())
-    deserialized['_outputs'] = copy.deepcopy(
-        deserialized['instance'].outputs())
-
-    return deserialized
-
-
-PROCESS_TYPES = {
-    'protocol': {
-        '_type': 'protocol',
-        '_inherit': 'string'},
-
-    'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
-
-    'interval': {
-        '_type': 'interval',
-        '_inherit': 'float',
-        '_apply': 'set',
-        '_default': '1.0'},
-
-    'step': {
-        '_type': 'step',
-        '_inherit': 'edge',
-        '_apply': apply_process,
-        '_serialize': serialize_process,
-        '_deserialize': deserialize_step,
-        '_check': check_process,
-        '_fold': fold_visit,
-        '_divide': divide_process,
-        '_description': '',
-        # TODO: support reference to type parameters from other states
-        'address': 'protocol',
-        'config': 'quote'},
-
-    # TODO: slice process to allow for navigating through a port
-    'process': {
-        '_type': 'process',
-        '_inherit': 'edge',
-        '_apply': apply_process,
-        '_serialize': serialize_process,
-        '_deserialize': deserialize_process,
-        '_check': check_process,
-        '_fold': fold_visit,
-        '_divide': divide_process,
-        '_description': '',
-        # TODO: support reference to type parameters from other states
-        'interval': 'interval',
-        'address': 'protocol',
-        'config': 'quote'}}
-
-
-BASE_PROTOCOLS = {
-    'local': local_lookup}
-
-
-# ===================
-# Process Type System
-# ===================
-
-class ProcessTypes(TypeSystem):
-    """
-    ProcessTypes class extends the TypeSystem class to include process types.
-    It maintains a registry of process types and provides methods to register
-    new process types, protocols, and emitters.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.process_registry = Registry()
-        self.protocol_registry = Registry()
-
-        self.update_types(PROCESS_TYPES)
-        self.register_protocols(BASE_PROTOCOLS)
-        self.register_processes(BASE_EMITTERS)
-
-        self.register_process('composite', Composite)
-
-
-    def register_protocols(self, protocols):
-        """Register protocols with the core"""
-        self.protocol_registry.register_multiple(protocols)
-
-
-    def register_process(
-            self,
-            name,
-            process_data
-    ):
-        """
-        Registers a new process type in the process registry.
-
-        Args:
-            name (str): The name of the process type.
-            process_data: The data associated with the process type.
-        """
-        self.process_registry.register(name, process_data)
-
-
-    def register_processes(self, processes):
-        for process_key, process_data in processes.items():
-            self.register_process(
-                process_key,
-                process_data)
-
-
-    def initialize_edge_state(self, schema, path, edge):
-        """
-        Initialize the state for an edge based on the schema and the edge.
-        """
-        initial_state = edge['instance'].initial_state()
-        if not initial_state:
-            return initial_state
-
-        input_ports = copy.deepcopy(get_path(schema, path + ('_inputs',)))
-        output_ports = copy.deepcopy(get_path(schema, path + ('_outputs',)))
-        ports = {
-            '_inputs': input_ports,
-            '_outputs': output_ports}
-
-        input_state = {}
-        if input_ports:
-            input_state = self.project_edge(
-                ports,
-                edge,
-                path[:-1],
-                initial_state,
-                ports_key='inputs')
-
-        output_state = {}
-        if output_ports:
-            output_state = self.project_edge(
-                ports,
-                edge,
-                path[:-1],
-                initial_state,
-                ports_key='outputs')
-
-        state = deep_merge(input_state, output_state)
-
-        return state
-
-
 # ===============
 # Process Classes
 # ===============
@@ -584,6 +269,10 @@ class Step(Edge):
         update = self.update(state)
         sync = SyncUpdate(update)
         return sync
+
+
+    def register_shared(self, instance):
+        self.instance = instance
 
 
     def update(self, state):
@@ -703,16 +392,6 @@ class Composite(Process):
         'bridge': {
             'inputs': 'wires',
             'outputs': 'wires'},
-        'emitter': {
-            'path': {
-                '_type': 'path',
-                '_default': ['emitter']},
-            'address': {
-                '_type': 'string',
-                '_default': 'local:ram-emitter'},
-            'config': 'tree[any]',
-            'mode': 'emitter_mode',
-            'emit': 'wires'},
         'global_time_precision': 'maybe[float]'}
 
 
@@ -743,9 +422,6 @@ class Composite(Process):
         self.composition, self.state = self.core.generate(
             initial_composition,
             initial_state)
-
-        # self.composition = copy.deepcopy(
-        #     self.core.access(composition))
 
         # TODO: add flag to self.core.access(copy=True)
         self.bridge = self.config.get('bridge', {})
@@ -778,10 +454,6 @@ class Composite(Process):
             self.state,
             edge_state)
 
-        # self.state = self.core.deserialize(
-        #     self.composition,
-        #     self.state)
-
         # TODO: call validate on this composite, not just check
         # assert self.core.validate(
         #     self.composition,
@@ -797,11 +469,6 @@ class Composite(Process):
         self.global_time_precision = self.config[
             'global_time_precision']
 
-        emitter_config = self.config.get('emitter')
-        if emitter_config and not emitter_config.get('mode', 'none') == 'none':
-            self.add_emitter(
-                emitter_config)
-
         self.front: Dict = {
             path: empty_front(self.state['global_time'])
             for path in self.process_paths}
@@ -812,6 +479,7 @@ class Composite(Process):
         self.build_step_network()
 
         # self.run_steps(self.to_run)
+
 
     def build_step_network(self):
         self.step_triggers = {}
@@ -872,10 +540,6 @@ class Composite(Process):
             print(f"Created new file: {filename}")
 
 
-    # def __repr__(self):
-    #     return self.core.representation(self.composition)
-
-
     def reset_step_state(self, step_paths):
         self.trigger_state = build_trigger_state(
             self.node_dependencies)
@@ -900,10 +564,6 @@ class Composite(Process):
             state,
             'process_bigraph.composite.Step')
 
-        self.emitter_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Emitter')
-
 
     def inputs(self):
         return self.process_schema.get('inputs', {})
@@ -911,63 +571,6 @@ class Composite(Process):
 
     def outputs(self):
         return self.process_schema.get('outputs', {})
-
-
-    def read_emitter_config(self, emitter_config):
-
-        # upcoming deprecation warning
-        print("Warning: read_emitter_config() is deprecated and will be removed in a future version. "
-              "Use use Vivarium for managing simulations and emitters instead of Composite.")
-
-        address = emitter_config.get('address', 'local:ram-emitter')
-        config = emitter_config.get('config', {})
-        mode = emitter_config.get('mode', 'none')
-
-        if mode == 'all':
-            inputs = {
-                key: [emitter_config.get('inputs', {}).get(key, key)]
-                for key in self.state.keys()
-                if not is_schema_key(key)}
-
-        elif mode == 'none':
-            inputs = emitter_config.get('emit', {})
-
-        elif mode == 'bridge':
-            inputs = {}
-
-        elif mode == 'ports':
-            inputs = {}
-            
-        if not 'emit' in config:
-            config['emit'] = {
-                input: 'any'
-                for input in inputs}
-
-        return {
-            '_type': 'step',
-            'address': address,
-            'config': config,
-            'inputs': inputs}
-        
-
-    def add_emitter(self, emitter_config):
-        path = tuple(emitter_config['path'])
-        
-        step_config = self.read_emitter_config(emitter_config)
-        emitter = set_path(
-            {}, path, step_config)
-
-        self.merge(
-            {},
-            emitter)
-
-        _, instance = self.core.slice(
-            self.composition,
-            self.state,
-            path)
-
-        self.emitter_paths[path] = instance
-        self.step_paths[path] = instance
 
 
     def merge(self, schema, state, path=None):
@@ -1209,16 +812,6 @@ class Composite(Process):
                 self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
 
-                # # display and emit
-                # if self.progress_bar:
-                #     print_progress_bar(self.global_time, end_time)
-                # if self.emit_step == 1:
-                #     self._emit_store_data()
-                # elif emit_time <= self.global_time:
-                #     while emit_time <= self.global_time:
-                #         self._emit_store_data()
-                #         emit_time += self.emit_step
-
             else:
                 # all processes have run past the interval
                 self.state['global_time'] = end_time
@@ -1283,27 +876,6 @@ class Composite(Process):
         self.run_steps(to_run)
 
 
-    def gather_results(self, queries=None):
-        '''
-        a map of paths to emitter --> queries for the emitter at that path
-        '''
-
-        if queries is None:
-            queries = {
-                path: None
-                for path in self.emitter_paths.keys()}
-
-        results = {}
-        for path, query in queries.items():
-            emitter = get_path(self.state, path)
-            results[path] = emitter['instance'].query(query)
-
-        # TODO: unnest the results?
-        # TODO: allow the results to be transposed
-
-        return results
-
-
     def update(self, state, interval):
         # do everything
 
@@ -1325,81 +897,3 @@ class Composite(Process):
         return updates
 
 
-# ========
-# Emitters
-# ========
-# Emitters are steps that observe the state of the system and emit it to an external source.
-# This could be to a database, to a file, or to the console.
-
-class Emitter(Step):
-    """Base emitter class.
-
-    An `Emitter` implementation instance diverts all querying of data to
-    the primary historical collection whose type pertains to Emitter child, i.e:
-     database-emitter=>`pymongo.Collection`, ram-emitter=>`.RamEmitter.history`(`List`)
-    """
-    config_schema = {
-        'emit': 'schema'}
-
-    def inputs(self) -> Dict:
-        return self.config['emit']
-
-    def query(self, query=None):
-        return {}
-
-    def update(self, state) -> Dict:
-        return {}
-
-
-class ConsoleEmitter(Emitter):
-    """Console emitter class.
-
-    This emitter logs the state to the console.
-    """
-
-    def update(self, state) -> Dict:
-        print(state)
-        return {}
-
-
-class RAMEmitter(Emitter):
-    """RAM emitter class.
-
-    This emitter logs the state to a list in memory.
-    """
-
-    def __init__(self, config, core):
-        super().__init__(config, core)
-        self.history = []
-
-
-    def update(self, state) -> Dict:
-        self.history.append(copy.deepcopy(state))
-        return {}
-
-
-    def query(self, query=None):
-        """
-        Query the history of the emitter.
-        :param query: a list of paths to query from the history. If None, the entire history is returned.
-        :return: results of the query in a list
-        """
-        if isinstance(query, list):
-            results = []
-            for t in self.history:
-                result = {}
-                for path in query:
-                    element = get_path(t, path)
-                    result = set_path(result, path, element)
-                results.append(result)
-                # element = get_path(self.history, path)
-                # result = set_path(result, path, element)
-        else:
-            results = self.history
-
-        return results
-
-
-BASE_EMITTERS = {
-    'console-emitter': ConsoleEmitter,
-    'ram-emitter': RAMEmitter}
