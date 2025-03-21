@@ -10,11 +10,11 @@ import os
 import json
 import copy
 import uuid
-from typing import Dict
 import pytest
+import numpy as np
+from typing import Dict
 
-from bigraph_schema import get_path, set_path, is_schema_key
-
+from bigraph_schema import get_path, set_path, is_schema_key, Edge
 from process_bigraph.composite import Composite, Step, find_instance_paths
 
 
@@ -202,6 +202,22 @@ class ConsoleEmitter(Emitter):
         return {}
 
 
+def tree_copy(state):
+    if isinstance(state, dict):
+        result = {}
+        for key, value in state.items():
+            tree = tree_copy(value)
+            if tree is not None:
+                result[key] = tree
+        return result
+    elif isinstance(state, np.ndarray):
+        return state.copy()
+    elif isinstance(state, Edge):
+        return None
+    else:
+        return copy.deepcopy(state)
+
+
 class RAMEmitter(Emitter):
     """RAM emitter class.
 
@@ -213,7 +229,9 @@ class RAMEmitter(Emitter):
         self.history = []
 
     def update(self, state) -> Dict:
-        self.history.append(copy.deepcopy(state))
+        tree = tree_copy(state)
+        self.history.append(tree)
+
         return {}
 
     def query(self, query=None):
