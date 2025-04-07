@@ -21,14 +21,17 @@ from process_bigraph.emitter import BASE_EMITTERS
 # Process Type Functions
 # ======================
 
-def apply_process(schema, current, update, core):
+def apply_process(schema, current, update, top_schema, top_state, path, core):
     """Apply an update to a process."""
     process_schema = schema.copy()
     process_schema.pop('_apply')
-    return core.apply(
+    return core.apply_update(
         process_schema,
         current,
-        update)
+        update,
+        top_schema=top_schema,
+        top_state=top_state,
+        path=path)
 
 
 def check_process(schema, state, core):
