@@ -3,6 +3,7 @@ from bigraph_schema.registry import deep_merge, default
 from process_bigraph.processes import register_processes
 from process_bigraph.composite import Process, Step, Composite, interval_time_precision
 from process_bigraph.process_types import ProcessTypes
+from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state
 
 
 pretty = pprint.PrettyPrinter(indent=2)
