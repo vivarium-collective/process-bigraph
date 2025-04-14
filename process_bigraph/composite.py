@@ -450,9 +450,13 @@ class Composite(Process):
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
 
-        self.state = deep_merge(
-            self.state,
+        self.merge(
+            self.composition,
             edge_state)
+
+        # self.state = deep_merge(
+        #     self.state,
+        #     edge_state)
 
         # TODO: call validate on this composite, not just check
         # assert self.core.validate(

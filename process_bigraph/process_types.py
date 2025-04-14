@@ -153,6 +153,8 @@ def deserialize_process(schema, encoded, core):
             core=core)
 
         deserialized['instance'] = process
+    else:
+        process = deserialized['instance']
 
     # TODO: this mutating the original value directly into
     #   the return value is weird (?)
