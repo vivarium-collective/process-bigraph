@@ -157,8 +157,8 @@ def deserialize_process(schema, encoded, core):
     # TODO: this mutating the original value directly into
     #   the return value is weird (?)
     shared = deserialized.get('shared', {})
+    deserialized['shared'] = {}
     if shared:
-        deserialized['shared'] = {}
         for step_id, step_config in shared.items():
             step = deserialize_step(
                 'step',

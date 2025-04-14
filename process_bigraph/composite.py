@@ -809,6 +809,7 @@ class Composite(Process):
                 # get all update paths, then trigger steps that
                 # depend on those paths
                 update_paths = self.apply_updates(updates)
+
                 self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
 
@@ -844,11 +845,14 @@ class Composite(Process):
                 updates.append(step_update)
 
             update_paths = self.apply_updates(updates)
+            self.expire_process_paths(update_paths)
             to_run = self.cycle_step_state()
+
             if len(to_run) > 0:
                 self.run_steps(to_run)
             else:
                 self.steps_run = set([])
+
         else:
             self.steps_run = set([])
 
