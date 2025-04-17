@@ -199,8 +199,10 @@ def find_downstream(steps, nodes, upstream):
                 if step_outputs is None:
                     step_outputs = []  # Ensure step_outputs is always an iterable
                 for output in step_outputs:
-                    for dependent in nodes[output]['after']:
-                        down.add(dependent)
+                    for subpath in explode_path(output):
+                        if subpath in nodes:
+                            for dependent in nodes[subpath]['after']:
+                                down.add(dependent)
                 visited.add(step_path)
         downstream |= down
 
