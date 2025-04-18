@@ -112,10 +112,8 @@ def deserialize_process(schema, encoded, core):
     encoded = encoded or {}
     schema = schema or {}
 
-    if not encoded:
-        deserialized = core.default(schema)
-    else:
-        deserialized = encoded
+    default = core.default(schema)
+    deserialized = deep_merge(default, encoded)
 
     if not deserialized.get('address'):
         return deserialized
@@ -153,12 +151,14 @@ def deserialize_process(schema, encoded, core):
             core=core)
 
         deserialized['instance'] = process
+    else:
+        process = deserialized['instance']
 
     # TODO: this mutating the original value directly into
     #   the return value is weird (?)
     shared = deserialized.get('shared', {})
+    deserialized['shared'] = {}
     if shared:
-        deserialized['shared'] = {}
         for step_id, step_config in shared.items():
             step = deserialize_step(
                 'step',
@@ -181,10 +181,8 @@ def deserialize_process(schema, encoded, core):
 
 
 def deserialize_step(schema, encoded, core):
-    if not encoded:
-        deserialized = core.default(schema)
-    else:
-        deserialized = copy.deepcopy(encoded)
+    default = core.default(schema)
+    deserialized = deep_merge(default, encoded)
 
     if not deserialized['address']:
         return deserialized

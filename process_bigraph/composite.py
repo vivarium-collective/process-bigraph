@@ -199,8 +199,10 @@ def find_downstream(steps, nodes, upstream):
                 if step_outputs is None:
                     step_outputs = []  # Ensure step_outputs is always an iterable
                 for output in step_outputs:
-                    for dependent in nodes[output]['after']:
-                        down.add(dependent)
+                    for subpath in explode_path(output):
+                        if subpath in nodes:
+                            for dependent in nodes[subpath]['after']:
+                                down.add(dependent)
                 visited.add(step_path)
         downstream |= down
 
@@ -450,9 +452,13 @@ class Composite(Process):
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
 
-        self.state = deep_merge(
-            self.state,
+        self.merge(
+            self.composition,
             edge_state)
+
+        # self.state = deep_merge(
+        #     self.state,
+        #     edge_state)
 
         # TODO: call validate on this composite, not just check
         # assert self.core.validate(
@@ -809,6 +815,7 @@ class Composite(Process):
                 # get all update paths, then trigger steps that
                 # depend on those paths
                 update_paths = self.apply_updates(updates)
+
                 self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
 
@@ -844,11 +851,14 @@ class Composite(Process):
                 updates.append(step_update)
 
             update_paths = self.apply_updates(updates)
+            self.expire_process_paths(update_paths)
             to_run = self.cycle_step_state()
+
             if len(to_run) > 0:
                 self.run_steps(to_run)
             else:
                 self.steps_run = set([])
+
         else:
             self.steps_run = set([])
 
