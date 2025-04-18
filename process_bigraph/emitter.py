@@ -234,19 +234,25 @@ class RAMEmitter(Emitter):
 
         return {}
 
-    def query(self, query=None):
+    def query(self, query=None, schema=None):
         """
         Query the history of the emitter.
         :param query: a list of paths to query from the history. If None, the entire history is returned.
         :return: results of the query in a list
         """
+        schema = schema or self.inputs()
         if isinstance(query, list):
             results = []
             for t in self.history:
                 result = {}
                 for path in query:
-                    element = get_path(t, path)
-                    result = set_path(result, path, element)
+                    _, state = self.core.slice(
+                        schema=schema,
+                        state=t,
+                        path=path)
+                
+                    # element = get_path(t, path)
+                    result = set_path(result, path, state)
                 results.append(result)
                 # element = get_path(self.history, path)
                 # result = set_path(result, path, element)
