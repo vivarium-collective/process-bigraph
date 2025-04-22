@@ -456,10 +456,6 @@ class Composite(Process):
             self.composition,
             edge_state)
 
-        # self.state = deep_merge(
-        #     self.state,
-        #     edge_state)
-
         # TODO: call validate on this composite, not just check
         # assert self.core.validate(
         #     self.composition,
