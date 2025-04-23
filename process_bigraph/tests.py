@@ -615,10 +615,15 @@ def test_grow_divide(core):
             id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']))
 
     composite.save('test_grow_divide_saved.json')
-    c2 = Composite.load('out/test_grow_divide_saved.json', core=core)
+
+    c2 = Composite.load(
+        'out/test_grow_divide_saved.json',
+        core=core)
     
-    id(c2.composition['environment']['_value']['grow_divide'])
-    breakpoint()
+    assert (id(composite.composition['environment']['_value']['grow_divide']) ==
+            id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']))
+
+    import ipdb; ipdb.set_trace()
 
 
 def test_gillespie_composite(core):
