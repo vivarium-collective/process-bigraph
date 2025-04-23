@@ -623,8 +623,6 @@ def test_grow_divide(core):
     assert (id(composite.composition['environment']['_value']['grow_divide']) ==
             id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']))
 
-    import ipdb; ipdb.set_trace()
-
 
 def test_gillespie_composite(core):
     composite_schema = {
