@@ -401,6 +401,8 @@ class Composite(Process):
     def load(cls, path, core=None):
         with open(path) as data:
             document = json.load(data)
+            composition = document['composition']
+            document['composition'] = core.deserialize('schema', composition)
 
             composite = cls(
                 document,
@@ -511,6 +513,9 @@ class Composite(Process):
             self.composition,
             self.state)
 
+    def serialize_schema(self):
+        return self.core.serialize('schema', self.composition)
+
     def save(self,
              filename='composite.json',
              outdir='out',
@@ -531,8 +536,7 @@ class Composite(Process):
             document['state'] = serialized_state
 
         if schema:
-            serialized_schema = self.core.representation(
-                self.composition)
+            serialized_schema = self.serialize_schema()
             document['composition'] = serialized_schema
 
         # save the dictionary to a JSON file
