@@ -695,6 +695,26 @@ def test_union_tree(core):
         {'a': ['what', 'is', 'happening']})
 
 
+def test_merge_schema(core):
+    state = {'a': 11.0}
+    composite = Composite({
+        'state': state}, core=core)
+
+    composite.merge_schema({
+        'increase': {
+            '_type': 'process',
+            'address': default('string', 'local:!process_bigraph.tests.IncreaseProcess'),
+            'config': default('quote', {'rate': 0.0001}),
+            'inputs': default('wires', {'level': ['b']}),
+            'outputs': default('wires', {'level': ['a']})}})
+
+    assert composite.composition['increase']['_type'] == 'process'
+    assert isinstance(composite.state['increase']['instance'], Process)
+
+    import ipdb; ipdb.set_trace()
+
+
+
 def test_shared_steps(core):
     initial_rate = 0.4
 
@@ -762,4 +782,4 @@ if __name__ == '__main__':
     test_shared_steps(core)
 
     test_stochastic_deterministic_composite(core)
-
+    test_merge_schema(core)
