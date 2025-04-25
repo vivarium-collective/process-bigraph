@@ -601,6 +601,7 @@ class Composite(Process):
         schema = set_path({}, path, schema)
         self.composition = self.core.merge_schemas(self.composition, schema)
         self.composition, self.state = self.core.generate(self.composition, self.state)
+        self.find_instance_paths(self.state)
 
     def process_update(
             self,
