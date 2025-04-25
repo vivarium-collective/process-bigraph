@@ -12,7 +12,7 @@ from typing import Dict
 
 from bigraph_schema import (
     Edge, Registry, 
-    get_path, resolve_path, hierarchy_depth, deep_merge,
+    get_path, set_path, resolve_path, hierarchy_depth, deep_merge,
     is_schema_key, strip_schema_keys)
 
 from process_bigraph.protocols import local_lookup, local_lookup_module
@@ -588,6 +588,19 @@ class Composite(Process):
             schema,
             state)
 
+    def apply(self, update, path=None):
+        path = path or []
+        update = set_path({}, path, update)
+        self.state = self.core.apply(
+            self.composition,
+            self.state,
+            update)
+
+    def merge_schema(self, schema, path=None):
+        path = path or []
+        schema = set_path({}, path, schema)
+        self.composition = self.core.merge_schemas(self.composition, schema)
+        self.composition, self.state = self.core.generate(self.composition, self.state)
 
     def process_update(
             self,
