@@ -587,6 +587,7 @@ class Composite(Process):
             path,
             schema,
             state)
+        self.find_instance_paths(self.state)
 
     def apply(self, update, path=None):
         path = path or []
