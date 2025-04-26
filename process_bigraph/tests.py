@@ -5,8 +5,8 @@ import pytest
 import random
 
 from bigraph_schema import default
-
 from process_bigraph import register_types
+
 from process_bigraph.composite import Process, Step, Composite, merge_collections
 
 from process_bigraph.processes.growth_division import grow_divide_agent
@@ -700,19 +700,47 @@ def test_merge_schema(core):
     composite = Composite({
         'state': state}, core=core)
 
-    composite.merge_schema({
+    increase_schema = {
         'increase': {
             '_type': 'process',
             'address': default('string', 'local:!process_bigraph.tests.IncreaseProcess'),
             'config': default('quote', {'rate': 0.0001}),
             'inputs': default('wires', {'level': ['b']}),
-            'outputs': default('wires', {'level': ['a']})}})
+            'outputs': default('wires', {'level': ['a']})}}
+
+    composite.merge_schema(
+        increase_schema)
 
     assert composite.composition['increase']['_type'] == 'process'
     assert isinstance(composite.state['increase']['instance'], Process)
 
-    import ipdb; ipdb.set_trace()
+    state = {
+        'x': -3.33,
+        'atoms': {
+            'A': {
+                'lll': 55}}}
 
+    composition = {
+        'atoms': 'map[lll:integer]'}
+
+    merge = Composite({
+        'composition': composition,
+        'state': state}, core=core)
+
+    nested_increase_schema = {
+        'increase': {
+            '_type': 'process',
+            'address': default('string', 'local:!process_bigraph.tests.IncreaseProcess'),
+            'config': default('quote', {'rate': 0.0001}),
+            'inputs': default('wires', {'level': ['..', '..', 'b']}),
+            'outputs': default('wires', {'level': ['..', '..', 'a']})}}
+
+    merge.merge_schema(
+        nested_increase_schema,
+        path=['atoms', '_value'])
+
+    assert isinstance(merge.state['atoms']['A']['increase']['instance'], Process)
+    assert merge.composition['atoms']['_value']['increase']['_type'] == 'process'
 
 
 def test_shared_steps(core):
