@@ -708,8 +708,12 @@ def test_merge_schema(core):
             'inputs': default('wires', {'level': ['b']}),
             'outputs': default('wires', {'level': ['a']})}}
 
-    composite.merge_schema(
-        increase_schema)
+    composite.merge(
+        increase_schema,
+        {})
+
+    # composite.merge_schema(
+    #     increase_schema)
 
     assert composite.composition['increase']['_type'] == 'process'
     assert isinstance(composite.state['increase']['instance'], Process)
@@ -735,21 +739,25 @@ def test_merge_schema(core):
             'inputs': default('wires', {'level': ['..', '..', 'b']}),
             'outputs': default('wires', {'level': ['..', '..', 'a']})}}
 
-    merge.merge_schema(
-        nested_increase_schema,
-        path=['atoms', '_value'])
+    merge.merge(
+        {'atoms': {'_value': nested_increase_schema}},
+        {})
+
+    # TODO: do we need merge_schema if merge works for schema and state?
+    # merge.merge_schema(
+    #     nested_increase_schema,
+    #     path=['atoms', '_value'])
 
     assert isinstance(merge.state['atoms']['A']['increase']['instance'], Process)
     assert merge.composition['atoms']['_value']['increase']['_type'] == 'process'
     assert ('atoms', 'A', 'increase') in merge.process_paths
 
     merge.merge(
-        {}, # merge.composition
+        {},
         {'atoms': {'B': {'lll': 11111}}})
 
     assert isinstance(merge.state['atoms']['B']['increase']['instance'], Process)
     assert ('atoms', 'B', 'increase') in merge.process_paths
-
 
 
 def test_shared_steps(core):
