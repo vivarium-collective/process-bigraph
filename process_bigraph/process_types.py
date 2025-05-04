@@ -120,7 +120,8 @@ def deserialize_process(schema, encoded, core):
 
     protocol, address = deserialized['address'].split(':', 1)
 
-    if 'instance' in deserialized:
+    existing_instance = 'instance' in deserialized and deserialized['instance']
+    if existing_instance:
         instantiate = type(deserialized['instance'])
     else:
         process_lookup = core.protocol_registry.access(protocol)
@@ -145,14 +146,14 @@ def deserialize_process(schema, encoded, core):
                 'interval',
                 'interval'))
 
-    if not 'instance' in deserialized:
+    if existing_instance:
+        process = deserialized['instance']
+    else:
         process = instantiate(
             config,
             core=core)
 
         deserialized['instance'] = process
-    else:
-        process = deserialized['instance']
 
     # TODO: this mutating the original value directly into
     #   the return value is weird (?)
@@ -189,7 +190,8 @@ def deserialize_step(schema, encoded, core):
 
     protocol, address = deserialized['address'].split(':', 1)
 
-    if 'instance' in deserialized:
+    existing_instance = 'instance' in deserialized and deserialized['instance']
+    if existing_instance:
         instantiate = type(deserialized['instance'])
     else:
         process_lookup = core.protocol_registry.access(protocol)
@@ -204,7 +206,7 @@ def deserialize_step(schema, encoded, core):
         instantiate.config_schema,
         deserialized.get('config', {}))
 
-    if not 'instance' in deserialized:
+    if not existing_instance:
         process = instantiate(config, core=core)
         deserialized['instance'] = process
 
