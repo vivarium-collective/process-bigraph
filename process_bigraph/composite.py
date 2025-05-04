@@ -714,6 +714,20 @@ class Composite(Process):
         return full_step
 
 
+    def read_bridge(self, state=None):
+        if state is None:
+            state = self.state
+
+        bridge_view = self.core.view(
+            self.interface()['outputs'],
+            self.bridge['outputs'],
+            (),
+            top_schema=self.composition,
+            top_state=state)
+
+        return bridge_view
+
+
     def apply_updates(self, updates):
         # view_expire = False
         update_paths = []
@@ -735,15 +749,12 @@ class Composite(Process):
                     self.state,
                     update)
 
-                bridge_update = self.core.view(
-                    self.interface()['outputs'],
-                    self.bridge['outputs'],
-                    (),
-                    top_schema=self.composition,
-                    top_state=update)
+                bridge_update = self.read_bridge(
+                    update)
 
                 if bridge_update:
-                    self.bridge_updates.append(bridge_update)
+                    self.bridge_updates.append(
+                        bridge_update)
 
         self.find_instance_paths(
             self.state)
@@ -786,11 +797,6 @@ class Composite(Process):
 
 
     def run(self, interval, force_complete=False):
-        # If there are steps to run, execute them
-        if self.to_run:
-            self.run_steps(self.to_run)
-            self.to_run = None
-
         # Define the end time for the run
         end_time = self.state['global_time'] + interval
 

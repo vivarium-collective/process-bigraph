@@ -251,11 +251,9 @@ class RAMEmitter(Emitter):
                         state=t,
                         path=path)
                 
-                    # element = get_path(t, path)
                     result = set_path(result, path, state)
                 results.append(result)
-                # element = get_path(self.history, path)
-                # result = set_path(result, path, element)
+
         else:
             results = self.history
 

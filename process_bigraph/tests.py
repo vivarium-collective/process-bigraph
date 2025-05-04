@@ -427,18 +427,9 @@ def test_emitter(core):
                 'outputs': {
                     'mRNA': ['mRNA']},
                 'interval': '3.0'}},
-            'emitter': {
-                '_type': 'step',
-                'address': 'local:ram-emitter',
-                'inputs': {
-                    'time': ['global_time'],
-                    'mRNA': ['mRNA'],
-                    'interval': ['event', 'interval']},
-                'config': {
-                    'emit': {
-                        'time': 'any',
-                        'mRNA': 'any',
-                        'interval': 'any'}}}}
+            'emitter': emitter_from_wires({
+                'mRNA': ['mRNA'],
+                'interval': ['event', 'interval']})}
 
     gillespie = Composite(
         composite_schema,
@@ -466,7 +457,8 @@ def test_run_process(core):
     initial_A = 11.11
 
     state = {
-        'species': {'A': initial_A},
+        'species': {
+            'A': initial_A},
         'run': {
             '_type': 'step',
             'address': 'local:RunProcess',
@@ -480,21 +472,20 @@ def test_run_process(core):
                 'observables': [['species']],
                 'timestep': timestep,
                 'runtime': runtime},
-            # '_outputs': {'results': {'_emit': True}},
             'inputs': {'species': ['species']},
             'outputs': {'results': ['A_results']}}}
 
-    process = Composite({
+    run = Composite({
         'bridge': {
             'outputs': {
                 'results': ['A_results']}},
         'state': state},
         core=core)
 
-    results = process.update({}, 0.0)
+    results = run.read_bridge()['results']
 
-    assert results[0]['results']['time'][-1] == runtime
-    assert results[0]['results']['species'][0]['A'] == initial_A
+    assert results['time'][-1] == runtime
+    assert results['species'][0]['A'] == initial_A
 
 
 def test_nested_wires(core):
@@ -610,9 +601,10 @@ def test_grow_divide(core):
     assert '0_0_0_0_1' in composite.state['environment']
     assert composite.state['environment']['0_0_0_0_1']['mass'] == composite.state['environment']['0_0_0_0_1']['grow_divide']['instance'].state['mass']
 
+    import ipdb; ipdb.set_trace()
+
     # check recursive schema reference
-    assert (id(composite.composition['environment']['_value']['grow_divide']) ==
-            id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']))
+    assert id(composite.composition['environment'] == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']))
 
     composite.save('test_grow_divide_saved.json')
 
@@ -620,8 +612,7 @@ def test_grow_divide(core):
         'out/test_grow_divide_saved.json',
         core=core)
     
-    assert (id(composite.composition['environment']['_value']['grow_divide']) ==
-            id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']))
+    assert id(composite.composition['environment'] == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']))
 
 
 def test_gillespie_composite(core):
@@ -779,15 +770,6 @@ def test_shared_steps(core):
         'emitter': emitter_from_wires({
             'level': ['value']})}
 
-        # 'emitter': {
-        #     '_type': 'step',
-        #     'address': 'local:ram-emitter',
-        #     'config': {
-        #         'emit': {
-        #             'level': 'float'}},
-        #     'inputs': {
-        #         'level': ['value']}}}
-
     shared = Composite(
         {'state': state},
         core=core)
@@ -820,7 +802,6 @@ if __name__ == '__main__':
     test_union_tree(core)
 
     test_gillespie_composite(core)
-    test_grow_divide(core)
     test_run_process(core)
     test_nested_wires(core)
     test_parameter_scan(core)
@@ -828,3 +809,4 @@ if __name__ == '__main__':
 
     test_stochastic_deterministic_composite(core)
     test_merge_schema(core)
+    test_grow_divide(core)

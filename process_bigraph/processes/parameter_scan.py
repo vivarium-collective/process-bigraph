@@ -66,6 +66,7 @@ class RunProcess(Step):
         'process_address': 'string',
         'process_config': 'tree[any]',
         'observables': 'list[path]',
+        'initial_state': 'any',
         'timestep': 'float',
         'runtime': 'float'}
 
@@ -113,49 +114,46 @@ class RunProcess(Step):
             {'time': 'float'},
             **self.observables_schema)
 
-        composite_config = {
-            'global_time_precision': global_time_precision,
-            # TODO: support emitter at the composite level
-            #   they are a list of emit dicts that describe
-            #   which emitter to use and what from the composite
-            #   state will be emitted. The schema can be inferred
-            #   from the targets. ALSO: support process ports
-            #   to be targets
-            # 'emit': [{
-            #     'address': 'local:mongo-emitter'
-            #     'targets': dict({'time': ['global_time']}, **{
-            #         key: [key]
-            #         for key in self.process.outputs()})}],
-            'state': {
-                'process': {
-                    '_type': 'process',
-                    'address': self.config['process_address'],
-                    'config': self.config['process_config'],
-                    'instance': self.process,
-                    'interval': self.config['timestep'],
-                    '_inputs': self.process.inputs(),
-                    '_outputs': self.process.outputs(),
-                    'inputs': {
-                        key: [key]
-                        for key in self.process.inputs()},
-                    'outputs': {
-                        key: [key]
-                        for key in process_outputs}},
-                'emitter': {
-                    '_type': 'step',
-                    '_inputs': emit_config,
-                    'address': 'local:ram-emitter',
-                    'config': {
-                        'emit': emit_config},
-                    'inputs': dict(
-                        {'time': ['global_time']},
-                        **self.inputs_config),
-                    'outputs': {}}}}
+        state = copy.deepcopy(
+            config['initial_state'])
 
-        self.composite = Composite(composite_config, core=self.core)
+        state['process'] = {
+            '_type': 'process',
+            'address': self.config['process_address'],
+            'config': self.config['process_config'],
+            'instance': self.process,
+            'interval': self.config['timestep'],
+            '_inputs': self.process.inputs(),
+            '_outputs': self.process.outputs(),
+            'inputs': {
+                key: [key]
+                for key in self.process.inputs()},
+            'outputs': {
+                key: [key]
+                for key in process_outputs}}
+
+        state['emitter'] = {
+            '_type': 'step',
+            '_inputs': emit_config,
+            'address': 'local:ram-emitter',
+            'config': {
+                'emit': emit_config},
+            'inputs': dict(
+                {'time': ['global_time']},
+                **self.inputs_config),
+            'outputs': {}}
+
+        self.document = {
+            'global_time_precision': global_time_precision,
+            'state': state}
+
+        # wait to initialize until we get our first update
+        self.composite = None
+
 
     def inputs(self):
         return self.process.inputs()
+
 
     def outputs(self):
         return {
@@ -163,9 +161,21 @@ class RunProcess(Step):
                 {'time': 'list[float]'},
                 **self.results_schema)}
 
+
     def update(self, inputs):
-        # TODO: instead of the composite being a reference it is instead read through
-        #   some port and lives in the state of the simulation (??)
+        # TODO: instead of the composite being a reference it is
+        #   instead read through some port and lives in
+        #   the state of the simulation (??)
+
+        if self.composite is None:
+            self.document['state'] = deep_merge(
+                self.document['state'],
+                inputs)
+
+            self.composite = Composite(
+                self.document,
+                core=self.core)
+
         self.composite.merge(
             self.inputs(),
             inputs)
@@ -173,7 +183,8 @@ class RunProcess(Step):
         self.composite.run(
             self.config['runtime'])
 
-        histories = gather_emitter_results(self.composite)
+        histories = gather_emitter_results(
+            self.composite)
 
         results = {
             key: timeseries_from_history(
@@ -185,7 +196,8 @@ class RunProcess(Step):
         for timeseries in results.values():
             all_results = deep_merge(all_results, timeseries)
 
-        return {'results': all_results}
+        return {
+            'results': all_results}
 
 
 def timeseries_from_history(history, observables):
