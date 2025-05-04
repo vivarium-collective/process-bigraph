@@ -601,8 +601,6 @@ def test_grow_divide(core):
     assert '0_0_0_0_1' in composite.state['environment']
     assert composite.state['environment']['0_0_0_0_1']['mass'] == composite.state['environment']['0_0_0_0_1']['grow_divide']['instance'].state['mass']
 
-    import ipdb; ipdb.set_trace()
-
     # check recursive schema reference
     assert id(composite.composition['environment'] == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']))
 

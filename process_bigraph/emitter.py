@@ -361,12 +361,13 @@ def test_ram_emitter(core):
             # 'interval': 1.0,
             'inputs': {'level': ['valueB']},
             'outputs': {'level': ['valueB']}},
-    }
-    composite = Composite({'state': composite_spec}, core)
-    composite = add_emitter_to_composite(composite,
-                                         core,
-                                         emitter_mode='all',
-                                         address='local:ram-emitter')
+        'emitter': emitter_from_wires({
+            'time': ['global_time'],
+            'valueA': ['valueA'],
+            'valueB': ['valueB']})}
+
+    composite = Composite(
+        {'state': composite_spec}, core=core)
 
     # run the simulation
     composite.run(10)
@@ -374,15 +375,16 @@ def test_ram_emitter(core):
     # query the emitter
     results = composite.state['emitter']['instance'].query()
     assert len(results) == 11
-    assert results[-1]['global_time'] == 10
+    assert results[-1]['time'] == 10
     assert 'valueA' in results[0] and 'valueB' in results[0]
     # print(results)
 
-    composite2 = Composite({'state': composite_spec}, core)
-    composite2 = add_emitter_to_composite(composite2,
-                                         core,
-                                         emitter_mode={'paths': ['valueA']},
-                                         address='local:ram-emitter')
+    composite_spec['emitter'] = emitter_from_wires({
+        'time': ['global_time'],
+        'valueA': ['valueA']})
+
+    composite2 = Composite({
+        'state': composite_spec}, core=core)
 
     # run the simulation
     composite2.run(10)
@@ -404,17 +406,18 @@ def test_json_emitter(core):
             'outputs': {'level': ['value']}},
     }
     composite = Composite({'state': composite_spec}, core)
-    composite = add_emitter_to_composite(composite,
-                                         core,
-                                         emitter_mode='all',
-                                         address='local:json-emitter')
+    composite = add_emitter_to_composite(
+        composite,
+        core,
+        emitter_mode='all',
+        address='local:json-emitter')
 
     # run the simulation
     composite.run(10)
 
     # query the emitter
     results = composite.state['emitter']['instance'].query()
-    assert len(results) == 11
+    assert len(results) == 10
     assert results[-1]['global_time'] == 10
     print(results)
 
