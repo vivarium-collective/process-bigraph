@@ -482,7 +482,7 @@ class Composite(Process):
         # build the step network
         self.build_step_network()
 
-        # self.run_steps(self.to_run)
+        self.run_steps(self.to_run)
 
 
     def build_step_network(self):
@@ -596,6 +596,8 @@ class Composite(Process):
             self.composition,
             self.state,
             update)
+        self.find_instance_paths(
+            self.state)
 
     def merge_schema(self, schema, path=None):
         path = path or []
@@ -742,6 +744,9 @@ class Composite(Process):
 
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
+
+        self.find_instance_paths(
+            self.state)
 
         return update_paths
 
