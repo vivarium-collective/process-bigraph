@@ -868,6 +868,8 @@ def test_star_update(core):
         'composition': composition,
         'state': state}, core=core)
 
+    assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
+
 
 def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
