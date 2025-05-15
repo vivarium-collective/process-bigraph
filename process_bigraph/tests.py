@@ -795,9 +795,9 @@ class WriteCounts(Step):
     def update(self, state):
         update = {}
 
-        for key, local in state['concentrations']:
+        for key, local in state['concentrations'].items():
             update[key] = {}
-            for substrate, concentration in local:
+            for substrate, concentration in local.items():
                 count = concentration * state['volumes'][key]
                 update[key][substrate] = count
 
