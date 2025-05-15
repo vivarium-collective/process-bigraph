@@ -793,17 +793,16 @@ class WriteCounts(Step):
 
 
     def update(self, state):
-        update = {}
+        counts = {}
 
         for key, local in state['concentrations'].items():
-            update[key] = {}
+            counts[key] = {}
             for substrate, concentration in local.items():
-                count = concentration * state['volumes'][key]
-                update[key][substrate] = count
+                count = int(concentration * state['volumes'][key])
+                counts[key][substrate] = count
 
-        import ipdb; ipdb.set_trace()
-
-        return update
+        return {
+            'counts': counts}
 
 
 def test_star_update(core):
@@ -838,7 +837,7 @@ def test_star_update(core):
                         'acetate': 1.123976466801866,
                         'biomass': 5.484002382436302,
                         'glucose': 5.054266524967003},
-                    'volume': 1},
+                    'volume': 100},
                 'position': [0.5, 0.5, 0.0]},
             '1': {
                 'Shared Environment': {
@@ -850,7 +849,7 @@ def test_star_update(core):
                         'acetate': 1.1582833546687243,
                         'biomass': 5.2088139570269405,
                         'glucose': 2.4652858010098577},
-                    'volume': 1},
+                    'volume': 200},
                 'position': [0.5, 1.5, 0.0]},
             '2': {
                 'Shared Environment': {
@@ -862,14 +861,12 @@ def test_star_update(core):
                         'acetate': 2.644399921259828,
                         'biomass': 9.63480818091309,
                         'glucose': 2.375172278348736},
-                    'volume': 1},
+                    'volume': 300},
                 'position': [0.5, 2.5, 0.0]}}}
 
     star = Composite({
         'composition': composition,
         'state': state}, core=core)
-
-    import ipdb; ipdb.set_trace()
 
 
 def test_stochastic_deterministic_composite(core):
