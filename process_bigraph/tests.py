@@ -780,6 +780,97 @@ def test_shared_steps(core):
     assert shared.state['increase']['instance'].config['rate'] > initial_rate
 
 
+class WriteCounts(Step):
+    def inputs(self):
+        return {
+            'volumes': 'map[float]',
+            'concentrations': 'map[map[float]]'}
+
+
+    def outputs(self):
+        return {
+            'counts': 'map[map[integer]]'}
+
+
+    def update(self, state):
+        counts = {}
+
+        for key, local in state['concentrations'].items():
+            counts[key] = {}
+            for substrate, concentration in local.items():
+                count = int(concentration * state['volumes'][key])
+                counts[key][substrate] = count
+
+        return {
+            'counts': counts}
+
+
+def test_star_update(core):
+    composition = {
+        'Compartments': {
+            '_type': 'map',
+            '_value': {
+                'Shared Environment': {
+                    'counts': 'map[integer]',
+                    'concentrations': 'map[float]',
+                    'volume': 'float'},
+                'position': 'list[float]'}}}
+
+    state = {
+        'write': {
+            '_type': 'process',
+            'address': 'local:!process_bigraph.tests.WriteCounts',
+            'inputs': {
+                'volumes': ['Compartments', '*', 'Shared Environment', 'volume'],
+                'concentrations': ['Compartments', '*', 'Shared Environment', 'concentrations']},
+            'outputs': {
+                'counts': ['Compartments', '*', 'Shared Environment', 'counts']}},
+
+        'Compartments': {
+            '0': {
+                'Shared Environment': {
+                    'concentrations': {
+                        'acetate': 1.123976466801866,
+                        'biomass': 5.484002382436302,
+                        'glucose': 5.054266524967003},
+                    'counts': {
+                        'acetate': 1.123976466801866,
+                        'biomass': 5.484002382436302,
+                        'glucose': 5.054266524967003},
+                    'volume': 100},
+                'position': [0.5, 0.5, 0.0]},
+            '1': {
+                'Shared Environment': {
+                    'concentrations': {
+                        'acetate': 1.1582833546687243,
+                        'biomass': 5.2088139570269405,
+                        'glucose': 2.4652858010098577},
+                    'counts': {
+                        'acetate': 1.1582833546687243,
+                        'biomass': 5.2088139570269405,
+                        'glucose': 2.4652858010098577},
+                    'volume': 200},
+                'position': [0.5, 1.5, 0.0]},
+            '2': {
+                'Shared Environment': {
+                    'concentrations': {
+                        'acetate': 2.644399921259828,
+                        'biomass': 9.63480818091309,
+                        'glucose': 2.375172278348736},
+                    'counts': {
+                        'acetate': 2.644399921259828,
+                        'biomass': 9.63480818091309,
+                        'glucose': 2.375172278348736},
+                    'volume': 300},
+                'position': [0.5, 2.5, 0.0]}}}
+
+    star = Composite({
+        'composition': composition,
+        'state': state}, core=core)
+
+    assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
+
+
 def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
@@ -808,3 +899,4 @@ if __name__ == '__main__':
     test_stochastic_deterministic_composite(core)
     test_merge_schema(core)
     test_grow_divide(core)
+    test_star_update(core)
