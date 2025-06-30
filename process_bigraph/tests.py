@@ -7,7 +7,7 @@ import random
 from bigraph_schema import default
 from process_bigraph import register_types
 
-from process_bigraph.composite import Process, Step, Composite, merge_collections
+from process_bigraph.composite import Process, Step, Composite, merge_collections, match_star_path
 
 from process_bigraph.processes.growth_division import grow_divide_agent
 from process_bigraph.process_types import ProcessTypes
@@ -875,6 +875,10 @@ def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
 
+def test_match_star_path(core):
+    assert match_star_path(["first", "list", "test"], ["first", "*", "test"])
+    assert not match_star_path(["first", "list", "tent"], ["first", "*", "test"])
+    assert match_star_path(["first", "list", "test"], ["first", "list", "test"])
 
 if __name__ == '__main__':
     core = ProcessTypes()
@@ -900,3 +904,4 @@ if __name__ == '__main__':
     test_merge_schema(core)
     test_grow_divide(core)
     test_star_update(core)
+    test_match_star_path(core)
