@@ -379,6 +379,14 @@ class Defer:
             self.defer.get(),
             self.args)
 
+def match_star_path(path, star_path):
+    compare = zip(path, star_path)
+    for element, star_element in compare:
+        if element != star_element:
+            if star_element != "*":
+                return False
+    return True
+
 
 class Composite(Process):
     """
@@ -487,13 +495,16 @@ class Composite(Process):
 
     def build_step_network(self):
         self.step_triggers = {}
+        self.star_triggers = {}
         for step_path, step in self.step_paths.items():
             step_triggers = find_step_triggers(
                 step_path, step)
             self.step_triggers = merge_collections(
                 self.step_triggers,
                 step_triggers)
-
+        for trigger in self.step_triggers:
+            if "*" in trigger:
+                self.star_triggers[trigger] = self.step_triggers[trigger]
         self.steps_run = set([])
 
         self.step_dependencies, self.node_dependencies = build_step_network(
@@ -896,6 +907,10 @@ class Composite(Process):
             paths = explode_path(update_path)
             for path in paths:
                 step_paths = self.step_triggers.get(path, [])
+                if self.star_triggers:
+                    for star_trigger, star_steps in self.star_triggers.items():
+                        if match_star_path(path, star_trigger):
+                            step_paths.extend(star_steps)
                 for step_path in step_paths:
                     if step_path is not None and step_path not in self.steps_run:
                         steps_to_run.append(step_path)
@@ -931,5 +946,3 @@ class Composite(Process):
         self.bridge_updates = []
 
         return updates
-
-
