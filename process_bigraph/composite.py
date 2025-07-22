@@ -582,6 +582,12 @@ class Composite(Process):
             'process_bigraph.composite.Step')
 
 
+    def clean_front(self, state):
+        self.find_instance_paths(state)
+
+        # import ipdb; ipdb.set_trace()
+
+
     def inputs(self):
         return self.process_schema.get('inputs', {})
 
@@ -767,8 +773,7 @@ class Composite(Process):
                     self.bridge_updates.append(
                         bridge_update)
 
-        self.find_instance_paths(
-            self.state)
+        self.clean_front(self.state)
 
         return update_paths
 
