@@ -369,92 +369,161 @@ def interval_time_precision(timestep: float) -> int:
 # Process Classes
 # ===============
 
-class SyncUpdate():
-    def __init__(self, update):
+class SyncUpdate:
+    """
+    Wrapper for synchronous process updates.
+
+    This object encapsulates an update dictionary and provides a `.get()` method
+    for compatibility with deferred or lazy update execution pipelines.
+    """
+
+    def __init__(self, update: Dict[str, Any]) -> None:
+        """
+        Args:
+            update: The process update to wrap.
+        """
         self.update = update
 
-    def get(self):
+    def get(self) -> Dict[str, Any]:
+        """
+        Returns:
+            The stored process update.
+        """
         return self.update
 
 
 class Step(Edge):
-    """Step base class.
+    """
+    Step base class.
 
-    Steps are the basic unit of computation in a composite process, they are non-temporal
-    processes that can get triggered based on their dependencies, setting up a flow of steps
-    like a workflow.
+    A `Step` is a stateless, non-temporal computational unit within a composite process.
+    It is triggered when its data dependencies are satisfied, functioning like a reaction
+    or transformation rule.
+
+    Override the `.update()` method to define custom behavior.
     """
     # TODO: support trigger every time as well as dependency trigger
 
-    def invoke(self, state, _=None):
-        update = self.update(state)
-        sync = SyncUpdate(update)
-        return sync
+    def invoke(self, state: Dict[str, Any], _: Optional[float] = None) -> SyncUpdate:
+        """
+        Run the step using the given state and return its update.
 
+        Args:
+            state: The input state to compute the update from.
+            _: Ignored time interval placeholder (not used by steps).
+
+        Returns:
+            A SyncUpdate object containing the update dictionary.
+        """
+        update = self.update(state)
+        return SyncUpdate(update)
 
     def register_shared(self, instance):
+        """
+        Register a reference to a shared instance, e.g., for access to core or context.
+
+        Args:
+            instance: A reference to the external object being shared with the step.
+        """
         self.instance = instance
 
+    def update(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compute and return the update for the step.
 
-    def update(self, state):
+        Override this method in subclasses to define the step's logic.
+
+        Args:
+            state: The current simulation state at the step's inputs.
+
+        Returns:
+            A dictionary representing the update to apply.
+        """
         return {}
 
 
 class Process(Edge):
-    """Process parent class.
+    """
+    Process base class.
 
-      All :term:`process` classes must inherit from this class. Each
-      class can provide a ``defaults`` class variable to specify the
-      process defaults as a dictionary.
+    A `Process` is a temporal unit of computation that operates on state and advances in time.
+    Each subclass must implement the `update()` method and optionally the `invoke()` method.
 
-      Note that subclasses should call the superclass init function
-      first. This allows the superclass to correctly save the initial
-      parameters before they are mutated by subclass constructor code.
-      We need access to the original parameters for serialization to
-      work properly.
-
-      Args:
-          config: Override the class defaults. This dictionary may
-              also contain the following special keys (TODO):
+    Processes are stateful and typically used for simulations of continuous or discrete dynamics.
     """
 
-    def invoke(self, state, interval):
+    def invoke(self, state: Dict[str, Any], interval: float) -> SyncUpdate:
+        """
+        Execute the process update for a given state and time interval.
+
+        Args:
+            state: The current simulation state for this process.
+            interval: The time step over which to apply the update.
+
+        Returns:
+            A SyncUpdate containing the update result.
+        """
         update = self.update(state, interval)
-        sync = SyncUpdate(update)
-        return sync
+        return SyncUpdate(update)
 
+    def update(self, state: Dict[str, Any], interval: float) -> Dict[str, Any]:
+        """
+        Override this method to implement the process logic.
 
-    def update(self, state, interval):
+        Args:
+            state: The current simulation state at the process ports.
+            interval: The time step over which to simulate.
+
+        Returns:
+            A dictionary representing the update to apply to the state.
+        """
         return {}
 
 
 class ProcessEnsemble(Process):
-    def __init__(self, config=None, core=None):
-        self.__init__(config, core)
+    """
+    ProcessEnsemble base class.
 
-        
-    def union_interface(self):
-        union_inputs = {}
-        union_outputs = {}
+    A container for multiple sub-processes that exposes a combined interface by unifying
+    their inputs and outputs. Useful when combining multiple related processes into a single one.
+    """
 
-        for self_key in dir(self):
-            if self_key.startswith('inputs_'):
-                inputs = self.getattr(self_key)()
-                union_inputs = self.core.resolve_schemas(
-                    union_inputs,
-                    inputs)
+    def __init__(self, config: Optional[Dict[str, Any]] = None, core: Optional[Any] = None) -> None:
+        """
+        Args:
+            config: Configuration dictionary for the ensemble process.
+            core: Optional shared core/context for schema operations and initialization.
+        """
+        super().__init__(config=config, core=core)
 
-            if self_key.startswith('outputs_'):
-                outputs = self.getattr(self_key)()
-                union_outputs = self.core.resolve_schemas(
-                    union_outputs,
-                    outputs)
+    def union_interface(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Generate a unified interface by combining all inputs_*/outputs_* methods defined in the subclass.
+
+        Returns:
+            A dictionary with 'inputs' and 'outputs' schemas merged from all sub-process interfaces.
+        """
+        union_inputs: Dict[str, Any] = {}
+        union_outputs: Dict[str, Any] = {}
+
+        for attr_name in dir(self):
+            if attr_name.startswith('inputs_'):
+                inputs_func = getattr(self, attr_name)
+                if callable(inputs_func):
+                    inputs = inputs_func()
+                    union_inputs = self.core.resolve_schemas(union_inputs, inputs)
+
+            if attr_name.startswith('outputs_'):
+                outputs_func = getattr(self, attr_name)
+                if callable(outputs_func):
+                    outputs = outputs_func()
+                    union_outputs = self.core.resolve_schemas(union_outputs, outputs)
 
         return {
             'inputs': union_inputs,
-            'outputs': union_outputs}
+            'outputs': union_outputs
+        }
 
-        
 
 class Defer:
     """Allows for delayed application of a function to an update.
