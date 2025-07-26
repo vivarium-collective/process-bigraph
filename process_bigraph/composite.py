@@ -722,6 +722,110 @@ class Composite(Process):
         # Run all steps that are ready on the first cycle.
         self.run_steps(self.to_run)
 
+    def find_instance_paths(self, state: Dict[str, Any]) -> None:
+        """
+        Identify all Step and Process instances in the current state.
+
+        Populates:
+            - self.process_paths
+            - self.step_paths
+        """
+        self.process_paths = find_instance_paths(state, 'process_bigraph.composite.Process')
+        self.step_paths = find_instance_paths(state, 'process_bigraph.composite.Step')
+
+    def merge(self, schema: Dict[str, Any], state: Dict[str, Any], path: Optional[List[str]] = None) -> None:
+        """
+        Merge a new schema/state subtree into the Composite.
+
+        Args:
+            schema: Schema dictionary to merge.
+            state: State dictionary to merge.
+            path: Path where merge should occur (default: root).
+        """
+        path = path or []
+        self.composition, self.state = self.core.merge(
+            self.composition,
+            self.state,
+            path,
+            schema,
+            state)
+        self.find_instance_paths(self.state)
+
+    def apply(self, update: Dict[str, Any], path: Optional[List[str]] = None) -> None:
+        """
+        Apply an update to the current state.
+
+        Args:
+            update: A state update dictionary.
+            path: Optional path to scope the update under.
+        """
+        path = path or []
+        scoped_update = set_path({}, path, update)
+        self.state = self.core.apply(self.composition, self.state, scoped_update)
+        self.find_instance_paths(self.state)
+
+    def inputs(self) -> Dict[str, Any]:
+        """Return the composite's input schema (wired to the bridge)."""
+        return self.process_schema.get('inputs', {})
+
+    def outputs(self) -> Dict[str, Any]:
+        """Return the composite's output schema (wired to the bridge)."""
+        return self.process_schema.get('outputs', {})
+
+    def serialize_state(self) -> Dict[str, Any]:
+        """
+        Serialize the internal state using the core serializer.
+
+        Returns:
+            A serialized representation of the current state.
+        """
+        return self.core.serialize(self.composition, self.state)
+
+    def serialize_schema(self) -> Dict[str, Any]:
+        """
+        Serialize the composition (schema) using the core serializer.
+
+        Returns:
+            A serialized schema representation.
+        """
+        return self.core.serialize('schema', self.composition)
+
+    def save(
+            self,
+            filename: str = 'composite.json',
+            outdir: str = 'out',
+            schema: bool = False,
+            state: bool = False
+    ) -> None:
+        """
+        Save the composite to a JSON file.
+
+        WARNING: This method is deprecated. Use Vivarium's native tools instead.
+
+        Args:
+            filename: Output filename.
+            outdir: Output directory.
+            schema: Whether to include the serialized schema.
+            state: Whether to include the serialized state.
+        """
+        print("Warning: save() is deprecated and will be removed in a future version.")
+
+        if not schema and not state:
+            schema = state = True
+
+        document = {}
+        if state:
+            document['state'] = self.serialize_state()
+        if schema:
+            document['composition'] = self.serialize_schema()
+
+        os.makedirs(outdir, exist_ok=True)
+        filepath = os.path.join(outdir, filename)
+        with open(filepath, 'w') as f:
+            json.dump(document, f, indent=4)
+            print(f"Saved composite to {filepath}")
+
+
 
     def build_step_network(self):
         self.step_triggers = {}
@@ -745,53 +849,10 @@ class Composite(Process):
 
         self.to_run = self.cycle_step_state()
 
-    def serialize_state(self):
-        return self.core.serialize(
-            self.composition,
-            self.state)
-
-    def serialize_schema(self):
-        return self.core.serialize('schema', self.composition)
-
-    def save(self,
-             filename='composite.json',
-             outdir='out',
-             schema=False,
-             state=False):
-
-        # upcoming deprecation warning
-        print("Warning: save() is deprecated and will be removed in a future version. "
-              "Use use Vivarium for managing simulations instead of Composite.")
-
-        document = {}
-
-        if not schema and not state:
-            schema = state = True
-
-        if state:
-            serialized_state = self.serialize_state()
-            document['state'] = serialized_state
-
-        if schema:
-            serialized_schema = self.serialize_schema()
-            document['composition'] = serialized_schema
-
-        # save the dictionary to a JSON file
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-        filename = os.path.join(outdir, filename)
-
-        # write the new data to the file
-        with open(filename, 'w') as json_file:
-            json.dump(document, json_file, indent=4)
-            print(f"Created new file: {filename}")
-
-
     def reset_step_state(self, step_paths):
         self.trigger_state = build_trigger_state(
             self.node_dependencies)
         self.steps_remaining = set(step_paths)
-
 
     def cycle_step_state(self):
         to_run, self.steps_remaining, self.trigger_state = determine_steps(
@@ -799,46 +860,6 @@ class Composite(Process):
             self.steps_remaining,
             self.trigger_state)
         return to_run
-
-
-    def find_instance_paths(self, state):
-        # find all processes, steps, and emitter in the state
-        self.process_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Process')
-
-        self.step_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Step')
-
-
-    def inputs(self):
-        return self.process_schema.get('inputs', {})
-
-
-    def outputs(self):
-        return self.process_schema.get('outputs', {})
-
-
-    def merge(self, schema, state, path=None):
-        path = path or []
-        self.composition, self.state = self.core.merge(
-            self.composition,
-            self.state,
-            path,
-            schema,
-            state)
-        self.find_instance_paths(self.state)
-
-    def apply(self, update, path=None):
-        path = path or []
-        update = set_path({}, path, update)
-        self.state = self.core.apply(
-            self.composition,
-            self.state,
-            update)
-        self.find_instance_paths(
-            self.state)
 
     def merge_schema(self, schema, path=None):
         path = path or []
