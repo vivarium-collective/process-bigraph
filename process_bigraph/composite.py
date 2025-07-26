@@ -526,23 +526,18 @@ class ProcessEnsemble(Process):
 
 
 class Defer:
-    """Allows for delayed application of a function to an update.
+    """
+    Defer a computation by holding a reference to a function and its arguments
+    until a later time when `.get()` is called.
 
-    The object simply holds the provided arguments until it's time
-    for the computation to be performed. Then, the function is
-    called.
+    This is used to delay the application of a function to a value until all
+    required data is available, typically used for processing deferred updates
+    in simulation pipelines.
 
-    Args:
-        defer: An object with a ``.get_command_result()`` method
-            whose output will be passed to the function. For
-            example, the object could be an
-            :Process` object whose
-            ``.get_command_result()`` method will return the process
-            update.
-        function: The function. For example,
-            :py:func:`invert_topology` to transform the returned
-            update.
-        args: Passed as the second argument to the function.
+    Attributes:
+        defer (SupportsGet): An object that supports `.get()` and returns the input to the function.
+        f (Callable[[Any, Any], Any]): A binary function to apply to the result of `defer.get()` and `args`.
+        args (Any): Arguments passed to the function alongside the deferred value.
     """
 
     def __init__(
@@ -550,35 +545,60 @@ class Defer:
             defer,
             f,
             args
-    ):
-
+    ) -> None:
+        """
+        Args:
+            defer: Any object that implements `.get()` and returns a value.
+            f: A function that takes two arguments: the result of `defer.get()` and `args`.
+            args: A secondary argument passed to `f`.
+        """
         self.defer = defer
         self.f = f
         self.args = args
 
-
-    def get(self):
-        """Perform the deferred computation.
+    def get(self) -> Any:
+        """
+        Perform the deferred computation by calling the stored function with the
+        deferred result and provided arguments.
 
         Returns:
-            The result of calling the function.
+            The result of `f(defer.get(), args)`.
         """
-        return self.f(
-            self.defer.get(),
-            self.args)
+        return self.f(self.defer.get(), self.args)
 
-def match_star_path(path, star_path):
-    compare = zip(path, star_path)
-    for element, star_element in compare:
-        if element != star_element:
-            if star_element != "*":
-                return False
+
+def match_star_path(
+    path: Tuple[str, ...],
+    star_path: Tuple[str, ...]
+) -> bool:
+    """
+    Compare two paths where elements in `star_path` may contain wildcards (*).
+
+    Args:
+        path: A tuple representing the actual path (e.g., ('cells', 'A', 'growth')).
+        star_path: A tuple that may contain '*' wildcards to match any segment.
+
+    Returns:
+        True if the paths match, treating '*' as a wildcard; False otherwise.
+
+    Example:
+        match_star_path(('cells', 'A', 'growth'), ('cells', '*', 'growth'))  # True
+        match_star_path(('cells', 'A'), ('cells', '*', 'growth'))            # False
+    """
+    for element, star_element in zip(path, star_path):
+        if star_element != "*" and element != star_element:
+            return False
     return True
+
+
+
 
 
 class Composite(Process):
     """
-    Composite parent class.
+    A Composite process contains a dynamic network of child Processes and Steps
+    connected via a schema and bridge. It manages time, state, dependencies, and
+    update propagation during simulation.
     """
 
     config_schema = {
@@ -586,98 +606,120 @@ class Composite(Process):
         'state': 'tree[any]',
         'interface': {
             'inputs': 'schema',
-            'outputs': 'schema'},
+            'outputs': 'schema'
+        },
         'bridge': {
             'inputs': 'wires',
-            'outputs': 'wires'},
-        'global_time_precision': 'maybe[float]'}
-
+            'outputs': 'wires'
+        },
+        'global_time_precision': 'maybe[float]'
+    }
 
     @classmethod
-    def load(cls, path, core=None):
+    def load(cls, path: str, core: Optional[Any] = None) -> "Composite":
+        """
+        Load a Composite from a saved JSON file.
+
+        Args:
+            path: Path to the saved composition file.
+            core: Optional core context providing deserialization.
+
+        Returns:
+            A new Composite instance.
+        """
         with open(path) as data:
             document = json.load(data)
             composition = document['composition']
             document['composition'] = core.deserialize('schema', composition)
+            return cls(document, core=core)
 
-            composite = cls(
-                document,
-                core=core)
+    def initialize(self, config: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Initialize the composite model from its config.
 
-        return composite
+        This method:
+        - Adds `global_time` to schema/state if missing
+        - Generates the full composition/state tree
+        - Finds all step/process instances
+        - Resolves the schema bridge
+        - Prepares the step execution network
+        - Computes initial front (per-process timeline)
 
+        Args:
+            config: Optional override configuration (usually not needed).
+        """
 
-    def initialize(self, config=None):
-
-        # insert global_time into schema if not present
+        # Get the initial composition schema from config.
         initial_composition = self.config.get('composition', {})
+
+        # Ensure 'global_time' is explicitly declared in the schema.
         if 'global_time' not in initial_composition:
             initial_composition['global_time'] = 'float'
 
-        # insert global_time into state if not present
+        # Get the initial state from config.
         initial_state = self.config.get('state', {})
+
+        # Ensure the initial simulation state has a global_time initialized.
         if 'global_time' not in initial_state:
             initial_state['global_time'] = 0.0
 
+        # Generate internal schema and state structures using the core engine.
         self.composition, self.state = self.core.generate(
             initial_composition,
             initial_state)
 
-        # TODO: add flag to self.core.access(copy=True)
+        # Load the bridge configuration, which defines how inputs/outputs connect to the world.
         self.bridge = self.config.get('bridge', {})
 
-        self.find_instance_paths(
-            self.state)
+        # Identify all Process and Step instances in the state tree.
+        self.find_instance_paths(self.state)
 
-        # merge the processes and steps into a single "edges" dict
-        self.edge_paths = self.process_paths.copy()
-        self.edge_paths.update(self.step_paths)
+        # Merge both process and step paths into a single edge dictionary.
+        self.edge_paths = {**self.process_paths, **self.step_paths}
 
-        # get the initial_state() for each edge and merge
-        # them all together, validating that there are no
-        # contradictions in the state (paths from initial_state
-        # that conflict/have different values at the same path)
-        edge_state = {}
+        # Initialize each process/step's state and accumulate it into a unified state tree.
+        edge_state: Dict[str, Any] = {}
         for path, edge in self.edge_paths.items():
+            # Generate the initial state for this specific edge (process or step).
             initial = self.core.initialize_edge_state(
                 self.composition,
                 path,
                 edge)
 
+            # Merge the new edge state with the global state tree, checking for conflicts.
             try:
                 edge_state = deep_merge(edge_state, initial)
-            except:
+            except Exception:
                 raise Exception(
-                    f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
+                    f'initial state from edge does not match initial state from other edges:\n'
+                    f'{path}\n{edge}\n{edge_state}'
+                )
 
-        self.merge(
-            self.composition,
-            edge_state)
+        # Apply the merged edge_state into the global state and update instance paths.
+        self.merge(self.composition, edge_state)
 
-        # TODO: call validate on this composite, not just check
-        # assert self.core.validate(
-        #     self.composition,
-        #     self.state)
+        # Wire the input/output schema for the Composite from the bridge config.
+        self.process_schema = {
+            port: self.core.wire_schema(self.composition, self.bridge[port])
+            for port in ['inputs', 'outputs']
+        }
 
-        self.process_schema = {}
+        # Set the global time precision used to round step time advances.
+        self.global_time_precision = self.config.get('global_time_precision')
 
-        for port in ['inputs', 'outputs']:
-            self.process_schema[port] = self.core.wire_schema(
-                self.composition,
-                self.bridge[port])
-
-        self.global_time_precision = self.config[
-            'global_time_precision']
-
-        self.front: Dict = {
+        # Initialize a "front" dictionary tracking the next update time and update data per process.
+        self.front = {
             path: empty_front(self.state['global_time'])
-            for path in self.process_paths}
+            for path in self.process_paths
+        }
 
-        self.bridge_updates = []
+        # A buffer for updates to be emitted at the composite's output interface.
+        self.bridge_updates: List[Any] = []
 
-        # build the step network
+        # Build the dependency network between steps and determine which steps should run first.
         self.build_step_network()
 
+        # Run all steps that are ready on the first cycle.
         self.run_steps(self.to_run)
 
 
