@@ -1,8 +1,17 @@
 """
-====================================
-Composite, Process, and Step classes
-====================================
+composite.py
+
+This module defines the core execution logic for compositional simulation workflows using the
+Process Bigraph Protocol (PBP). It includes:
+
+- `Composite`: A process orchestrator supporting nested processes, steps, and synchronization.
+- `Step`: A process steps triggered by dependency updates.
+- `Process`: A time-driven process unit.
+- Utility functions for dependency tracking, merging, scheduling, and update application.
+
+Used as part of the Vivarium 2.0 ecosystem for modular biological modeling.
 """
+
 import os
 import copy
 import json
@@ -23,7 +32,15 @@ from process_bigraph.protocols import local_lookup, local_lookup_module
 # =========================
 
 def assert_interface(interface: Dict):
-    """Ensure that an interface dict has the required keys"""
+    """
+    Validate that an interface dictionary contains both 'inputs' and 'outputs' keys.
+
+    Args:
+        interface (Dict): A dictionary representing a process interface.
+
+    Raises:
+        AssertionError: If the interface does not contain exactly the required keys.
+    """
     required_keys = ['inputs', 'outputs']
     existing_keys = set(interface.keys())
     assert existing_keys == set(required_keys), \
@@ -31,6 +48,16 @@ def assert_interface(interface: Dict):
 
 
 def find_instances(state, instance_type='process_bigraph.composite.Process'):
+    """
+    Recursively search a nested state dictionary for instances of a given type.
+
+    Args:
+        state (dict): The simulation state tree.
+        instance_type (str): Fully qualified class path of the target instance type.
+
+    Returns:
+        dict: Paths in the tree mapped to instances of the given type.
+    """
     process_class = local_lookup_module(instance_type)
     found = {}
 
@@ -39,25 +66,41 @@ def find_instances(state, instance_type='process_bigraph.composite.Process'):
             if isinstance(inner.get('instance'), process_class):
                 found[key] = inner
             elif not is_schema_key(key):
-                inner_instances = find_instances(
-                    inner,
-                    instance_type=instance_type)
-
+                inner_instances = find_instances(inner, instance_type=instance_type)
                 if inner_instances:
                     found[key] = inner_instances
     return found
 
 
 def find_instance_paths(state, instance_type='process_bigraph.composite.Process'):
+    """
+    Find the paths to all instances of a given type in the state tree.
+
+    Args:
+        state (dict): The simulation state.
+        instance_type (str): Class path of the desired instance type.
+
+    Returns:
+        dict: Paths to instances with their hierarchy depth information.
+    """
     instances = find_instances(state, instance_type)
     return hierarchy_depth(instances)
 
 
 def find_step_triggers(path, step):
+    """
+    Determine which state paths will trigger a given step when updated.
+
+    Args:
+        path (list or tuple): Path to the step in the composite tree.
+        step (dict): The step configuration dictionary.
+
+    Returns:
+        dict: Mapping of trigger paths to a list of steps triggered by those paths.
+    """
     prefix = tuple(path[:-1])
     triggers = {}
-    wire_paths = find_leaves(
-        step['inputs'])
+    wire_paths = find_leaves(step['inputs'])
 
     for wire in wire_paths:
         trigger_path = resolve_path(tuple(prefix) + tuple(wire))
@@ -69,6 +112,18 @@ def find_step_triggers(path, step):
 
 
 def explode_path(path):
+    """
+    Expand a path into a list of all prefix paths.
+
+    Example:
+        ('a', 'b', 'c') → [(), ('a',), ('a', 'b'), ('a', 'b', 'c')]
+
+    Args:
+        path (tuple): A hierarchical path.
+
+    Returns:
+        list: List of tuples representing path prefixes.
+    """
     explode = ()
     paths = [explode]
 
@@ -80,6 +135,19 @@ def explode_path(path):
 
 
 def merge_collections(existing, new):
+    """
+    Merge two nested collections (dicts or lists), preserving shared structure.
+
+    Args:
+        existing (dict or None): The existing nested collection.
+        new (dict or None): The new collection to merge in.
+
+    Returns:
+        dict: The merged structure.
+
+    Raises:
+        Exception: If types are incompatible or not mergeable.
+    """
     if existing is None:
         existing = {}
     if new is None:
@@ -100,6 +168,15 @@ def merge_collections(existing, new):
 
 
 def empty_front(time):
+    """
+    Create a default front dictionary for a process timeline.
+
+    Args:
+        time (float): Current simulation time.
+
+    Returns:
+        dict: Front dictionary with time and empty update.
+    """
     return {
         'time': time,
         'update': {}
@@ -107,6 +184,16 @@ def empty_front(time):
 
 
 def find_leaves(tree_structure, path=None):
+    """
+    Recursively find all leaf paths in a nested dictionary structure.
+
+    Args:
+        tree_structure (any): A nested structure of dicts/lists/tuples.
+        path (tuple or None): Current traversal path (for recursion).
+
+    Returns:
+        list: List of leaf paths as tuples.
+    """
     leaves = []
     path = ()
 
@@ -128,12 +215,23 @@ def find_leaves(tree_structure, path=None):
 
 
 def build_step_network(steps):
+    """
+    Construct a dependency network between steps based on their input/output schemas.
+
+    Args:
+        steps (dict): Dictionary mapping step keys to step configs.
+
+    Returns:
+        tuple:
+            - ancestors (dict): Input/output paths for each step.
+            - nodes (dict): Mapping of paths to step dependencies (before/after).
+    """
     ancestors = {
         step_key: {
             'input_paths': None,
             'output_paths': None}
-        for step_key in steps}
-
+        for step_key in steps
+    }
     nodes = {}
 
     for step_key, step in steps.items():
@@ -147,45 +245,60 @@ def build_step_network(steps):
             assert_interface(schema)
             assert_interface(other_schema)
 
+            # Compute input paths once per step
             if ancestors[step_key]['input_paths'] is None:
-                ancestors[step_key]['input_paths'] = find_leaves(
-                    step['inputs'])
+                ancestors[step_key]['input_paths'] = find_leaves(step['inputs'])
             input_paths = ancestors[step_key]['input_paths']
 
+            # Compute output paths once per step
             if ancestors[step_key]['output_paths'] is None:
-                ancestors[step_key]['output_paths'] = find_leaves(
-                    step.get('outputs', {}))
+                ancestors[step_key]['output_paths'] = find_leaves(step.get('outputs', {}))
             output_paths = ancestors[step_key]['output_paths']
 
+            # Track which steps consume/produce each path
             for input in input_paths:
                 path = tuple(input)
-                if not path in nodes:
-                    nodes[path] = {
-                        'before': set([]),
-                        'after': set([])}
+                nodes.setdefault(path, {'before': set(), 'after': set()})
                 nodes[path]['after'].add(step_key)
 
             for output in output_paths:
                 if output in input_paths:
                     continue
-
                 path = tuple(output)
-                if not path in nodes:
-                    nodes[path] = {
-                        'before': set([]),
-                        'after': set([])}
+                nodes.setdefault(path, {'before': set(), 'after': set()})
                 nodes[path]['before'].add(step_key)
 
     return ancestors, nodes
 
 
 def build_trigger_state(nodes):
+    """
+    Create an initial trigger state from the dependency graph.
+
+    Args:
+        nodes (dict): Dependency network nodes.
+
+    Returns:
+        dict: Mapping of paths to sets of steps waiting on them.
+    """
     return {
         key: value['before'].copy()
-        for key, value in nodes.items()}
+        for key, value in nodes.items()
+    }
 
 
 def find_downstream(steps, nodes, upstream):
+    """
+    Recursively find all downstream steps affected by an update.
+
+    Args:
+        steps (dict): Dictionary of step configurations.
+        nodes (dict): Dependency graph nodes.
+        upstream (set): Set of initially affected steps.
+
+    Returns:
+        set: All downstream steps.
+    """
     downstream = set(upstream)
     visited = set([])
     previous_len = -1
@@ -210,6 +323,20 @@ def find_downstream(steps, nodes, upstream):
 
 
 def determine_steps(steps, remaining, fulfilled):
+    """
+    Identify which steps are ready to run based on fulfilled dependencies.
+
+    Args:
+        steps (dict): Step metadata with input/output paths.
+        remaining (set): Remaining steps not yet run.
+        fulfilled (dict): Dependency satisfaction state.
+
+    Returns:
+        tuple:
+            - to_run (list): List of step paths ready to execute.
+            - remaining (set): Updated remaining steps.
+            - fulfilled (dict): Updated fulfillment state.
+    """
     to_run = []
     for step_path in remaining:
         step_inputs = steps[step_path]['input_paths']
@@ -236,7 +363,15 @@ def determine_steps(steps, remaining, fulfilled):
 
 
 def interval_time_precision(timestep):
-    # get number of decimal places to set global time precision
+    """
+    Determine number of decimal places for a given timestep.
+
+    Args:
+        timestep (float): Time interval.
+
+    Returns:
+        int: Number of decimal places in timestep.
+    """
     timestep_str = str(timestep)
     global_time_precision = 0
     if '.' in timestep_str:
