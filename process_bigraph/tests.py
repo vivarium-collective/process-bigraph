@@ -9,7 +9,7 @@ from process_bigraph import register_types
 
 from process_bigraph.composite import Process, Step, Composite, merge_collections, match_star_path
 
-from process_bigraph.processes.growth_division import grow_divide_agent
+from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
 from process_bigraph.process_types import ProcessTypes
 from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
 
@@ -871,6 +871,44 @@ def test_star_update(core):
     assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
 
 
+class GlobalProcess(Process):
+    config_schema = {}
+
+
+    def initialize(self, config):
+        pass
+
+
+    
+
+
+def test_default_process_state(core):
+    default_rate = {
+        'config': {
+            'rate': 0.001}}
+
+    default_grow = core.default_state(
+        Grow,
+        default_rate)
+
+    initial_mass = 1.0
+
+    composite = Composite({
+        'state': {
+            'grow': default_grow,
+            'mass': initial_mass}},
+        core=core)
+
+    composite.run(10.0)
+
+    assert composite.state['mass'] > initial_mass
+
+
+
+def test_update_removal(core):
+    return {}
+
+
 def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
@@ -885,6 +923,7 @@ if __name__ == '__main__':
     core = register_types(core)
 
     test_default_config(core)
+    test_default_process_state(core)
     test_merge_collections(core)
     test_process(core)
     test_composite(core)

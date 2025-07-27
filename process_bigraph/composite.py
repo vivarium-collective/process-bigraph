@@ -951,3 +951,5 @@ class Composite(Process):
         self.bridge_updates = []
 
         return updates
+
+
