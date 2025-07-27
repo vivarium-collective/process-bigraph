@@ -905,9 +905,11 @@ def test_default_process_state(core):
     # assert the process ran and the mass increased
     assert composite.state['mass'] > 1.0
 
+    # try a step as well
     default_divide = core.default_state(
         Divide)
 
+    # the step should not have an 'interval' as they do not consume time
     assert 'interval' not in default_divide
 
 
