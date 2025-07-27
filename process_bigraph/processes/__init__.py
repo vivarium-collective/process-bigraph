@@ -1,5 +1,6 @@
 from process_bigraph.processes.parameter_scan import ToySystem, ODE, RunProcess, ParameterScan
 from process_bigraph.processes.growth_division import Grow, Divide
+from process_bigraph.emitter import BASE_EMITTERS
 # from process_bigraph.experiments.minimal_gillespie import GillespieInterval, GillespieEvent
 
 
@@ -18,4 +19,8 @@ TOY_PROCESSES = {
 def register_processes(core):
     for name, process in TOY_PROCESSES.items():
         core.register_process(name, process)
+
+    core = core.register_processes(
+        BASE_EMITTERS)
+
     return core

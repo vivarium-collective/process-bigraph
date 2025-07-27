@@ -7,10 +7,9 @@ import random
 from bigraph_schema import default
 from process_bigraph import register_types
 
-from process_bigraph.composite import Process, Step, Composite, merge_collections, match_star_path
+from process_bigraph.composite import Process, Step, Composite, merge_collections, match_star_path, ProcessTypes
 
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
-from process_bigraph.process_types import ProcessTypes
 from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
 
 
@@ -883,26 +882,33 @@ class GlobalProcess(Process):
 
 
 def test_default_process_state(core):
+    # provide some initial values
     default_rate = {
         'config': {
             'rate': 0.001}}
 
+    # generate a default state for the Grow process
     default_grow = core.default_state(
         Grow,
         default_rate)
 
-    initial_mass = 1.0
-
+    # create a composite from the default process state
     composite = Composite({
         'state': {
             'grow': default_grow,
-            'mass': initial_mass}},
+            'mass': 1.0}},
         core=core)
 
+    # run the composite
     composite.run(10.0)
 
-    assert composite.state['mass'] > initial_mass
+    # assert the process ran and the mass increased
+    assert composite.state['mass'] > 1.0
 
+    default_divide = core.default_state(
+        Divide)
+
+    assert 'interval' not in default_divide
 
 
 def test_update_removal(core):
@@ -913,10 +919,12 @@ def test_stochastic_deterministic_composite(core):
     # TODO make the demo for a hybrid stochastic/deterministic simulator
     pass
 
+
 def test_match_star_path(core):
     assert match_star_path(["first", "list", "test"], ["first", "*", "test"])
     assert not match_star_path(["first", "list", "tent"], ["first", "*", "test"])
     assert match_star_path(["first", "list", "test"], ["first", "list", "test"])
+
 
 if __name__ == '__main__':
     core = ProcessTypes()

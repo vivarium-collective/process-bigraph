@@ -319,8 +319,10 @@ class ProcessTypes(TypeSystem):
             'address': f'local:!{process_class.__module__}.{process_class.__name__}',
             'config': default_config,
             'inputs': instance.default_inputs(),
-            'outputs': instance.default_outputs(),
-            'interval': 1.0}
+            'outputs': instance.default_outputs()}
+
+        if issubclass(process_class, Process):
+            state['interval'] = 1.0        
 
         if initial_state:
             state = deep_merge(
