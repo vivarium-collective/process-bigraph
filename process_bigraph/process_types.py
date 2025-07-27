@@ -306,6 +306,32 @@ class ProcessTypes(TypeSystem):
         return state
 
 
+    def default_state(self, process_class, initial_state=None):
+        default_config = self.default(
+            process_class.config_schema)
+
+        instance = process_class(
+            default_config,
+            core=self)
+
+        state = {
+            '_type': 'process',
+            'address': f'local:!{process_class.__module__}.{process_class.__name__}',
+            'config': default_config,
+            'inputs': instance.default_inputs(),
+            'outputs': instance.default_outputs()}
+
+        if issubclass(process_class, Process):
+            state['interval'] = 1.0        
+
+        if initial_state:
+            state = deep_merge(
+                state,
+                initial_state)
+
+        return state
+
+
 PROCESS_TYPES = {
     'protocol': {
         '_type': 'protocol',
