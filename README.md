@@ -46,4 +46,4 @@ diagraph of a whole-cell E. coli model.
 
 ## License
 
-Bigraph-schema is open-source software released under the [Apache 2 License](https://github.com/vivarium-collective/process-bigraph/blob/main/LICENSE).
+process-bigraph is open-source software released under the [Apache 2 License](https://github.com/vivarium-collective/process-bigraph/blob/main/LICENSE).
