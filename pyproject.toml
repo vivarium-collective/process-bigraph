@@ -12,7 +12,8 @@ dependencies = [
 
 [tool.setuptools]
 packages = [
-    "process_bigraph"
+    "process_bigraph",
+    "process_bigraph.processes"
 ]
 
 [tool.uv.sources]
