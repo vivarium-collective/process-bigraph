@@ -1,14 +1,26 @@
 """
-====================================
-Composite, Process, and Step classes
-====================================
+composite.py
+
+This module defines the core execution logic for compositional simulation workflows using the
+Process Bigraph Protocol (PBP). It includes:
+
+- `Composite`: A process orchestrator supporting nested processes, steps, and synchronization.
+- `Step`: A process steps triggered by dependency updates.
+- `Process`: A time-driven process unit.
+- Utility functions for dependency tracking, merging, scheduling, and update application.
+
+Used as part of the Vivarium 2.0 ecosystem for modular biological modeling.
 """
+
 import os
 import copy
 import json
 import math
+from typing import (
+    Any, Dict, List, Optional, Set, Tuple, Union,
+    Mapping, MutableMapping, Sequence
+)
 import collections
-from typing import Dict
 
 from bigraph_schema import (
     Edge, Registry, TypeSystem, visit_method,
@@ -22,92 +34,178 @@ from process_bigraph.protocols import local_lookup, local_lookup_module
 # Process Utility Functions
 # =========================
 
+def assert_interface(interface: Dict[str, Any]) -> None:
+    """
+    Ensure that the interface dictionary contains both 'inputs' and 'outputs' keys.
 
-def assert_interface(interface: Dict):
-    """Ensure that an interface dict has the required keys"""
-    required_keys = ['inputs', 'outputs']
+    Args:
+        interface: A dictionary describing a process interface.
+
+    Raises:
+        AssertionError: If required keys are missing or extra keys are present.
+    """
+    required_keys = {'inputs', 'outputs'}
     existing_keys = set(interface.keys())
-    assert existing_keys == set(required_keys), \
-        f"every interface requires an inputs schema and an outputs schema, not {existing_keys}"
+    assert existing_keys == required_keys, (
+        f"Every interface requires exactly the keys 'inputs' and 'outputs', "
+        f"but found: {existing_keys}"
+    )
 
 
-def find_instances(state, instance_type='process_bigraph.composite.Process'):
+def find_instances(
+    state: Dict[str, Any],
+    instance_type: str = 'process_bigraph.composite.Process'
+) -> Dict[str, Any]:
+    """
+    Recursively find all dictionary entries that contain an 'instance' of the given type.
+
+    Args:
+        state: Nested state dictionary.
+        instance_type: Fully qualified path to the target class (e.g., 'module.Class').
+
+    Returns:
+        A dictionary of matching subtrees keyed by their path segment.
+    """
     process_class = local_lookup_module(instance_type)
-    found = {}
+    found: Dict[str, Any] = {}
 
     for key, inner in state.items():
         if isinstance(inner, dict):
             if isinstance(inner.get('instance'), process_class):
                 found[key] = inner
             elif not is_schema_key(key):
-                inner_instances = find_instances(
-                    inner,
-                    instance_type=instance_type)
+                sub_instances = find_instances(inner, instance_type)
+                if sub_instances:
+                    found[key] = sub_instances
 
-                if inner_instances:
-                    found[key] = inner_instances
     return found
 
 
-def find_instance_paths(state, instance_type='process_bigraph.composite.Process'):
+def find_instance_paths(
+    state: Dict[str, Any],
+    instance_type: str = 'process_bigraph.composite.Process'
+) -> Dict[Tuple[str, ...], Any]:
+    """
+    Find all paths to instances of a given type in the state.
+
+    Args:
+        state: The full nested state dictionary.
+        instance_type: Fully qualified class name to match.
+
+    Returns:
+        A dictionary mapping full paths (as tuples) to instance-containing subtrees.
+    """
     instances = find_instances(state, instance_type)
     return hierarchy_depth(instances)
 
 
-def find_step_triggers(path, step):
+def find_step_triggers(
+    path: Union[List[str], Tuple[str, ...]],
+    step: Dict[str, Any]
+) -> Dict[Tuple[str, ...], List[Union[List[str], Tuple[str, ...]]]]:
+    """
+    Identify which paths, when updated, should trigger the execution of a given step.
+
+    Args:
+        path: Path to the step in the composite model tree.
+        step: Step object containing an 'inputs' field with wire mappings.
+
+    Returns:
+        Mapping from trigger paths to lists of step paths that they trigger.
+    """
     prefix = tuple(path[:-1])
-    triggers = {}
-    wire_paths = find_leaves(
-        step['inputs'])
+    triggers: Dict[Tuple[str, ...], List[Union[List[str], Tuple[str, ...]]]] = {}
+    wire_paths = find_leaves(step['inputs'])
 
     for wire in wire_paths:
-        trigger_path = resolve_path(tuple(prefix) + tuple(wire))
-        if trigger_path not in triggers:
-            triggers[trigger_path] = []
-        triggers[trigger_path].append(path)
+        trigger_path = resolve_path(prefix + tuple(wire))
+        triggers.setdefault(trigger_path, []).append(path)
 
     return triggers
 
 
-def explode_path(path):
-    explode = ()
-    paths = [explode]
+def explode_path(path: Union[List[str], Tuple[str, ...]]) -> List[Tuple[str, ...]]:
+    """
+    Break a hierarchical path into all its prefix paths.
 
+    Example:
+        ('a', 'b', 'c') → [(), ('a',), ('a', 'b'), ('a', 'b', 'c')]
+
+    Args:
+        path: A tuple or list representing a path.
+
+    Returns:
+        A list of prefix paths.
+    """
+    explode: Tuple[str, ...] = ()
+    paths = [explode]
     for node in path:
         explode = explode + (node,)
         paths.append(explode)
-
     return paths
 
 
-def merge_collections(existing, new):
-    if existing is None:
-        existing = {}
-    if new is None:
-        new = {}
+def merge_collections(
+    existing: Optional[MutableMapping[str, Any]],
+    new: Optional[MutableMapping[str, Any]]
+) -> MutableMapping[str, Any]:
+    """
+    Merge two nested structures (dicts or lists), combining compatible elements in-place.
+
+    Args:
+        existing: An existing collection to merge into.
+        new: A new collection to merge.
+
+    Returns:
+        The merged structure.
+
+    Raises:
+        Exception: If types are incompatible or mergeable fields conflict.
+    """
+    existing = existing or {}
+    new = new or {}
+
     for key, value in new.items():
         if key in existing:
-            if isinstance(existing[key], dict) and isinstance(new[key], collections.abc.Mapping):
-                merge_collections(existing[key], new[key])
-            elif isinstance(existing[key], list) and isinstance(new[key], collections.abc.Sequence):
-                existing[key].extend(new[key])
+            if isinstance(existing[key], dict) and isinstance(value, Mapping):
+                merge_collections(existing[key], value)
+            elif isinstance(existing[key], list) and isinstance(value, Sequence):
+                existing[key].extend(value)
             else:
                 raise Exception(
-                    f'cannot merge collections as they do not match:\n{existing}\n{new}')
+                    f"Cannot merge conflicting types or values for key '{key}':\n"
+                    f"existing={existing[key]}\nnew={value}"
+                )
         else:
             existing[key] = value
 
     return existing
 
 
-def empty_front(time):
-    return {
-        'time': time,
-        'update': {}
-    }
+def empty_front(time: float) -> Dict[str, Any]:
+    """
+    Generate a default front buffer for a process.
+
+    Args:
+        time: The current simulation time.
+
+    Returns:
+        A dictionary with time and an empty update field.
+    """
+    return {'time': time, 'update': {}}
 
 
 def find_leaves(tree_structure, path=None):
+    """
+    Recursively find all leaf paths in a nested dictionary structure.
+
+    Args:
+        tree_structure (any): A nested structure of dicts/lists/tuples.
+        path (tuple or None): Current traversal path (for recursion).
+
+    Returns:
+        list: List of leaf paths as tuples.
+    """
     leaves = []
     path = ()
 
@@ -129,64 +227,77 @@ def find_leaves(tree_structure, path=None):
 
 
 def build_step_network(steps):
-    ancestors = {
-        step_key: {
-            'input_paths': None,
-            'output_paths': None}
-        for step_key in steps}
+    """
+    Build the data dependency graph among steps.
 
+    Args:
+        steps: A mapping of step identifiers to their instance/config.
+
+    Returns:
+        - ancestors: A mapping from step keys to their input/output paths.
+        - nodes: A mapping from paths to sets of steps that are dependent on them.
+    """
+    ancestors = {
+        step_key: {'input_paths': None, 'output_paths': None}
+        for step_key in steps
+    }
     nodes = {}
 
     for step_key, step in steps.items():
-        for other_key, other_step in steps.items():
-            if step_key == other_key:
-                continue
+        schema = step['instance'].interface()
+        assert_interface(schema)
 
-            schema = step['instance'].interface()
-            other_schema = other_step['instance'].interface()
+        # Compute input paths once per step
+        if ancestors[step_key]['input_paths'] is None:
+            ancestors[step_key]['input_paths'] = find_leaves(step['inputs'])
 
-            assert_interface(schema)
-            assert_interface(other_schema)
+        # Compute output paths once per step
+        if ancestors[step_key]['output_paths'] is None:
+            ancestors[step_key]['output_paths'] = find_leaves(step.get('outputs', {}))
 
-            if ancestors[step_key]['input_paths'] is None:
-                ancestors[step_key]['input_paths'] = find_leaves(
-                    step['inputs'])
-            input_paths = ancestors[step_key]['input_paths']
+        input_paths = ancestors[step_key]['input_paths'] or []
+        output_paths = ancestors[step_key]['output_paths'] or []
 
-            if ancestors[step_key]['output_paths'] is None:
-                ancestors[step_key]['output_paths'] = find_leaves(
-                    step.get('outputs', {}))
-            output_paths = ancestors[step_key]['output_paths']
+        # Track which steps consume/produce each path
+        for input_path in input_paths:
+            path = tuple(input_path)
+            nodes.setdefault(path, {'before': set(), 'after': set()})
+            nodes[path]['after'].add(step_key)
 
-            for input in input_paths:
-                path = tuple(input)
-                if not path in nodes:
-                    nodes[path] = {
-                        'before': set([]),
-                        'after': set([])}
-                nodes[path]['after'].add(step_key)
-
-            for output in output_paths:
-                if output in input_paths:
-                    continue
-
-                path = tuple(output)
-                if not path in nodes:
-                    nodes[path] = {
-                        'before': set([]),
-                        'after': set([])}
+        for output_path in output_paths:
+            if output_path not in input_paths:
+                path = tuple(output_path)
+                nodes.setdefault(path, {'before': set(), 'after': set()})
                 nodes[path]['before'].add(step_key)
 
     return ancestors, nodes
 
 
 def build_trigger_state(nodes):
-    return {
-        key: value['before'].copy()
-        for key, value in nodes.items()}
+    """
+    Initialize the trigger state from dependency nodes.
+
+    Args:
+        nodes: Dependency graph nodes with 'before' and 'after' sets.
+
+    Returns:
+        A mapping of paths to the set of steps waiting on those paths.
+    """
+    return {key: value['before'].copy() for key, value in nodes.items()}
 
 
 def find_downstream(steps, nodes, upstream):
+    """
+    Given a set of updated steps, identify all downstream steps that depend on them.
+
+    Args:
+        steps: Step metadata with input/output info.
+        nodes: Dependency graph.
+        upstream: Initial set of triggered step paths.
+
+    Returns:
+        Set of all steps affected directly or transitively.
+    """
     downstream = set(upstream)
     visited = set([])
     previous_len = -1
@@ -211,151 +322,222 @@ def find_downstream(steps, nodes, upstream):
 
 
 def determine_steps(steps, remaining, fulfilled):
+    """
+    Determine which steps are eligible to run, based on current fulfilled triggers.
+
+    Args:
+        steps: Step metadata.
+        remaining: Set of step paths not yet run.
+        fulfilled: Map of data paths to steps waiting for fulfillment.
+
+    Returns:
+        - to_run: List of ready step paths.
+        - remaining: Updated remaining steps.
+        - fulfilled: Updated fulfilled structure.
+    """
     to_run = []
-    for step_path in remaining:
-        step_inputs = steps[step_path]['input_paths']
-        if step_inputs is None:
-            step_inputs = []
-        all_fulfilled = True
-        for input in step_inputs:
-            if len(fulfilled[input]) > 0:
-                all_fulfilled = False
-        if all_fulfilled:
+
+    for step_path in list(remaining):
+        step_inputs = steps[step_path].get('input_paths', []) or []
+        if all(len(fulfilled[input]) == 0 for input in step_inputs):
             to_run.append(step_path)
 
     for step_path in to_run:
         remaining.remove(step_path)
-        step_outputs = steps[step_path]['output_paths']
-        if step_outputs is None:
-            step_outputs = []
-
+        step_outputs = steps[step_path].get('output_paths', []) or []
         for output in step_outputs:
-            if output in fulfilled and step_path in fulfilled[output]:
+            if step_path in fulfilled.get(output, set()):
                 fulfilled[output].remove(step_path)
 
     return to_run, remaining, fulfilled
 
 
-def interval_time_precision(timestep):
-    # get number of decimal places to set global time precision
-    timestep_str = str(timestep)
-    global_time_precision = 0
-    if '.' in timestep_str:
-        _, decimals = timestep_str.split('.')
-        global_time_precision = len(decimals)
+def interval_time_precision(timestep: float) -> int:
+    """
+    Compute the number of decimal places required to represent the given timestep.
 
-    return global_time_precision
+    Args:
+        timestep: Time interval as float.
+
+    Returns:
+        The number of digits after the decimal point.
+    """
+    return len(str(timestep).split('.')[1]) if '.' in str(timestep) else 0
 
 
 # ===============
 # Process Classes
 # ===============
 
-class SyncUpdate():
-    def __init__(self, update):
+class SyncUpdate:
+    """
+    Wrapper for synchronous process updates.
+
+    This object encapsulates an update dictionary and provides a `.get()` method
+    for compatibility with deferred or lazy update execution pipelines.
+    """
+
+    def __init__(self, update: Dict[str, Any]) -> None:
+        """
+        Args:
+            update: The process update to wrap.
+        """
         self.update = update
 
-    def get(self):
+    def get(self) -> Dict[str, Any]:
+        """
+        Returns:
+            The stored process update.
+        """
         return self.update
 
 
 class Step(Edge):
-    """Step base class.
+    """
+    Step base class.
 
-    Steps are the basic unit of computation in a composite process, they are non-temporal
-    processes that can get triggered based on their dependencies, setting up a flow of steps
-    like a workflow.
+    A `Step` is a stateless, non-temporal computational unit within a composite process.
+    It is triggered when its data dependencies are satisfied, functioning like a reaction
+    or transformation rule.
+
+    Override the `.update()` method to define custom behavior.
     """
     # TODO: support trigger every time as well as dependency trigger
 
-    def invoke(self, state, _=None):
-        update = self.update(state)
-        sync = SyncUpdate(update)
-        return sync
+    def invoke(self, state: Dict[str, Any], _: Optional[float] = None) -> SyncUpdate:
+        """
+        Run the step using the given state and return its update.
 
+        Args:
+            state: The input state to compute the update from.
+            _: Ignored time interval placeholder (not used by steps).
+
+        Returns:
+            A SyncUpdate object containing the update dictionary.
+        """
+        update = self.update(state)
+        return SyncUpdate(update)
 
     def register_shared(self, instance):
+        """
+        Register a reference to a shared instance, e.g., for access to core or context.
+
+        Args:
+            instance: A reference to the external object being shared with the step.
+        """
         self.instance = instance
 
+    def update(self, state: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Compute and return the update for the step.
 
-    def update(self, state):
+        Override this method in subclasses to define the step's logic.
+
+        Args:
+            state: The current simulation state at the step's inputs.
+
+        Returns:
+            A dictionary representing the update to apply.
+        """
         return {}
 
 
 class Process(Edge):
-    """Process parent class.
+    """
+    Process base class.
 
-      All :term:`process` classes must inherit from this class. Each
-      class can provide a ``defaults`` class variable to specify the
-      process defaults as a dictionary.
+    A `Process` is a temporal unit of computation that operates on state and advances in time.
+    Each subclass must implement the `update()` method and optionally the `invoke()` method.
 
-      Note that subclasses should call the superclass init function
-      first. This allows the superclass to correctly save the initial
-      parameters before they are mutated by subclass constructor code.
-      We need access to the original parameters for serialization to
-      work properly.
-
-      Args:
-          config: Override the class defaults. This dictionary may
-              also contain the following special keys (TODO):
+    Processes are stateful and typically used for simulations of continuous or discrete dynamics.
     """
 
-    def invoke(self, state, interval):
+    def invoke(self, state: Dict[str, Any], interval: float) -> SyncUpdate:
+        """
+        Execute the process update for a given state and time interval.
+
+        Args:
+            state: The current simulation state for this process.
+            interval: The time step over which to apply the update.
+
+        Returns:
+            A SyncUpdate containing the update result.
+        """
         update = self.update(state, interval)
-        sync = SyncUpdate(update)
-        return sync
+        return SyncUpdate(update)
 
+    def update(self, state: Dict[str, Any], interval: float) -> Dict[str, Any]:
+        """
+        Override this method to implement the process logic.
 
-    def update(self, state, interval):
+        Args:
+            state: The current simulation state at the process ports.
+            interval: The time step over which to simulate.
+
+        Returns:
+            A dictionary representing the update to apply to the state.
+        """
         return {}
 
 
 class ProcessEnsemble(Process):
-    def __init__(self, config=None, core=None):
-        self.__init__(config, core)
+    """
+    ProcessEnsemble base class.
 
-        
-    def union_interface(self):
-        union_inputs = {}
-        union_outputs = {}
+    A container for multiple sub-processes that exposes a combined interface by unifying
+    their inputs and outputs. Useful when combining multiple related processes into a single one.
+    """
 
-        for self_key in dir(self):
-            if self_key.startswith('inputs_'):
-                inputs = self.getattr(self_key)()
-                union_inputs = self.core.resolve_schemas(
-                    union_inputs,
-                    inputs)
+    def __init__(self, config: Optional[Dict[str, Any]] = None, core: Optional[Any] = None) -> None:
+        """
+        Args:
+            config: Configuration dictionary for the ensemble process.
+            core: Optional shared core/context for schema operations and initialization.
+        """
+        super().__init__(config=config, core=core)
 
-            if self_key.startswith('outputs_'):
-                outputs = self.getattr(self_key)()
-                union_outputs = self.core.resolve_schemas(
-                    union_outputs,
-                    outputs)
+    def union_interface(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Generate a unified interface by combining all inputs_*/outputs_* methods defined in the subclass.
+
+        Returns:
+            A dictionary with 'inputs' and 'outputs' schemas merged from all sub-process interfaces.
+        """
+        union_inputs: Dict[str, Any] = {}
+        union_outputs: Dict[str, Any] = {}
+
+        for attr_name in dir(self):
+            if attr_name.startswith('inputs_'):
+                inputs_func = getattr(self, attr_name)
+                if callable(inputs_func):
+                    inputs = inputs_func()
+                    union_inputs = self.core.resolve_schemas(union_inputs, inputs)
+
+            if attr_name.startswith('outputs_'):
+                outputs_func = getattr(self, attr_name)
+                if callable(outputs_func):
+                    outputs = outputs_func()
+                    union_outputs = self.core.resolve_schemas(union_outputs, outputs)
 
         return {
             'inputs': union_inputs,
-            'outputs': union_outputs}
+            'outputs': union_outputs
+        }
 
-        
 
 class Defer:
-    """Allows for delayed application of a function to an update.
+    """
+    Defer a computation by holding a reference to a function and its arguments
+    until a later time when `.get()` is called.
 
-    The object simply holds the provided arguments until it's time
-    for the computation to be performed. Then, the function is
-    called.
+    This is used to delay the application of a function to a value until all
+    required data is available, typically used for processing deferred updates
+    in simulation pipelines.
 
-    Args:
-        defer: An object with a ``.get_command_result()`` method
-            whose output will be passed to the function. For
-            example, the object could be an
-            :Process` object whose
-            ``.get_command_result()`` method will return the process
-            update.
-        function: The function. For example,
-            :py:func:`invert_topology` to transform the returned
-            update.
-        args: Passed as the second argument to the function.
+    Attributes:
+        defer (SupportsGet): An object that supports `.get()` and returns the input to the function.
+        f (Callable[[Any, Any], Any]): A binary function to apply to the result of `defer.get()` and `args`.
+        args (Any): Arguments passed to the function alongside the deferred value.
     """
 
     def __init__(
@@ -363,35 +545,60 @@ class Defer:
             defer,
             f,
             args
-    ):
-
+    ) -> None:
+        """
+        Args:
+            defer: Any object that implements `.get()` and returns a value.
+            f: A function that takes two arguments: the result of `defer.get()` and `args`.
+            args: A secondary argument passed to `f`.
+        """
         self.defer = defer
         self.f = f
         self.args = args
 
-
-    def get(self):
-        """Perform the deferred computation.
+    def get(self) -> Any:
+        """
+        Perform the deferred computation by calling the stored function with the
+        deferred result and provided arguments.
 
         Returns:
-            The result of calling the function.
+            The result of `f(defer.get(), args)`.
         """
-        return self.f(
-            self.defer.get(),
-            self.args)
+        return self.f(self.defer.get(), self.args)
 
-def match_star_path(path, star_path):
-    compare = zip(path, star_path)
-    for element, star_element in compare:
-        if element != star_element:
-            if star_element != "*":
-                return False
+
+def match_star_path(
+    path: Tuple[str, ...],
+    star_path: Tuple[str, ...]
+) -> bool:
+    """
+    Compare two paths where elements in `star_path` may contain wildcards (*).
+
+    Args:
+        path: A tuple representing the actual path (e.g., ('cells', 'A', 'growth')).
+        star_path: A tuple that may contain '*' wildcards to match any segment.
+
+    Returns:
+        True if the paths match, treating '*' as a wildcard; False otherwise.
+
+    Example:
+        match_star_path(('cells', 'A', 'growth'), ('cells', '*', 'growth'))  # True
+        match_star_path(('cells', 'A'), ('cells', '*', 'growth'))            # False
+    """
+    for element, star_element in zip(path, star_path):
+        if star_element != "*" and element != star_element:
+            return False
     return True
+
+
+
 
 
 class Composite(Process):
     """
-    Composite parent class.
+    A Composite process contains a dynamic network of child Processes and Steps
+    connected via a schema and bridge. It manages time, state, dependencies, and
+    update propagation during simulation.
     """
 
     config_schema = {
@@ -399,205 +606,153 @@ class Composite(Process):
         'state': 'tree[any]',
         'interface': {
             'inputs': 'schema',
-            'outputs': 'schema'},
+            'outputs': 'schema'
+        },
         'bridge': {
             'inputs': 'wires',
-            'outputs': 'wires'},
-        'global_time_precision': 'maybe[float]'}
+            'outputs': 'wires'
+        },
+        'global_time_precision': 'maybe[float]'
+    }
 
 
-    @classmethod
-    def load(cls, path, core=None):
-        with open(path) as data:
-            document = json.load(data)
-            composition = document['composition']
-            document['composition'] = core.deserialize('schema', composition)
+    # ==============================
+    # Initialization & Configuration
+    # ==============================
 
-            composite = cls(
-                document,
-                core=core)
+    def initialize(self, config: Optional[Dict[str, Any]] = None) -> None:
+        """
+        Initialize the composite model from its config.
 
-        return composite
+        This method:
+        - Adds `global_time` to schema/state if missing
+        - Generates the full composition/state tree
+        - Finds all step/process instances
+        - Resolves the schema bridge
+        - Prepares the step execution network
+        - Computes initial front (per-process timeline)
 
+        Args:
+            config: Optional override configuration (usually not needed).
+        """
 
-    def initialize(self, config=None):
-
-        # insert global_time into schema if not present
+        # Get the initial composition schema from config.
         initial_composition = self.config.get('composition', {})
+
+        # Ensure 'global_time' is explicitly declared in the schema.
         if 'global_time' not in initial_composition:
             initial_composition['global_time'] = 'float'
 
-        # insert global_time into state if not present
+        # Get the initial state from config.
         initial_state = self.config.get('state', {})
+
+        # Ensure the initial simulation state has a global_time initialized.
         if 'global_time' not in initial_state:
             initial_state['global_time'] = 0.0
 
+        # Generate internal schema and state structures using the core engine.
         self.composition, self.state = self.core.generate(
             initial_composition,
             initial_state)
 
-        # TODO: add flag to self.core.access(copy=True)
+        # Load the bridge configuration, which defines how inputs/outputs connect to the world.
         self.bridge = self.config.get('bridge', {})
 
-        self.find_instance_paths(
-            self.state)
+        # Identify all Process and Step instances in the state tree.
+        self.find_instance_paths(self.state)
 
-        # merge the processes and steps into a single "edges" dict
-        self.edge_paths = self.process_paths.copy()
-        self.edge_paths.update(self.step_paths)
+        # Merge both process and step paths into a single edge dictionary.
+        self.edge_paths = {**self.process_paths, **self.step_paths}
 
-        # get the initial_state() for each edge and merge
-        # them all together, validating that there are no
-        # contradictions in the state (paths from initial_state
-        # that conflict/have different values at the same path)
-        edge_state = {}
+        # Initialize each process/step's state and accumulate it into a unified state tree.
+        edge_state: Dict[str, Any] = {}
         for path, edge in self.edge_paths.items():
+            # Generate the initial state for this specific edge (process or step).
             initial = self.core.initialize_edge_state(
                 self.composition,
                 path,
                 edge)
 
+            # Merge the new edge state with the global state tree, checking for conflicts.
             try:
                 edge_state = deep_merge(edge_state, initial)
-            except:
+            except Exception:
                 raise Exception(
-                    f'initial state from edge does not match initial state from other edges:\n{path}\n{edge}\n{edge_state}')
+                    f'initial state from edge does not match initial state from other edges:\n'
+                    f'{path}\n{edge}\n{edge_state}'
+                )
 
-        self.merge(
-            self.composition,
-            edge_state)
+        # Apply the merged edge_state into the global state and update instance paths.
+        self.merge(self.composition, edge_state)
 
-        # TODO: call validate on this composite, not just check
-        # assert self.core.validate(
-        #     self.composition,
-        #     self.state)
+        # Wire the input/output schema for the Composite from the bridge config.
+        self.process_schema = {
+            port: self.core.wire_schema(self.composition, self.bridge[port])
+            for port in ['inputs', 'outputs']
+        }
 
-        self.process_schema = {}
+        # Set the global time precision used to round step time advances.
+        self.global_time_precision = self.config.get('global_time_precision')
 
-        for port in ['inputs', 'outputs']:
-            self.process_schema[port] = self.core.wire_schema(
-                self.composition,
-                self.bridge[port])
-
-        self.global_time_precision = self.config[
-            'global_time_precision']
-
-        self.front: Dict = {
+        # Initialize a "front" dictionary tracking the next update time and update data per process.
+        self.front = {
             path: empty_front(self.state['global_time'])
-            for path in self.process_paths}
+            for path in self.process_paths
+        }
 
-        self.bridge_updates = []
+        # A buffer for updates to be emitted at the composite's output interface.
+        self.bridge_updates: List[Any] = []
 
-        # build the step network
+        # Build the dependency network between steps and determine which steps should run first.
         self.build_step_network()
 
+        # Run all steps that are ready on the first cycle.
         self.run_steps(self.to_run)
 
+    @classmethod
+    def load(cls, path: str, core: Optional[Any] = None) -> "Composite":
+        """
+        Load a Composite from a saved JSON file.
 
-    def build_step_network(self):
-        self.step_triggers = {}
-        self.star_triggers = {}
-        for step_path, step in self.step_paths.items():
-            step_triggers = find_step_triggers(
-                step_path, step)
-            self.step_triggers = merge_collections(
-                self.step_triggers,
-                step_triggers)
-        for trigger in self.step_triggers:
-            if "*" in trigger:
-                self.star_triggers[trigger] = self.step_triggers[trigger]
-        self.steps_run = set([])
+        Args:
+            path: Path to the saved composition file.
+            core: Optional core context providing deserialization.
 
-        self.step_dependencies, self.node_dependencies = build_step_network(
-            self.step_paths)
-
-        self.reset_step_state(
-            self.step_paths)
-
-        self.to_run = self.cycle_step_state()
-
-    def serialize_state(self):
-        return self.core.serialize(
-            self.composition,
-            self.state)
-
-    def serialize_schema(self):
-        return self.core.serialize('schema', self.composition)
-
-    def save(self,
-             filename='composite.json',
-             outdir='out',
-             schema=False,
-             state=False):
-
-        # upcoming deprecation warning
-        print("Warning: save() is deprecated and will be removed in a future version. "
-              "Use use Vivarium for managing simulations instead of Composite.")
-
-        document = {}
-
-        if not schema and not state:
-            schema = state = True
-
-        if state:
-            serialized_state = self.serialize_state()
-            document['state'] = serialized_state
-
-        if schema:
-            serialized_schema = self.serialize_schema()
-            document['composition'] = serialized_schema
-
-        # save the dictionary to a JSON file
-        if not os.path.exists(outdir):
-            os.makedirs(outdir)
-        filename = os.path.join(outdir, filename)
-
-        # write the new data to the file
-        with open(filename, 'w') as json_file:
-            json.dump(document, json_file, indent=4)
-            print(f"Created new file: {filename}")
-
-
-    def reset_step_state(self, step_paths):
-        self.trigger_state = build_trigger_state(
-            self.node_dependencies)
-        self.steps_remaining = set(step_paths)
-
-
-    def cycle_step_state(self):
-        to_run, self.steps_remaining, self.trigger_state = determine_steps(
-            self.step_dependencies,
-            self.steps_remaining,
-            self.trigger_state)
-        return to_run
-
-
-    def find_instance_paths(self, state):
-        # find all processes, steps, and emitter in the state
-        self.process_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Process')
-
-        self.step_paths = find_instance_paths(
-            state,
-            'process_bigraph.composite.Step')
-
-
+        Returns:
+            A new Composite instance.
+        """
+        with open(path) as data:
+            document = json.load(data)
+            composition = document['composition']
+            document['composition'] = core.deserialize('schema', composition)
+            return cls(document, core=core)
+          
     def clean_front(self, state):
         self.find_instance_paths(state)
 
         # import ipdb; ipdb.set_trace()
 
 
-    def inputs(self):
-        return self.process_schema.get('inputs', {})
+    def find_instance_paths(self, state: Dict[str, Any]) -> None:
+        """
+        Identify all Step and Process instances in the current state.
 
+        Populates:
+            - self.process_paths
+            - self.step_paths
+        """
+        self.process_paths = find_instance_paths(state, 'process_bigraph.composite.Process')
+        self.step_paths = find_instance_paths(state, 'process_bigraph.composite.Step')
 
-    def outputs(self):
-        return self.process_schema.get('outputs', {})
+    def merge(self, schema: Dict[str, Any], state: Dict[str, Any], path: Optional[List[str]] = None) -> None:
+        """
+        Merge a new schema/state subtree into the Composite.
 
-
-    def merge(self, schema, state, path=None):
+        Args:
+            schema: Schema dictionary to merge.
+            state: State dictionary to merge.
+            path: Path where merge should occur (default: root).
+        """
         path = path or []
         self.composition, self.state = self.core.merge(
             self.composition,
@@ -607,232 +762,316 @@ class Composite(Process):
             state)
         self.find_instance_paths(self.state)
 
-    def apply(self, update, path=None):
-        path = path or []
-        update = set_path({}, path, update)
-        self.state = self.core.apply(
-            self.composition,
-            self.state,
-            update)
-        self.find_instance_paths(
-            self.state)
-
-    def merge_schema(self, schema, path=None):
-        path = path or []
-        schema = set_path({}, path, schema)
-        self.composition = self.core.merge_schemas(self.composition, schema)
-        self.composition, self.state = self.core.generate(self.composition, self.state)
-        self.find_instance_paths(self.state)
-
-    def process_update(
+    def merge_schema(
             self,
-            path,
-            process,
-            states,
-            interval,
-            ports_key='outputs'):
-
-        """Start generating a process's update.
-
-        This function is similar to :py:meth:`_invoke_process` except in
-        addition to triggering the computation of the process's update
-        (by calling ``_invoke_process``), it also generates a
-        :py:class:`Defer` object to transform the update into absolute
-        terms.
+            schema: Dict[str, Any],
+            path: Optional[List[str]] = None
+    ) -> None:
+        """
+        Merge a new schema subtree into the current composite schema and regenerate state.
 
         Args:
-            path: Path to process.
-            process: The process.
-            states: Simulation state to pass to process's
-                ``next_update`` method.
-            interval: Interval for which to compute the update.
+            schema: The schema subtree to merge.
+            path: Optional path at which to merge the schema (defaults to root).
+        """
+        path = path or []
+
+        # Set the new schema subtree at the given path
+        scoped_schema = set_path({}, path, schema)
+
+        # Merge it into the existing schema
+        self.composition = self.core.merge_schemas(self.composition, scoped_schema)
+
+        # Re-generate state based on the new schema structure
+        self.composition, self.state = self.core.generate(self.composition, self.state)
+
+        # Re-scan the state tree for processes and steps
+        self.find_instance_paths(self.state)
+
+    def apply(self, update: Dict[str, Any], path: Optional[List[str]] = None) -> None:
+        """
+        Apply an update to the current state.
+
+        Args:
+            update: A state update dictionary.
+            path: Optional path to scope the update under.
+        """
+        path = path or []
+        scoped_update = set_path({}, path, update)
+        self.state = self.core.apply(self.composition, self.state, scoped_update)
+        self.find_instance_paths(self.state)
+
+
+    # ===================
+    # Serialization & I/O
+    # ===================
+
+    def serialize_state(self) -> Dict[str, Any]:
+        """
+        Serialize the internal state using the core serializer.
 
         Returns:
-            Tuple of the deferred update (in absolute terms) and
-            ``store``.
+            A serialized representation of the current state.
         """
+        return self.core.serialize(self.composition, self.state)
 
-        states = strip_schema_keys(states)
+    def serialize_schema(self) -> Dict[str, Any]:
+        """
+        Serialize the composition (schema) using the core serializer.
 
-        update = process['instance'].invoke(states, interval)
+        Returns:
+            A serialized schema representation.
+        """
+        return self.core.serialize('schema', self.composition)
 
-        def defer_project(update, args):
-            schema, state, path = args
-            return self.core.project_edge(
-                schema,
-                state,
-                path,
-                update,
-                ports_key)
+    def save(
+            self,
+            filename: str = 'composite.json',
+            outdir: str = 'out',
+            schema: bool = False,
+            state: bool = False
+    ) -> None:
+        """
+        Save the composite to a JSON file.
 
-        absolute = Defer(
-            update,
-            defer_project, (
-                self.composition,
-                self.state,
-                path))
+        WARNING: This method is deprecated. Use Vivarium's native tools instead.
 
-        return absolute
+        Args:
+            filename: Output filename.
+            outdir: Output directory.
+            schema: Whether to include the serialized schema.
+            state: Whether to include the serialized state.
+        """
+        print("Warning: save() is deprecated and will be removed in a future version.")
 
+        if not schema and not state:
+            schema = state = True
 
-    def run_process(self, path, process, end_time, full_step, force_complete):
-        if path not in self.front:
-            self.front[path] = empty_front(
-                self.state['global_time'])
+        document = {}
+        if state:
+            document['state'] = self.serialize_state()
+        if schema:
+            document['composition'] = self.serialize_schema()
 
-        process_time = self.front[path]['time']
-        if process_time <= self.state['global_time']:
-            if self.front[path].get('future'):
-                future_front = self.front[path]['future']
-                process_interval = future_front['interval']
-                store = future_front['store']
-                state = future_front['state']
-                del self.front[path]['future']
-            else:
-                state = self.core.view_edge(
-                    self.composition,
-                    self.state,
-                    path)
-
-                process_interval = process['interval']
-
-            if force_complete:
-                # force the process to complete at end_time
-                future = min(process_time + process_interval, end_time)
-            else:
-                future = process_time + process_interval
-
-            if self.global_time_precision is not None:
-                # set future time based on global_time_precision
-                future = round(future, self.global_time_precision)
-
-            # absolute interval
-            interval = future - self.state['global_time']
-            if interval < full_step:
-                full_step = interval
-
-            if future <= end_time:
-                update = self.process_update(
-                    path,
-                    process,
-                    state,
-                    process_interval
-                )
-
-                # update front, to be applied at its projected time
-                self.front[path]['time'] = future
-                self.front[path]['update'] = update
-
-        else:
-            # don't shoot past processes that didn't run this time
-            process_delay = process_time - self.state['global_time']
-            if process_delay < full_step:
-                full_step = process_delay
-
-        return full_step
+        os.makedirs(outdir, exist_ok=True)
+        filepath = os.path.join(outdir, filename)
+        with open(filepath, 'w') as f:
+            json.dump(document, f, indent=4)
+            print(f"Saved composite to {filepath}")
 
 
-    def read_bridge(self, state=None):
-        if state is None:
-            state = self.state
+    # ==================
+    # Interface & Wiring
+    # ==================
+
+    def inputs(self) -> Dict[str, Any]:
+        """Return the composite's input schema (wired to the bridge)."""
+        return self.process_schema.get('inputs', {})
+
+    def outputs(self) -> Dict[str, Any]:
+        """Return the composite's output schema (wired to the bridge)."""
+        return self.process_schema.get('outputs', {})
+
+    def read_bridge(self, state: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, Any]]:
+        """
+        View the external bridge output ports using the current or provided state.
+
+        This method uses the composite's interface and bridge configuration to extract
+        the substate that corresponds to external output ports.
+
+        Args:
+            state: Optional state dictionary. If not provided, uses `self.state`.
+
+        Returns:
+            A dictionary of output values from the bridge view, or None if not found.
+        """
+        state = state or self.state
 
         bridge_view = self.core.view(
             self.interface()['outputs'],
             self.bridge['outputs'],
             (),
             top_schema=self.composition,
-            top_state=state)
+            top_state=state
+        )
 
         return bridge_view
 
 
-    def apply_updates(self, updates):
-        # view_expire = False
-        update_paths = []
+    # =======================
+    # Step Network Management
+    # =======================
 
-        for defer in updates:
-            series = defer.get()
-            if series is None:
-                continue
+    def build_step_network(self) -> None:
+        """
+        Construct the internal dependency network for all registered steps.
 
-            if not isinstance(series, list):
-                series = [series]
+        This includes:
+        - Finding trigger paths for each step based on their input wires
+        - Registering wildcard triggers (e.g. `*`-based patterns)
+        - Building a graph of data dependencies between steps
+        - Initializing tracking structures for trigger state and pending steps
+        - Populating the `self.to_run` queue with steps ready to execute
+        """
+        self.step_triggers: Dict[Tuple[str, ...], List[Union[str, Tuple[str, ...]]]] = {}
+        self.star_triggers: Dict[Tuple[str, ...], List[Union[str, Tuple[str, ...]]]] = {}
 
-            for update in series:
-                paths = hierarchy_depth(update)
-                update_paths.extend(paths.keys())
+        # Collect triggers for each step's input schema
+        for step_path, step in self.step_paths.items():
+            step_triggers = find_step_triggers(step_path, step)
+            self.step_triggers = merge_collections(self.step_triggers, step_triggers)
 
-                self.state = self.core.apply_update(
-                    self.composition,
-                    self.state,
-                    update)
+        # Identify wildcard-based triggers (those containing '*')
+        for trigger_path in self.step_triggers:
+            if "*" in trigger_path:
+                self.star_triggers[trigger_path] = self.step_triggers[trigger_path]
 
-                bridge_update = self.read_bridge(
-                    update)
+        # Track which steps have already executed in the current cycle
+        self.steps_run: Set[Union[str, Tuple[str, ...]]] = set()
 
-                if bridge_update:
-                    self.bridge_updates.append(
-                        bridge_update)
+        # Build the step execution dependency graph
+        self.step_dependencies, self.node_dependencies = build_step_network(self.step_paths)
+
+        # Initialize trigger fulfillment state and steps remaining
+        self.reset_step_state(self.step_paths)
+
+        # Compute the initial set of runnable steps
+        self.to_run = self.cycle_step_state()
 
         self.clean_front(self.state)
 
-        return update_paths
 
-                # view_expire_update = self.apply_update(up, store)
-                # view_expire = view_expire or view_expire_update
+    def reset_step_state(
+            self,
+            step_paths: Dict[Union[str, Tuple[str, ...]], Any]
+        ) -> None:
+        """
+        Reset the trigger tracking state for a given set of steps.
 
-        # if view_expire:
-        #     self.state.build_topology_views()
+        Args:
+            step_paths: A dictionary of step paths (as keys).
+        """
+        # Start with a fresh trigger state from the dependency graph
+        self.trigger_state = build_trigger_state(self.node_dependencies)
 
+        # Track steps still waiting to be executed in this cycle
+        self.steps_remaining: Set[Union[str, Tuple[str, ...]]] = set(step_paths)
 
-    def expire_process_paths(self, update_paths):
+    def cycle_step_state(self) -> List[Union[str, Tuple[str, ...]]]:
+        """
+        Evaluate the current trigger state and determine which steps can run.
+
+        Returns:
+            A list of step paths that are ready to be invoked in this cycle.
+        """
+        to_run, self.steps_remaining, self.trigger_state = determine_steps(
+            self.step_dependencies,
+            self.steps_remaining,
+            self.trigger_state
+        )
+        return to_run
+
+    def trigger_steps(self, update_paths: List[Tuple[str, ...]]) -> None:
+        """
+        Determine and run step processes triggered by recent state updates.
+
+        Args:
+            update_paths: Paths in the state that were updated.
+        """
+        steps_to_run: List[Tuple[str, ...]] = []
+
         for update_path in update_paths:
-            for process_path in self.process_paths.copy():
-                updated = all([
-                    update == process
-                    for update, process in zip(update_path, process_path)])
+            for path in explode_path(update_path):
+                # Check direct trigger matches
+                step_paths = self.step_triggers.get(path, [])
 
-                if updated:
-                    self.find_instance_paths(
-                        self.state)
-                    return
+                # Also handle wildcard (*) path matches
+                if self.star_triggers:
+                    for star_trigger, star_steps in self.star_triggers.items():
+                        if match_star_path(path, star_trigger):
+                            step_paths.extend(star_steps)
 
-                    # del self.process_paths[process_path]
+                # Add unrun steps to the execution queue
+                for step_path in step_paths:
+                    if step_path is not None and step_path not in self.steps_run:
+                        steps_to_run.append(step_path)
+                        self.steps_run.add(step_path)
 
-                    # target_schema, target_state = self.core.slice(
-                    #     self.composition,
-                    #     self.state,
-                    #     update_path)
+        # Identify downstream steps dependent on triggered ones
+        steps_to_run = find_downstream(
+            self.step_dependencies,
+            self.node_dependencies,
+            steps_to_run
+        )
 
-                    # process_subpaths = find_instance_paths(
-                    #     target_state,
-                    #     'process_bigraph.composite.Process')
+        self.reset_step_state(steps_to_run)
+        to_run = self.cycle_step_state()
+        self.run_steps(to_run)
 
-                    # for subpath, process in process_subpaths.items():
-                    #     process_path = update_path + subpath
-                    #     self.process_paths[process_path] = process
+    def run_steps(self, step_paths: List[Tuple[str, ...]]) -> None:
+        """
+        Execute a list of step processes, apply their updates, and handle cascading triggers.
+
+        Args:
+            step_paths: A list of step path tuples to run.
+        """
+        if step_paths:
+            updates = []
+
+            for step_path in step_paths:
+                step = get_path(self.state, step_path)
+                state = self.core.view_edge(
+                    self.composition, self.state, step_path, 'inputs'
+                )
+
+                # Steps are always invoked with interval = -1.0
+                step_update = self.process_update(
+                    step_path, step, state, -1.0, 'outputs'
+                )
+                updates.append(step_update)
+
+            update_paths = self.apply_updates(updates)
+            self.expire_process_paths(update_paths)
+
+            to_run = self.cycle_step_state()
+
+            if to_run:
+                self.run_steps(to_run)
+            else:
+                self.steps_run = set()
+        else:
+            self.steps_run = set()
 
 
-    def run(self, interval, force_complete=False):
-        # Define the end time for the run
+    # ====================
+    # Simulation Execution
+    # ====================
+
+    def run(self, interval: float, force_complete: bool = False) -> None:
+        """
+        Advance simulation by running processes until a target time is reached.
+
+        The method loops through all registered processes and executes their updates
+        incrementally based on their configured interval. Updates are applied and
+        steps are triggered accordingly.
+
+        Args:
+            interval: Time interval to simulate.
+            force_complete: If True, forces all processes to reach the end time.
+        """
         end_time = self.state['global_time'] + interval
 
-        # Run the processes and apply updates until the end time is reached
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
 
+            # Run each process and compute the minimum time step that advances simulation
             for path in self.process_paths:
                 process = get_path(self.state, path)
                 full_step = self.run_process(
-                    path,
-                    process,
-                    end_time,
-                    full_step,
-                    force_complete)
+                    path, process, end_time, full_step, force_complete)
 
-            # apply updates based on process times in self.front
             if full_step == math.inf:
-                # no processes ran, jump to next process
+                # No process ran — jump to the next scheduled process time
                 next_event = end_time
                 for path in self.front.keys():
                     if self.front[path]['time'] < next_event:
@@ -840,116 +1079,238 @@ class Composite(Process):
                 self.state['global_time'] = next_event
 
             elif self.state['global_time'] + full_step <= end_time:
-                # at least one process ran within the interval
-                # increase the time, apply updates, and continue
+                # At least one process ran — advance time and apply its update
                 self.state['global_time'] += full_step
-
-                # apply updates that are behind global time
                 updates = []
                 paths = []
+
                 for path, advance in self.front.items():
-                    if advance['time'] <= self.state['global_time'] \
-                            and advance['update']:
-                        new_update = advance['update']
-                        updates.append(new_update)
+                    if advance['time'] <= self.state['global_time'] and advance['update']:
+                        updates.append(advance['update'])
                         advance['update'] = {}
                         paths.append(path)
 
-                # get all update paths, then trigger steps that
-                # depend on those paths
                 update_paths = self.apply_updates(updates)
-
                 self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
 
             else:
-                # all processes have run past the interval
+                # All remaining process events are beyond end_time
                 self.state['global_time'] = end_time
 
             if force_complete and self.state['global_time'] == end_time:
                 force_complete = False
 
+    def run_process(
+            self,
+            path: Union[str, Tuple[str, ...]],
+            process: Dict[str, Any],
+            end_time: float,
+            full_step: float,
+            force_complete: bool
+    ) -> float:
+        """
+        Run a process at a given path and determine its next scheduled time.
 
-    def run_steps(self, step_paths):
-        if len(step_paths) > 0:
-            updates = []
-            for step_path in step_paths:
-                step = get_path(
-                    self.state,
-                    step_path)
+        This updates the `self.front` to store when the process is due next,
+        and captures its update as a deferred computation.
 
-                state = self.core.view_edge(
-                    self.composition,
-                    self.state,
-                    step_path,
-                    'inputs')
+        Args:
+            path: The path to the process in the state/composition tree.
+            process: The dictionary representing the process (must contain 'interval').
+            end_time: The simulation time to run up to.
+            full_step: The current smallest time step among all processes.
+            force_complete: If True, forces the process to reach `end_time` exactly.
 
-                step_update = self.process_update(
-                    step_path,
-                    step,
-                    state,
-                    -1.0,
-                    'outputs')
+        Returns:
+            The updated `full_step`, i.e., the shortest remaining time across all processes.
+        """
+        # Initialize the front buffer for this process if missing
+        if path not in self.front:
+            self.front[path] = empty_front(self.state['global_time'])
 
-                updates.append(step_update)
+        process_time = self.front[path]['time']
 
-            update_paths = self.apply_updates(updates)
-            self.expire_process_paths(update_paths)
-            to_run = self.cycle_step_state()
-
-            if len(to_run) > 0:
-                self.run_steps(to_run)
+        if process_time <= self.state['global_time']:
+            # Use future state if already scheduled and saved
+            if 'future' in self.front[path]:
+                future_front = self.front[path].pop('future')
+                process_interval = future_front['interval']
+                state = future_front['state']
             else:
-                self.steps_run = set([])
+                # Otherwise, slice the current state for the process
+                state = self.core.view_edge(self.composition, self.state, path)
+                process_interval = process['interval']
+
+            # Determine the target time for the next update
+            future = (
+                min(process_time + process_interval, end_time)
+                if force_complete
+                else process_time + process_interval
+            )
+
+            # Apply rounding if global time precision is set
+            if self.global_time_precision is not None:
+                future = round(future, self.global_time_precision)
+
+            # Compute how long this process would advance
+            interval = future - self.state['global_time']
+            if interval < full_step:
+                full_step = interval
+
+            # Only proceed if the next step occurs within the target range
+            if future <= end_time:
+                update = self.process_update(path, process, state, process_interval)
+
+                # Store the update to apply when simulation reaches `future` time
+                self.front[path]['time'] = future
+                self.front[path]['update'] = update
 
         else:
-            self.steps_run = set([])
+            # This process is scheduled in the future — ensure we don't skip ahead
+            process_delay = process_time - self.state['global_time']
+            if process_delay < full_step:
+                full_step = process_delay
 
+        return full_step
 
-    def trigger_steps(self, update_paths):
-        steps_to_run = []
+    def process_update(
+            self,
+            path: Union[str, Tuple[str, ...]],
+            process: Dict[str, Any],
+            states: Dict[str, Any],
+            interval: float,
+            ports_key: str = 'outputs'
+    ) -> Defer:
+        """
+        Start generating a process's update and wrap it in a deferred transformation.
 
+        This is similar to invoking a process directly, but it delays transformation
+        into absolute state terms until `.get()` is called on the returned `Defer` object.
+
+        Args:
+            path: The path to the process in the state/composition tree.
+            process: The dictionary representing the process instance (must include 'instance').
+            states: The current state values at the process’s ports.
+            interval: The time interval to simulate.
+            ports_key: Which port ('inputs' or 'outputs') to use when projecting the update.
+
+        Returns:
+            A `Defer` object that, when resolved, transforms the update to absolute paths.
+        """
+        # Strip schema-specific metadata from the state
+        clean_state = strip_schema_keys(states)
+
+        # Invoke the process and retrieve a wrapped SyncUpdate object
+        update = process['instance'].invoke(clean_state, interval)
+
+        # This nested function projects the update into the global state at the given path
+        def defer_project(update_result: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
+            schema, state, process_path = args
+            return self.core.project_edge(schema, state, process_path, update_result, ports_key)
+
+        # Return a deferred object that will project the update when requested
+        return Defer(update, defer_project, (self.composition, self.state, path))
+
+    def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
+        """
+        Apply a series of deferred updates and record the resulting bridge outputs.
+
+        For each update in the list, the deferred `.get()` method is called, which
+        may return a single update or a list of updates. Each is then applied to the
+        composite's state, and corresponding bridge outputs are captured.
+
+        Args:
+            updates: A list of `Defer` objects representing delayed update functions.
+
+        Returns:
+            A list of update paths (used to determine which processes to refresh).
+        """
+        update_paths = []
+
+        for defer in updates:
+            # Resolve deferred computation to get update(s)
+            series = defer.get()
+            if series is None:
+                continue
+            if not isinstance(series, list):
+                series = [series]
+
+            for update in series:
+                # Extract all hierarchical paths touched by this update
+                paths = hierarchy_depth(update)
+                update_paths.extend(paths.keys())
+
+                # Apply update directly to the internal state
+                self.state = self.core.apply_update(self.composition, self.state, update)
+
+                # Read updated bridge outputs, if available
+                bridge_update = self.read_bridge(update)
+                if bridge_update:
+                    self.bridge_updates.append(bridge_update)
+
+        # Refresh process and step instance paths
+        self.find_instance_paths(self.state)
+
+        return update_paths
+
+    def expire_process_paths(self, update_paths: List[Union[str, Tuple[str, ...]]]) -> None:
+        """
+        Invalidate and refresh process paths if affected by recent updates.
+
+        This is used to ensure that processes are rediscovered if a state update
+        altered a region where a process instance may be added, removed, or replaced.
+
+        Args:
+            update_paths: A list of hierarchical paths that were modified.
+        """
         for update_path in update_paths:
-            paths = explode_path(update_path)
-            for path in paths:
-                step_paths = self.step_triggers.get(path, [])
-                if self.star_triggers:
-                    for star_trigger, star_steps in self.star_triggers.items():
-                        if match_star_path(path, star_trigger):
-                            step_paths.extend(star_steps)
-                for step_path in step_paths:
-                    if step_path is not None and step_path not in self.steps_run:
-                        steps_to_run.append(step_path)
-                        self.steps_run.add(step_path)
-
-        steps_to_run = find_downstream(
-            self.step_dependencies,
-            self.node_dependencies,
-            steps_to_run)
-
-        self.reset_step_state(steps_to_run)
-        to_run = self.cycle_step_state()
-
-        self.run_steps(to_run)
+            for process_path in self.process_paths.copy():
+                # Match if update path completely overlaps the process path prefix
+                updated = all(update == process for update, process in zip(update_path, process_path))
+                if updated:
+                    self.find_instance_paths(self.state)
+                    return  # Exit early after one match, as paths are re-evaluated
 
 
-    def update(self, state, interval):
-        # do everything
+    # ====================
+    # Update Integration
+    # ====================
+    # This section handles how updates from processes and steps are applied to
+    # the global state, how downstream effects are triggered, and how bridge
+    # outputs are collected.
 
+    def update(self, state: Dict[str, Any], interval: float) -> List[Dict[str, Any]]:
+        """
+        Project input state, run the simulation interval, and return bridge updates.
+
+        This is the main entry point for executing a time step of the composite.
+        It performs:
+        - Input projection using the bridge schema
+        - Merging projected input into state
+        - Executing processes for the given time interval
+        - Returning updates for the bridge output
+
+        Args:
+            state: Input state to project into the composite.
+            interval: Time interval to simulate.
+
+        Returns:
+            A list of updates generated for the bridge outputs.
+        """
         projection = self.core.project(
             self.interface()['inputs'],
             self.bridge['inputs'],
             [],
-            state)
+            state
+        )
 
-        self.merge(
-            {},
-            projection)
-
+        self.merge({}, projection)
         self.run(interval)
 
         updates = self.bridge_updates
         self.bridge_updates = []
+
 
         return updates
 
