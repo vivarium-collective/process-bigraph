@@ -759,6 +759,9 @@ class Composite(Process):
                 series = [series]
 
             for update in series:
+                if update and isinstance(update, dict) and 'environment' in update and update['environment'] and isinstance(update['environment'], dict) and '_react' in update['environment']:
+                    import ipdb; ipdb.set_trace()
+
                 paths = hierarchy_depth(update)
                 update_paths.extend(paths.keys())
 

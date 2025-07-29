@@ -62,6 +62,8 @@ class Divide(Step):
                                 'agent_id': f'{mother}_{i}'}}}})
                 for i in range(self.config['divisions'])]
 
+            import ipdb; ipdb.set_trace()
+
             # return divide reaction
             return {
                 'environment': {
@@ -131,7 +133,7 @@ def grow_divide_agent(config=None, state=None, path=None):
 
     grow_divide_state = {
         'grow': {
-            '_type': 'process',  # TODO -- should support 'process'
+            '_type': 'process',
             'address': 'local:grow',
             'config': grow_config,
             'inputs': {
@@ -140,7 +142,7 @@ def grow_divide_agent(config=None, state=None, path=None):
                 'mass': ['mass']}},
 
         'divide': {
-            '_type': 'process', # TODO -- should support 'process'
+            '_type': 'process',
             'address': 'local:divide',
             'config': divide_config,
             'inputs': {

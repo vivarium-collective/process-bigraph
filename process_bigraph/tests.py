@@ -589,6 +589,8 @@ def test_grow_divide(core):
                 'environment': ['environment']}}},
         core=core)
 
+    import ipdb; ipdb.set_trace()
+
     updates = composite.update({
         'environment': {
             '0': {
@@ -601,7 +603,7 @@ def test_grow_divide(core):
     assert composite.state['environment']['0_0_0_0_1']['mass'] == composite.state['environment']['0_0_0_0_1']['grow_divide']['instance'].state['mass']
 
     # check recursive schema reference
-    assert id(composite.composition['environment'] == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']))
+    assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
     composite.save('test_grow_divide_saved.json')
 
@@ -609,7 +611,7 @@ def test_grow_divide(core):
         'out/test_grow_divide_saved.json',
         core=core)
     
-    assert id(composite.composition['environment'] == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']))
+    assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
 
 def test_gillespie_composite(core):
