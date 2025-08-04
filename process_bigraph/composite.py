@@ -658,6 +658,9 @@ class Composite(Process):
         # Load the bridge configuration, which defines how inputs/outputs connect to the world.
         self.bridge = self.config.get('bridge', {})
 
+        # initialize an empty front for finding the instance paths
+        self.front = {}
+
         # Identify all Process and Step instances in the state tree.
         self.find_instance_paths(self.state)
 
@@ -730,8 +733,6 @@ class Composite(Process):
     def clean_front(self, state):
         self.find_instance_paths(state)
 
-        # import ipdb; ipdb.set_trace()
-
 
     def find_instance_paths(self, state: Dict[str, Any]) -> None:
         """
@@ -743,6 +744,18 @@ class Composite(Process):
         """
         self.process_paths = find_instance_paths(state, 'process_bigraph.composite.Process')
         self.step_paths = find_instance_paths(state, 'process_bigraph.composite.Step')
+
+        all_paths = set(
+            list(self.process_paths.keys()) +
+            list(self.step_paths.keys()))
+
+        front_paths = set(
+            self.front.keys())
+
+        for removed_key in front_paths.difference(all_paths):
+            # do we want to do anything with these?
+            removed_front = self.front.pop(removed_key)
+
 
     def merge(self, schema: Dict[str, Any], state: Dict[str, Any], path: Optional[List[str]] = None) -> None:
         """

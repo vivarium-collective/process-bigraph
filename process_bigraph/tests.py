@@ -872,17 +872,6 @@ def test_star_update(core):
     assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
 
 
-class GlobalProcess(Process):
-    config_schema = {}
-
-
-    def initialize(self, config):
-        pass
-
-
-    
-
-
 def test_default_process_state(core):
     # provide some initial values
     default_rate = {
@@ -915,8 +904,123 @@ def test_default_process_state(core):
     assert 'interval' not in default_divide
 
 
+class AboveProcess(Process):
+    config_schema = {
+        'rate': 'float'}
+
+    def inputs(self):
+        return {
+            'below': 'map[mass:float]'}
+
+    def outputs(self):
+        return {
+            'below': 'map[mass:float]'}
+
+    def update(self, state, interval):
+        update = {
+            'below': {}}
+
+        for id, pod in state['below'].items():
+            update['below'][id] = {
+                'mass': self.config['rate'] * pod['mass']}
+
+        return update
+
+
+class BelowProcess(Process):
+    next_id = 1
+
+    config_schema = {
+        'id': 'string',
+        'creation_probability': 'float',
+        'annihilation_probability': 'float'}
+
+    def inputs(self):
+        return {
+            'mass': 'float',
+            'entropy': 'float'}
+
+    def outputs(self):
+        return {
+            'entropy': 'float',
+            'environment': 'map[mass:float]'}
+
+    def update(self, state, interval):
+        creation = random.random() < self.config['creation_probability'] * state['entropy']
+        annihilation = random.random() < self.config['annihilation_probability'] * state['entropy']
+
+        update = {}
+
+        if creation or annihilation:
+            update['environment'] = {}
+
+        if creation:
+            new_id = str(BelowProcess.next_id)
+            BelowProcess.next_id += 1
+
+            update['environment']['_add'] = {
+                new_id: {
+                    'mass': 1.1,
+                    'below': {
+                        'config': {
+                            'id': new_id}}}}
+
+        if annihilation:
+            update['environment']['_remove'] = [self.config['id']]
+
+        if not 'environment' in update:
+            update['entropy'] = 0.1
+        else:
+            update['entropy'] = -state['entropy']
+
+        return update
+
+
 def test_update_removal(core):
-    return {}
+    composition = {
+        'environment': {
+            '_type': 'map',
+            '_value': {
+                'below': {
+                    '_type': 'process',
+                    'address': default(
+                        'string',
+                        'local:!process_bigraph.tests.BelowProcess'),
+                    'config': default('quote', {
+                        'creation_probability': 0.01,
+                        'annihilation_probability': 0.007}),
+                    'inputs': default('wires', {
+                        'mass': ['mass'],
+                        'entropy': ['entropy']}),
+                    'outputs': default('wires', {
+                        'entropy': ['entropy'],
+                        'environment': ['..']}),
+                    'interval': default('float', 0.4)}}}}
+
+    state = {
+        'above': {
+            '_type': 'process',
+            'address': 'local:!process_bigraph.tests.AboveProcess',
+            'config': {
+                'rate': 0.001},
+            'inputs': {
+                'below': ['environment']},
+            'outputs': {
+                'below': ['environment']},
+            'interval': 3.33},
+        'environment': {
+            '0': {
+                'below': {
+                    'config': {
+                        'id': '0'}},
+                'mass': 1.001,
+                'entropy': 0.03}}}
+
+    composite = Composite({
+        'composition': composition,
+        'state': state}, core=core)
+
+    composite.run(50)
 
 
 def test_stochastic_deterministic_composite(core):
@@ -956,3 +1060,4 @@ if __name__ == '__main__':
     test_grow_divide(core)
     test_star_update(core)
     test_match_star_path(core)
+    test_update_removal(core)
