@@ -870,17 +870,6 @@ def test_star_update(core):
     assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
 
 
-class GlobalProcess(Process):
-    config_schema = {}
-
-
-    def initialize(self, config):
-        pass
-
-
-    
-
-
 def test_default_process_state(core):
     # provide some initial values
     default_rate = {
