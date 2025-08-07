@@ -5,11 +5,10 @@ import pytest
 import random
 
 from bigraph_schema import default
-from process_bigraph import register_types
+from process_bigraph import register_types, ProcessTypes
 
 from process_bigraph.composite import (
-    Process, Step, Composite, merge_collections, match_star_path, ProcessTypes,
-    as_process, as_step,
+    Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
 )
 
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide

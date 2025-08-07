@@ -321,8 +321,13 @@ class ProcessTypes(TypeSystem):
             'inputs': instance.default_inputs(),
             'outputs': instance.default_outputs()}
 
-        if issubclass(process_class, Process):
-            state['interval'] = 1.0        
+        if isinstance(process_class, type):
+            try:
+                from vivarium.core.process import Process  # only when needed to avoid circular imports
+                if issubclass(process_class, Process):
+                    state['interval'] = 1.0
+            except ImportError:
+                pass
 
         if initial_state:
             state = deep_merge(
