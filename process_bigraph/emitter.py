@@ -11,9 +11,6 @@ Emitters are steps that observe a composite simulation's state and emit data to 
 - Implement concrete emitters (RAM, console, JSON)
 """
 
-# ========
-# Imports
-# ========
 import os
 import json
 import copy
@@ -169,6 +166,7 @@ def tree_copy(state):
         return None
     return copy.deepcopy(state)
 
+
 class RAMEmitter(Emitter):
     """Store historical states in memory."""
     def __init__(self, config, core):
@@ -191,6 +189,7 @@ class RAMEmitter(Emitter):
                 results.append(result)
             return results
         return self.history
+
 
 class JSONEmitter(Emitter):
     """Append simulation state to a persistent JSON file each timestep."""

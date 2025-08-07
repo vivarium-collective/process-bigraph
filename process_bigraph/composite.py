@@ -540,6 +540,7 @@ def as_process(inputs, outputs, core=None):
 
     return decorator
 
+
 class ProcessEnsemble(Process):
     """
     ProcessEnsemble base class.
@@ -649,9 +650,6 @@ def match_star_path(
         if star_element != "*" and element != star_element:
             return False
     return True
-
-
-
 
 
 class Composite(Process):
@@ -793,7 +791,6 @@ class Composite(Process):
     def clean_front(self, state):
         self.find_instance_paths(state)
 
-
     def find_instance_paths(self, state: Dict[str, Any]) -> None:
         """
         Identify all Step and Process instances in the current state.
@@ -815,7 +812,6 @@ class Composite(Process):
         for removed_key in front_paths.difference(all_paths):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
-
 
     def merge(self, schema: Dict[str, Any], state: Dict[str, Any], path: Optional[List[str]] = None) -> None:
         """
@@ -1012,7 +1008,6 @@ class Composite(Process):
         self.to_run = self.cycle_step_state()
 
         self.clean_front(self.state)
-
 
     def reset_step_state(
             self,
@@ -1383,6 +1378,5 @@ class Composite(Process):
 
         updates = self.bridge_updates
         self.bridge_updates = []
-
 
         return updates

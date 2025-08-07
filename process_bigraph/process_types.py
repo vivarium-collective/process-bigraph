@@ -8,6 +8,7 @@ Additionally, it defines the `ProcessTypes` class, which extends the `TypeSystem
 class to include process types, and maintains a registry of process types, protocols,
 and emitters.
 """
+
 import copy
 
 from bigraph_schema import Registry, Edge, TypeSystem, deep_merge, visit_method, get_path
@@ -22,62 +23,98 @@ from process_bigraph.emitter import BASE_EMITTERS
 # ======================
 
 def apply_process(schema, current, update, top_schema, top_state, path, core):
-    """Apply an update to a process."""
+    """
+    Apply an update to a process instance using the core's update mechanism.
+
+    Args:
+        schema (dict): The schema for the current process.
+        current (dict): The current process state.
+        update (dict): The update to apply.
+        top_schema (dict): The top-level (composite) schema.
+        top_state (dict): The top-level state.
+        path (tuple): Path to the current process in the schema tree.
+        core: The type system or composition engine.
+
+    Returns:
+        dict: Updated process state.
+    """
     process_schema = schema.copy()
-    process_schema.pop('_apply')
+    process_schema.pop('_apply', None)
+
     return core.apply_update(
         process_schema,
         current,
         update,
         top_schema=top_schema,
         top_state=top_state,
-        path=path)
+        path=path
+    )
 
 
 def check_process(schema, state, core):
-    """Check if this is a process."""
-    return 'instance' in state and isinstance(
-        state['instance'],
-        Edge)
+    """
+    Check if a given state belongs to a valid process instance.
+
+    Args:
+        schema (dict): The expected schema (unused here).
+        state (dict): The process state.
+        core: The type system (unused here).
+
+    Returns:
+        bool: True if the state contains a valid Edge instance.
+    """
+    return 'instance' in state and isinstance(state['instance'], Edge)
 
 
 def fold_visit(schema, state, method, values, core):
-    visit = visit_method(
-        schema,
-        state,
-        method,
-        values,
-        core)
+    """
+    Wrapper for visiting a process state using a specific method.
 
-    return visit
+    Args:
+        schema (dict): The process schema.
+        state (dict): The process state.
+        method (str): The method name to invoke (e.g., 'apply', 'serialize').
+        values (dict): Inputs to the visitor method.
+        core: The type system.
+
+    Returns:
+        Any: Result of the visitor operation.
+    """
+    return visit_method(schema, state, method, values, core)
 
 
 def divide_process(schema, state, values, core):
-    # daughter_configs must have a config per daughter
+    """
+    Divide a process into multiple daughter process states.
 
-    daughter_configs = values.get(
-        'daughter_configs',
-        [{} for index in range(values['divisions'])])
+    Args:
+        schema (dict): The schema for the process.
+        state (dict): The current process state.
+        values (dict): Division parameters including:
+            - 'divisions' (int): Number of daughters
+            - 'daughter_configs' (list[dict], optional): Config overrides
+
+    Returns:
+        list[dict]: A list of daughter states.
+    """
+    num_daughters = values['divisions']
+    daughter_configs = values.get('daughter_configs', [{} for _ in range(num_daughters)])
 
     if 'config' not in state:
         return daughter_configs
 
     existing_config = state['config']
-
     divisions = []
-    for index in range(values['divisions']):
-        daughter_config = copy.deepcopy(
-            existing_config)
-        daughter_config = deep_merge(
-            daughter_config,
-            daughter_configs[index])
 
-        # TODO: provide a way to override inputs and outputs
+    for i in range(num_daughters):
+        daughter_config = deep_merge(copy.deepcopy(existing_config), daughter_configs[i])
+
         daughter_state = {
             'address': state['address'],
             'config': daughter_config,
             'inputs': copy.deepcopy(state['inputs']),
-            'outputs': copy.deepcopy(state['outputs'])}
+            'outputs': copy.deepcopy(state['outputs']),
+        }
 
         if 'interval' in state:
             daughter_state['interval'] = state['interval']
@@ -88,30 +125,45 @@ def divide_process(schema, state, values, core):
 
 
 def serialize_process(schema, value, core):
-    """Serialize a process to a JSON-safe representation."""
-    # TODO -- need to get back the protocol: address and the config
+    """
+    Serialize a process state to a JSON-safe format.
+
+    Args:
+        schema (dict): The schema (unused here).
+        value (dict): The full process state.
+        core: The type system to handle sub-serialization.
+
+    Returns:
+        dict: Serialized process data.
+    """
     process = value.copy()
+
     process['config'] = core.serialize(
         process['instance'].config_schema,
-        process['config'])
-    del process['instance']
+        process['config']
+    )
+
+    del process['instance']  # Remove the live instance for serialization
+
     return process
 
 
 def deserialize_process(schema, encoded, core):
-    """Deserialize a process from a serialized state.
+    """
+    Deserialize a process from a saved (serialized) state.
 
-    This function is used by the type system to deserialize a process.
+    Args:
+        schema (dict): The expected process schema.
+        encoded (dict): Serialized process state.
+        core: The type system, needed to resolve classes and configs.
 
-    :param encoded: A JSON-safe representation of the process.
-    :param bindings: The bindings to use for deserialization.
-    :param core: The type system to use for deserialization.
-
-    :returns: The deserialized state with an instantiated process.
+    Returns:
+        dict: Fully rehydrated process state with instance attached.
     """
     encoded = encoded or {}
     schema = schema or {}
 
+    # Base deserialization
     default = core.default(schema)
     deserialized = deep_merge(default, encoded)
 
@@ -119,102 +171,90 @@ def deserialize_process(schema, encoded, core):
         return deserialized
 
     protocol, address = deserialized['address'].split(':', 1)
+    instance = deserialized.get('instance')
 
-    existing_instance = 'instance' in deserialized and deserialized['instance']
-    if existing_instance:
-        instantiate = type(deserialized['instance'])
+    # Determine the process class to instantiate
+    if instance:
+        instantiate = type(instance)
     else:
         process_lookup = core.protocol_registry.access(protocol)
         if not process_lookup:
-            raise Exception(f'protocol "{protocol}" not implemented')
-
+            raise Exception(f'Protocol "{protocol}" not implemented')
         instantiate = process_lookup(core, address)
         if not instantiate:
-            raise Exception(f'process "{address}" not found')
+            raise Exception(f'Process "{address}" not found')
 
-    config = core.deserialize(
-        instantiate.config_schema,
-        deserialized.get('config', {}))
-
-    interval = core.deserialize(
-        'interval',
-        deserialized.get('interval'))
+    # Deserialize the configuration
+    config = core.deserialize(instantiate.config_schema, deserialized.get('config', {}))
+    interval = core.deserialize('interval', deserialized.get('interval'))
 
     if interval is None:
-        interval = core.default(
-            schema.get(
-                'interval',
-                'interval'))
+        interval = core.default(schema.get('interval', 'interval'))
 
-    if existing_instance:
-        process = deserialized['instance']
-    else:
-        process = instantiate(
-            config,
-            core=core)
+    if not instance:
+        instance = instantiate(config, core=core)
+        deserialized['instance'] = instance
 
-        deserialized['instance'] = process
-
-    # TODO: this mutating the original value directly into
-    #   the return value is weird (?)
+    # Deserialize shared steps if any
     shared = deserialized.get('shared', {})
     deserialized['shared'] = {}
-    if shared:
-        for step_id, step_config in shared.items():
-            step = deserialize_step(
-                'step',
-                step_config,
-                core)
 
-            step['instance'].register_shared(
-                process)
+    for step_id, step_config in shared.items():
+        step = deserialize_step('step', step_config, core)
+        step['instance'].register_shared(instance)
+        deserialized['shared'][step_id] = step
 
-            deserialized['shared'][step_id] = step
-
+    # Finalize state
     deserialized['config'] = config
     deserialized['interval'] = interval
-    deserialized['_inputs'] = copy.deepcopy(
-        deserialized['instance'].inputs())
-    deserialized['_outputs'] = copy.deepcopy(
-        deserialized['instance'].outputs())
+    deserialized['_inputs'] = copy.deepcopy(instance.inputs())
+    deserialized['_outputs'] = copy.deepcopy(instance.outputs())
 
     return deserialized
 
 
 def deserialize_step(schema, encoded, core):
+    """
+    Deserialize a single process step (sub-process in a composite).
+
+    Args:
+        schema (str): Schema key, typically 'step'.
+        encoded (dict): Serialized step data.
+        core: The type system.
+
+    Returns:
+        dict: Deserialized step state with process instance.
+    """
     default = core.default(schema)
     deserialized = deep_merge(default, encoded)
 
-    if not deserialized['address']:
+    if not deserialized.get('address'):
         return deserialized
 
     protocol, address = deserialized['address'].split(':', 1)
+    instance = deserialized.get('instance')
 
-    existing_instance = 'instance' in deserialized and deserialized['instance']
-    if existing_instance:
-        instantiate = type(deserialized['instance'])
+    # Get class or factory function
+    if instance:
+        instantiate = type(instance)
     else:
         process_lookup = core.protocol_registry.access(protocol)
         if not process_lookup:
-            raise Exception(f'protocol "{protocol}" not implemented')
-
+            raise Exception(f'Protocol "{protocol}" not implemented')
         instantiate = process_lookup(core, address)
         if not instantiate:
-            raise Exception(f'process "{address}" not found')
+            raise Exception(f'Process "{address}" not found')
 
-    config = core.deserialize(
-        instantiate.config_schema,
-        deserialized.get('config', {}))
+    # Deserialize config and create instance if needed
+    config = core.deserialize(instantiate.config_schema, deserialized.get('config', {}))
 
-    if not existing_instance:
-        process = instantiate(config, core=core)
-        deserialized['instance'] = process
+    if not instance:
+        instance = instantiate(config, core=core)
+        deserialized['instance'] = instance
 
     deserialized['config'] = config
-    deserialized['_inputs'] = copy.deepcopy(
-        deserialized['instance'].inputs())
-    deserialized['_outputs'] = copy.deepcopy(
-        deserialized['instance'].outputs())
+    deserialized['_inputs'] = copy.deepcopy(instance.inputs())
+    deserialized['_outputs'] = copy.deepcopy(instance.outputs())
 
     return deserialized
 
@@ -225,117 +265,143 @@ def deserialize_step(schema, encoded, core):
 
 class ProcessTypes(TypeSystem):
     """
-    ProcessTypes class extends the TypeSystem class to include process types.
-    It maintains a registry of process types and provides methods to register
-    new process types, protocols, and emitters.
+    Extends the TypeSystem to manage simulation process types,
+    including registries for process classes, protocols, and emitters.
+
+    Responsibilities:
+    - Registering new process types, protocols, and emitters
+    - Initializing edge states for composed processes
+    - Providing a default configuration/state template for processes
     """
 
     def __init__(self):
         super().__init__()
+
+        # Registries to store user-defined and built-in components
         self.process_registry = Registry()
         self.protocol_registry = Registry()
 
+        # Initialize the core type system with known types and protocols
         self.update_types(PROCESS_TYPES)
         self.register_protocols(BASE_PROTOCOLS)
         self.register_processes(BASE_EMITTERS)
 
+        # Explicitly register Composite process type
         self.register_process('composite', Composite)
 
-
     def register_protocols(self, protocols):
-        """Register protocols with the core"""
-        self.protocol_registry.register_multiple(protocols)
-
-
-    def register_process(
-            self,
-            name,
-            process_data
-    ):
         """
-        Registers a new process type in the process registry.
+        Register a dictionary of protocol types with the core type system.
 
         Args:
-            name (str): The name of the process type.
-            process_data: The data associated with the process type.
+            protocols (dict): Mapping of protocol names to protocol definitions.
+        """
+        self.protocol_registry.register_multiple(protocols)
+
+    def register_process(self, name, process_data):
+        """
+        Register a new process type into the process registry.
+
+        Args:
+            name (str): Unique name for the process.
+            process_data: Associated class or factory function for the process.
         """
         self.process_registry.register(name, process_data)
 
-
     def register_processes(self, processes):
-        for process_key, process_data in processes.items():
-            self.register_process(
-                process_key,
-                process_data)
+        """
+        Register multiple process types.
 
+        Args:
+            processes (dict): Mapping of process names to process data.
+        """
+        for process_key, process_data in processes.items():
+            self.register_process(process_key, process_data)
 
     def initialize_edge_state(self, schema, path, edge):
         """
-        Initialize the state for an edge based on the schema and the edge.
+        Compute the initial state for a given edge in a composite process.
+
+        This combines the default input and output state projections
+        for a process based on its edge mapping and schema.
+
+        Args:
+            schema (dict): The complete schema of the composite.
+            path (tuple): Path to the process within the schema.
+            edge (dict): The edge entry with an instance and port mappings.
+
+        Returns:
+            dict: The initial merged state for the edge.
         """
+        # Get initial state from the process instance
         initial_state = edge['instance'].initial_state()
         if not initial_state:
             return initial_state
 
+        # Extract and clone port mappings from the schema
         input_ports = copy.deepcopy(get_path(schema, path + ('_inputs',)))
         output_ports = copy.deepcopy(get_path(schema, path + ('_outputs',)))
         ports = {
             '_inputs': input_ports,
-            '_outputs': output_ports}
+            '_outputs': output_ports
+        }
 
-        input_state = {}
-        if input_ports:
-            input_state = self.project_edge(
-                ports,
-                edge,
-                path[:-1],
-                initial_state,
-                ports_key='inputs')
+        # Project the edge's initial state onto its inputs and outputs
+        input_state = self.project_edge(
+            ports, edge, path[:-1], initial_state, ports_key='inputs'
+        ) if input_ports else {}
 
-        output_state = {}
-        if output_ports:
-            output_state = self.project_edge(
-                ports,
-                edge,
-                path[:-1],
-                initial_state,
-                ports_key='outputs')
+        output_state = self.project_edge(
+            ports, edge, path[:-1], initial_state, ports_key='outputs'
+        ) if output_ports else {}
 
-        state = deep_merge(input_state, output_state)
-
-        return state
-
+        return deep_merge(input_state, output_state)
 
     def default_state(self, process_class, initial_state=None):
-        default_config = self.default(
-            process_class.config_schema)
+        """
+        Construct the default runtime state for a given process class.
 
-        instance = process_class(
-            default_config,
-            core=self)
+        Args:
+            process_class (class): The process class to instantiate.
+            initial_state (dict, optional): Overrides for the default state.
 
+        Returns:
+            dict: The fully constructed default process state.
+        """
+        # Get default config from the process's schema
+        default_config = self.default(process_class.config_schema)
+
+        # Instantiate process with default config
+        instance = process_class(default_config, core=self)
+
+        # Build standard process state structure
         state = {
             '_type': 'process',
             'address': f'local:!{process_class.__module__}.{process_class.__name__}',
             'config': default_config,
             'inputs': instance.default_inputs(),
-            'outputs': instance.default_outputs()}
+            'outputs': instance.default_outputs()
+        }
 
+        # Add default interval if it's a subclass of Process
         if isinstance(process_class, type):
             try:
-                from vivarium.core.process import Process  # only when needed to avoid circular imports
+                from vivarium.core.process import Process  # Delayed import to avoid circularity
                 if issubclass(process_class, Process):
                     state['interval'] = 1.0
             except ImportError:
-                pass
+                pass  # Skip interval assignment if Process class is unavailable
 
+        # Apply any user-provided state overrides
         if initial_state:
-            state = deep_merge(
-                state,
-                initial_state)
+            state = deep_merge(state, initial_state)
 
         return state
 
+
+# ========================
+# Process Types Dictionary
+# ========================
 
 PROCESS_TYPES = {
     'protocol': {
