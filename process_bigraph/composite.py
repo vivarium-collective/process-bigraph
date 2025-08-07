@@ -18,7 +18,8 @@ import json
 import math
 from typing import (
     Any, Dict, List, Optional, Set, Tuple, Union,
-    Mapping, MutableMapping, Sequence
+    Mapping, MutableMapping, Sequence,
+    Callable, Type
 )
 import collections
 
@@ -479,6 +480,65 @@ class Process(Edge):
         """
         return {}
 
+def as_step(inputs, outputs, core=None):
+    """
+    Decorator to create a Step from a function named update_*.
+    If core is provided, registers under the name *.
+    """
+    def decorator(func):
+        assert func.__name__.startswith('update_'), "Function name must be of the form update_*"
+        step_name = func.__name__[len('update_'):]
+
+        class FunctionStep(Step):
+            def inputs(self):
+                return inputs
+
+            def outputs(self):
+                return outputs
+
+            def update(self, state):
+                return func(state)
+
+        FunctionStep.__name__ = step_name + 'Step'
+
+        if core is not None:
+            core.register_process(step_name, FunctionStep)
+
+        return FunctionStep
+
+    return decorator
+
+
+def as_process(inputs, outputs, core=None):
+    """
+    Decorator to create a Process from a function named update_*.
+    If core is provided, registers under the name *.
+    """
+    def decorator(func):
+        assert func.__name__.startswith('update_'), "Function name must be of the form update_*"
+        process_name = func.__name__[len('update_'):]
+
+        class FunctionProcess(Process):
+            def __init__(self, config=None, core=None):
+                super().__init__(config=config, core=core)
+
+            def inputs(self):
+                return inputs
+
+            def outputs(self):
+                return outputs
+
+            def update(self, state, interval):
+                return func(state, interval)
+
+        FunctionProcess.__name__ = process_name + 'Process'
+
+        if core is not None:
+            core.register_process(process_name, FunctionProcess)
+
+        return FunctionProcess
+
+    return decorator
 
 class ProcessEnsemble(Process):
     """
