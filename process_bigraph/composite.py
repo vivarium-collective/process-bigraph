@@ -28,7 +28,7 @@ from bigraph_schema import (
     get_path, set_path, resolve_path, hierarchy_depth, deep_merge,
     is_schema_key, strip_schema_keys)
 
-from process_bigraph.protocols import local_lookup, local_lookup_module
+from bigraph_schema.protocols import local_lookup_module
 
 
 # =========================
@@ -393,7 +393,176 @@ class SyncUpdate:
         return self.update
 
 
-class Step(Edge):
+class Open(Edge):
+    METHOD_COMMANDS = (
+        'initial_state', 'inputs', 'outputs', 'update')
+
+    ATTRIBUTE_READ_COMMANDS = (
+        'config', 'composition', 'state')
+
+
+    def __init__(self, config=None, core=None):
+        self._command_result: Any = None
+        self._pending_command: Optional[
+            Tuple[str, Optional[tuple], Optional[dict]]] = None
+
+        super().__init__(config, core=core)
+
+    def pre_send_command(
+            self, command: str, args: Optional[tuple], kwargs:
+            Optional[dict]) -> None:
+        '''Run pre-checks before starting a command.
+
+        This method should be called at the start of every
+        implementation of :py:meth:`send_command`.
+
+        Args:
+            command: The name of the command to run.
+            args: A tuple of positional arguments for the command.
+            kwargs: A dictionary of keyword arguments for the command.
+
+        Raises:
+            RuntimeError: Raised when a user tries to send a command
+                while a previous command is still pending (i.e. the user
+                hasn't called :py:meth:`get_command_result` yet for the
+                previous command).
+        '''
+        if self._pending_command:
+            raise RuntimeError(
+                f'Trying to send command {(command, args, kwargs)} but '
+                f'command {self._pending_command} is still pending.')
+        self._pending_command = command, args, kwargs
+
+
+    def send_command(
+            self, command: str, args: Optional[tuple] = None,
+            kwargs: Optional[dict] = None,
+            run_pre_check: bool = True) -> None:
+        '''Handle :term:`process commands`.
+
+        This method handles the commands listed in
+        :py:attr:`METHOD_COMMANDS` by passing ``args``
+        and ``kwargs`` to the method of ``self`` with the name
+        of the command and saving the return value as the result.
+
+        This method handles the commands listed in
+        :py:attr:`ATTRIBUTE_READ_COMMANDS` by returning the attribute of
+        ``self`` with the name matching the command, and it handles the
+        commands listed in :py:attr:`ATTRIBUTE_WRITE_COMMANDS` by
+        setting the attribute in the command to the first argument in
+        ``args``. The command must be named ``set_attr`` for attribute
+        ``attr``.
+
+        To add support for a custom command, override this function in
+        your subclass. Each command is defined by a name (a string)
+        and accepts both positional and keyword arguments. Any custom
+        commands you add should have associated methods such that:
+
+        * The command name matches the method name.
+        * The command and method accept the same positional and keyword
+          arguments.
+        * The command and method return the same values.
+
+        If all of the above are satisfied, you can use
+        :py:meth:`Process.run_command_method` to handle the command.
+
+        Your implementation of this function needs to handle all the
+        commands you want to support.  When presented with an unknown
+        command, you should call the superclass method, which will
+        either handle the command or call its superclass method. At the
+        top of this recursive chain, this ``Process.send_command()``
+        method handles some built-in commands and will raise an error
+        for unknown commands.
+
+        Any overrides of this method must also call
+        :py:meth:`pre_send_command` at the start of the method. This
+        call will check that no command is currently pending to avoid
+        confusing behavior when multiple commands are started without
+        intervening retrievals of command results. Since your overriding
+        method will have already performed the pre-check, it should pass
+        ``run_pre_check=False`` when calling the superclass method.
+
+        Args:
+            command: The name of the command to run.
+            args: A tuple of positional arguments for the command.
+            kwargs: A dictionary of keyword arguments for the command.
+            run_pre_check: Whether to run the pre-checks implemented in
+                :py:meth:`pre_send_command`. This should be left at its
+                default value unless the pre-checks have already been
+                performed (e.g. if this method is being called by a
+                subclass's overriding method.)
+
+        Returns:
+            None. This method just starts the command running.
+
+        Raises:
+            ValueError: For unknown commands.
+        '''
+        if run_pre_check:
+            self.pre_send_command(command, args, kwargs)
+        args = args or tuple()
+        kwargs = kwargs or {}
+        if command in self.METHOD_COMMANDS:
+            self._command_result = self.run_command_method(
+                command, args, kwargs)
+        elif command in self.ATTRIBUTE_READ_COMMANDS:
+            self._command_result = getattr(self, command)
+        # elif command in self.ATTRIBUTE_WRITE_COMMANDS:
+        #     assert command.startswith('set_')
+        #     assert args
+        #     setattr(self, command[len('set_'):], args[0])
+        else:
+            raise ValueError(
+                f'Process {self} does not understand the process '
+                f'command {command}')
+
+    def run_command_method(
+            self, command: str, args: tuple, kwargs: dict) -> Any:
+        '''Run a command whose name and interface match a method.
+
+        Args:
+            command: The command name, which must equal to a method of
+                ``self``.
+            args: The positional arguments to pass to the method.
+            kwargs: The keywords arguments for the method.
+
+        Returns:
+            The result of calling ``self.command(*args, **kwargs)`` is
+            returned for command ``command``.
+        '''
+        return getattr(self, command)(*args, **kwargs)
+
+    def get_command_result(self) -> Any:
+        '''Retrieve the result from the last-run command.
+
+        Returns:
+            The result of the last command run. Note that this method
+            should only be called once immediately after each call to
+            :py:meth:`send_command`.
+
+        Raises:
+            RuntimeError: When there is no command pending. This can
+                happen when this method is called twice without an
+                intervening call to :py:meth:`send_command`.
+        '''
+        if not self._pending_command:
+            raise RuntimeError(
+                'Trying to retrieve command result, but no command is '
+                'pending.')
+        self._pending_command = None
+        result = self._command_result
+        self._command_result = None
+        return result
+
+    def run_command(
+            self, command: str, args: Optional[tuple] = None,
+            kwargs: Optional[dict] = None) -> Any:
+        '''Helper function that sends a command and returns result.'''
+        self.send_command(command, args, kwargs)
+        return self.get_command_result()
+
+
+class Step(Open):
     """
     Step base class.
 
@@ -428,7 +597,7 @@ class Step(Edge):
         """
         self.instance = instance
 
-    def update(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def update(self, state: Dict[str, Any], interval=None) -> Dict[str, Any]:
         """
         Compute and return the update for the step.
 
@@ -443,7 +612,7 @@ class Step(Edge):
         return {}
 
 
-class Process(Edge):
+class Process(Open):
     """
     Process base class.
 
@@ -453,7 +622,7 @@ class Process(Edge):
     Processes are stateful and typically used for simulations of continuous or discrete dynamics.
     """
 
-    def invoke(self, state: Dict[str, Any], interval: float) -> SyncUpdate:
+    def invoke(self, state: Dict[str, Any], interval: float):
         """
         Execute the process update for a given state and time interval.
 
@@ -479,6 +648,7 @@ class Process(Edge):
             A dictionary representing the update to apply to the state.
         """
         return {}
+
 
 def as_step(inputs, outputs, core=None):
     """
@@ -1218,7 +1388,7 @@ class Composite(Process):
             )
 
             # Apply rounding if global time precision is set
-            if self.global_time_precision is not None:
+            if self.global_time_precision:
                 future = round(future, self.global_time_precision)
 
             # Compute how long this process would advance

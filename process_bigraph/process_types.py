@@ -13,7 +13,7 @@ import copy
 
 from bigraph_schema import Registry, Edge, TypeSystem, deep_merge, visit_method, get_path
 
-from process_bigraph.protocols import local_lookup, local_lookup_module
+from process_bigraph.protocols import BASE_PROTOCOLS
 from process_bigraph.composite import Composite
 from process_bigraph.emitter import BASE_EMITTERS
 
@@ -166,23 +166,25 @@ def deserialize_process(schema, encoded, core):
     # Base deserialization
     default = core.default(schema)
     deserialized = deep_merge(default, encoded)
+    address = deserialized.get('address')
 
-    if not deserialized.get('address'):
+    if not address:
         return deserialized
 
-    protocol, address = deserialized['address'].split(':', 1)
-    instance = deserialized.get('instance')
+    # protocol, address = deserialized['address'].split(':', 1)
 
-    # Determine the process class to instantiate
-    if instance:
-        instantiate = type(instance)
-    else:
-        process_lookup = core.protocol_registry.access(protocol)
-        if not process_lookup:
-            raise Exception(f'Protocol "{protocol}" not implemented')
-        instantiate = process_lookup(core, address)
-        if not instantiate:
-            raise Exception(f'Process "{address}" not found')
+    # # Determine the process class to instantiate
+    # if instance:
+    #     instantiate = type(instance)
+    # else:
+    #     process_lookup = core.protocol_registry.access(protocol)
+    #     if not process_lookup:
+    #         raise Exception(f'Protocol "{protocol}" not implemented')
+    #     instantiate = process_lookup(core, address)
+    #     if not instantiate:
+    #         raise Exception(f'Process "{address}" not found')
+
+    instantiate = core.parse_protocol(address)
 
     # Deserialize the configuration
     config = core.deserialize(instantiate.config_schema, deserialized.get('config', {}))
@@ -191,6 +193,7 @@ def deserialize_process(schema, encoded, core):
     if interval is None:
         interval = core.default(schema.get('interval', 'interval'))
 
+    instance = deserialized.get('instance')
     if not instance:
         instance = instantiate(config, core=core)
         deserialized['instance'] = instance
@@ -227,27 +230,29 @@ def deserialize_step(schema, encoded, core):
     """
     default = core.default(schema)
     deserialized = deep_merge(default, encoded)
+    address = deserialized.get('address')
 
     if not deserialized.get('address'):
         return deserialized
 
-    protocol, address = deserialized['address'].split(':', 1)
-    instance = deserialized.get('instance')
+    instantiate = core.parse_protocol(address)
+    # protocol, address = deserialized['address'].split(':', 1)
 
-    # Get class or factory function
-    if instance:
-        instantiate = type(instance)
-    else:
-        process_lookup = core.protocol_registry.access(protocol)
-        if not process_lookup:
-            raise Exception(f'Protocol "{protocol}" not implemented')
-        instantiate = process_lookup(core, address)
-        if not instantiate:
-            raise Exception(f'Process "{address}" not found')
+    # # Get class or factory function
+    # if instance:
+    #     instantiate = type(instance)
+    # else:
+    #     protocol = core.protocol_registry.access(protocol)
+    #     if not protocol:
+    #         raise Exception(f'Protocol "{protocol}" not implemented')
+    #     instantiate = protocol.interface(core, address)
+    #     if not instantiate:
+    #         raise Exception(f'Process "{address}" not found')
 
     # Deserialize config and create instance if needed
     config = core.deserialize(instantiate.config_schema, deserialized.get('config', {}))
 
+    instance = deserialized.get('instance')
     if not instance:
         instance = instantiate(config, core=core)
         deserialized['instance'] = instance
@@ -357,6 +362,22 @@ class ProcessTypes(TypeSystem):
 
         return deep_merge(input_state, output_state)
 
+    def parse_protocol(self, address):
+        if isinstance(address, str):
+            protocol_name, address = address.split(':', 1)
+        else:
+            protocol_name = address['protocol']
+
+        protocol = self.protocol_registry.access(protocol_name)
+        if not protocol:
+            raise Exception(f'Protocol "{protocol_name}" not implemented')
+
+        instantiate = protocol.interface(self, address) # process_lookup(core, address)
+        if not instantiate:
+            raise Exception(f'Process "{address}" not found')
+
+        return instantiate
+
     def default_state(self, process_class, initial_state=None):
         """
         Construct the default runtime state for a given process class.
@@ -449,5 +470,3 @@ PROCESS_TYPES = {
 }
 
 
-BASE_PROTOCOLS = {
-    'local': local_lookup}
