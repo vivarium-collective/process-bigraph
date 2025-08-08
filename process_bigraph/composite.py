@@ -18,7 +18,8 @@ import json
 import math
 from typing import (
     Any, Dict, List, Optional, Set, Tuple, Union,
-    Mapping, MutableMapping, Sequence
+    Mapping, MutableMapping, Sequence,
+    Callable, Type
 )
 import collections
 
@@ -27,7 +28,7 @@ from bigraph_schema import (
     get_path, set_path, resolve_path, hierarchy_depth, deep_merge,
     is_schema_key, strip_schema_keys)
 
-from process_bigraph.protocols import local_lookup, local_lookup_module
+from bigraph_schema.protocols import local_lookup_module
 
 
 # =========================
@@ -392,7 +393,176 @@ class SyncUpdate:
         return self.update
 
 
-class Step(Edge):
+class Open(Edge):
+    METHOD_COMMANDS = (
+        'initial_state', 'inputs', 'outputs', 'update')
+
+    ATTRIBUTE_READ_COMMANDS = (
+        'config', 'composition', 'state')
+
+
+    def __init__(self, config=None, core=None):
+        self._command_result: Any = None
+        self._pending_command: Optional[
+            Tuple[str, Optional[tuple], Optional[dict]]] = None
+
+        super().__init__(config, core=core)
+
+    def pre_send_command(
+            self, command: str, args: Optional[tuple], kwargs:
+            Optional[dict]) -> None:
+        '''Run pre-checks before starting a command.
+
+        This method should be called at the start of every
+        implementation of :py:meth:`send_command`.
+
+        Args:
+            command: The name of the command to run.
+            args: A tuple of positional arguments for the command.
+            kwargs: A dictionary of keyword arguments for the command.
+
+        Raises:
+            RuntimeError: Raised when a user tries to send a command
+                while a previous command is still pending (i.e. the user
+                hasn't called :py:meth:`get_command_result` yet for the
+                previous command).
+        '''
+        if self._pending_command:
+            raise RuntimeError(
+                f'Trying to send command {(command, args, kwargs)} but '
+                f'command {self._pending_command} is still pending.')
+        self._pending_command = command, args, kwargs
+
+
+    def send_command(
+            self, command: str, args: Optional[tuple] = None,
+            kwargs: Optional[dict] = None,
+            run_pre_check: bool = True) -> None:
+        '''Handle :term:`process commands`.
+
+        This method handles the commands listed in
+        :py:attr:`METHOD_COMMANDS` by passing ``args``
+        and ``kwargs`` to the method of ``self`` with the name
+        of the command and saving the return value as the result.
+
+        This method handles the commands listed in
+        :py:attr:`ATTRIBUTE_READ_COMMANDS` by returning the attribute of
+        ``self`` with the name matching the command, and it handles the
+        commands listed in :py:attr:`ATTRIBUTE_WRITE_COMMANDS` by
+        setting the attribute in the command to the first argument in
+        ``args``. The command must be named ``set_attr`` for attribute
+        ``attr``.
+
+        To add support for a custom command, override this function in
+        your subclass. Each command is defined by a name (a string)
+        and accepts both positional and keyword arguments. Any custom
+        commands you add should have associated methods such that:
+
+        * The command name matches the method name.
+        * The command and method accept the same positional and keyword
+          arguments.
+        * The command and method return the same values.
+
+        If all of the above are satisfied, you can use
+        :py:meth:`Process.run_command_method` to handle the command.
+
+        Your implementation of this function needs to handle all the
+        commands you want to support.  When presented with an unknown
+        command, you should call the superclass method, which will
+        either handle the command or call its superclass method. At the
+        top of this recursive chain, this ``Process.send_command()``
+        method handles some built-in commands and will raise an error
+        for unknown commands.
+
+        Any overrides of this method must also call
+        :py:meth:`pre_send_command` at the start of the method. This
+        call will check that no command is currently pending to avoid
+        confusing behavior when multiple commands are started without
+        intervening retrievals of command results. Since your overriding
+        method will have already performed the pre-check, it should pass
+        ``run_pre_check=False`` when calling the superclass method.
+
+        Args:
+            command: The name of the command to run.
+            args: A tuple of positional arguments for the command.
+            kwargs: A dictionary of keyword arguments for the command.
+            run_pre_check: Whether to run the pre-checks implemented in
+                :py:meth:`pre_send_command`. This should be left at its
+                default value unless the pre-checks have already been
+                performed (e.g. if this method is being called by a
+                subclass's overriding method.)
+
+        Returns:
+            None. This method just starts the command running.
+
+        Raises:
+            ValueError: For unknown commands.
+        '''
+        if run_pre_check:
+            self.pre_send_command(command, args, kwargs)
+        args = args or tuple()
+        kwargs = kwargs or {}
+        if command in self.METHOD_COMMANDS:
+            self._command_result = self.run_command_method(
+                command, args, kwargs)
+        elif command in self.ATTRIBUTE_READ_COMMANDS:
+            self._command_result = getattr(self, command)
+        # elif command in self.ATTRIBUTE_WRITE_COMMANDS:
+        #     assert command.startswith('set_')
+        #     assert args
+        #     setattr(self, command[len('set_'):], args[0])
+        else:
+            raise ValueError(
+                f'Process {self} does not understand the process '
+                f'command {command}')
+
+    def run_command_method(
+            self, command: str, args: tuple, kwargs: dict) -> Any:
+        '''Run a command whose name and interface match a method.
+
+        Args:
+            command: The command name, which must equal to a method of
+                ``self``.
+            args: The positional arguments to pass to the method.
+            kwargs: The keywords arguments for the method.
+
+        Returns:
+            The result of calling ``self.command(*args, **kwargs)`` is
+            returned for command ``command``.
+        '''
+        return getattr(self, command)(*args, **kwargs)
+
+    def get_command_result(self) -> Any:
+        '''Retrieve the result from the last-run command.
+
+        Returns:
+            The result of the last command run. Note that this method
+            should only be called once immediately after each call to
+            :py:meth:`send_command`.
+
+        Raises:
+            RuntimeError: When there is no command pending. This can
+                happen when this method is called twice without an
+                intervening call to :py:meth:`send_command`.
+        '''
+        if not self._pending_command:
+            raise RuntimeError(
+                'Trying to retrieve command result, but no command is '
+                'pending.')
+        self._pending_command = None
+        result = self._command_result
+        self._command_result = None
+        return result
+
+    def run_command(
+            self, command: str, args: Optional[tuple] = None,
+            kwargs: Optional[dict] = None) -> Any:
+        '''Helper function that sends a command and returns result.'''
+        self.send_command(command, args, kwargs)
+        return self.get_command_result()
+
+
+class Step(Open):
     """
     Step base class.
 
@@ -427,7 +597,7 @@ class Step(Edge):
         """
         self.instance = instance
 
-    def update(self, state: Dict[str, Any]) -> Dict[str, Any]:
+    def update(self, state: Dict[str, Any], interval=None) -> Dict[str, Any]:
         """
         Compute and return the update for the step.
 
@@ -442,7 +612,7 @@ class Step(Edge):
         return {}
 
 
-class Process(Edge):
+class Process(Open):
     """
     Process base class.
 
@@ -452,7 +622,7 @@ class Process(Edge):
     Processes are stateful and typically used for simulations of continuous or discrete dynamics.
     """
 
-    def invoke(self, state: Dict[str, Any], interval: float) -> SyncUpdate:
+    def invoke(self, state: Dict[str, Any], interval: float):
         """
         Execute the process update for a given state and time interval.
 
@@ -478,6 +648,67 @@ class Process(Edge):
             A dictionary representing the update to apply to the state.
         """
         return {}
+
+
+def as_step(inputs, outputs, core=None):
+    """
+    Decorator to create a Step from a function named update_*.
+    If core is provided, registers under the name *.
+    """
+    def decorator(func):
+        assert func.__name__.startswith('update_'), "Function name must be of the form update_*"
+        step_name = func.__name__[len('update_'):]
+
+        class FunctionStep(Step):
+            def inputs(self):
+                return inputs
+
+            def outputs(self):
+                return outputs
+
+            def update(self, state):
+                return func(state)
+
+        FunctionStep.__name__ = step_name + 'Step'
+
+        if core is not None:
+            core.register_process(step_name, FunctionStep)
+
+        return FunctionStep
+
+    return decorator
+
+
+def as_process(inputs, outputs, core=None):
+    """
+    Decorator to create a Process from a function named update_*.
+    If core is provided, registers under the name *.
+    """
+    def decorator(func):
+        assert func.__name__.startswith('update_'), "Function name must be of the form update_*"
+        process_name = func.__name__[len('update_'):]
+
+        class FunctionProcess(Process):
+            def __init__(self, config=None, core=None):
+                super().__init__(config=config, core=core)
+
+            def inputs(self):
+                return inputs
+
+            def outputs(self):
+                return outputs
+
+            def update(self, state, interval):
+                return func(state, interval)
+
+        FunctionProcess.__name__ = process_name + 'Process'
+
+        if core is not None:
+            core.register_process(process_name, FunctionProcess)
+
+        return FunctionProcess
+
+    return decorator
 
 
 class ProcessEnsemble(Process):
@@ -589,9 +820,6 @@ def match_star_path(
         if star_element != "*" and element != star_element:
             return False
     return True
-
-
-
 
 
 class Composite(Process):
@@ -733,7 +961,6 @@ class Composite(Process):
     def clean_front(self, state):
         self.find_instance_paths(state)
 
-
     def find_instance_paths(self, state: Dict[str, Any]) -> None:
         """
         Identify all Step and Process instances in the current state.
@@ -755,7 +982,6 @@ class Composite(Process):
         for removed_key in front_paths.difference(all_paths):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
-
 
     def merge(self, schema: Dict[str, Any], state: Dict[str, Any], path: Optional[List[str]] = None) -> None:
         """
@@ -952,7 +1178,6 @@ class Composite(Process):
         self.to_run = self.cycle_step_state()
 
         self.clean_front(self.state)
-
 
     def reset_step_state(
             self,
@@ -1163,7 +1388,7 @@ class Composite(Process):
             )
 
             # Apply rounding if global time precision is set
-            if self.global_time_precision is not None:
+            if self.global_time_precision:
                 future = round(future, self.global_time_precision)
 
             # Compute how long this process would advance
@@ -1327,371 +1552,4 @@ class Composite(Process):
         updates = self.bridge_updates
         self.bridge_updates = []
 
-
         return updates
-
-
-# ======================
-# Process Type Functions
-# ======================
-
-
-def apply_process(schema, current, update, top_schema, top_state, path, core):
-    """Apply an update to a process."""
-    process_schema = schema.copy()
-    process_schema.pop('_apply')
-    return core.apply_update(
-        process_schema,
-        current,
-        update,
-        top_schema=top_schema,
-        top_state=top_state,
-        path=path)
-
-
-def check_process(schema, state, core):
-    """Check if this is a process."""
-    return 'instance' in state and isinstance(
-        state['instance'],
-        Edge)
-
-
-def fold_visit(schema, state, method, values, core):
-    visit = visit_method(
-        schema,
-        state,
-        method,
-        values,
-        core)
-
-    return visit
-
-
-def divide_process(schema, state, values, core):
-    # daughter_configs must have a config per daughter
-
-    daughter_configs = values.get(
-        'daughter_configs',
-        [{} for index in range(values['divisions'])])
-
-    if 'config' not in state:
-        return daughter_configs
-
-    existing_config = state['config']
-
-    divisions = []
-    for index in range(values['divisions']):
-        daughter_config = copy.deepcopy(
-            existing_config)
-        daughter_config = deep_merge(
-            daughter_config,
-            daughter_configs[index])
-
-        # TODO: provide a way to override inputs and outputs
-        daughter_state = {
-            'address': state['address'],
-            'config': daughter_config,
-            'inputs': copy.deepcopy(state['inputs']),
-            'outputs': copy.deepcopy(state['outputs'])}
-
-        if 'interval' in state:
-            daughter_state['interval'] = state['interval']
-
-        divisions.append(daughter_state)
-
-    return divisions
-
-
-def serialize_process(schema, value, core):
-    """Serialize a process to a JSON-safe representation."""
-    # TODO -- need to get back the protocol: address and the config
-    process = value.copy()
-    process['config'] = core.serialize(
-        process['instance'].config_schema,
-        process['config'])
-    del process['instance']
-    return process
-
-
-def deserialize_process(schema, encoded, core):
-    """Deserialize a process from a serialized state.
-
-    This function is used by the type system to deserialize a process.
-
-    :param encoded: A JSON-safe representation of the process.
-    :param bindings: The bindings to use for deserialization.
-    :param core: The type system to use for deserialization.
-
-    :returns: The deserialized state with an instantiated process.
-    """
-    encoded = encoded or {}
-    schema = schema or {}
-
-    default = core.default(schema)
-    deserialized = deep_merge(default, encoded)
-
-    if not deserialized.get('address'):
-        return deserialized
-
-    protocol, address = deserialized['address'].split(':', 1)
-
-    existing_instance = 'instance' in deserialized and deserialized['instance']
-    if existing_instance:
-        instantiate = type(deserialized['instance'])
-    else:
-        process_lookup = core.protocol_registry.access(protocol)
-        if not process_lookup:
-            raise Exception(f'protocol "{protocol}" not implemented')
-
-        instantiate = process_lookup(core, address)
-        if not instantiate:
-            raise Exception(f'process "{address}" not found')
-
-    config = core.deserialize(
-        instantiate.config_schema,
-        deserialized.get('config', {}))
-
-    interval = core.deserialize(
-        'interval',
-        deserialized.get('interval'))
-
-    if interval is None:
-        interval = core.default(
-            schema.get(
-                'interval',
-                'interval'))
-
-    if existing_instance:
-        process = deserialized['instance']
-    else:
-        process = instantiate(
-            config,
-            core=core)
-
-        deserialized['instance'] = process
-
-    # TODO: this mutating the original value directly into
-    #   the return value is weird (?)
-    shared = deserialized.get('shared', {})
-    deserialized['shared'] = {}
-    if shared:
-        for step_id, step_config in shared.items():
-            step = deserialize_step(
-                'step',
-                step_config,
-                core)
-
-            step['instance'].register_shared(
-                process)
-
-            deserialized['shared'][step_id] = step
-
-    deserialized['config'] = config
-    deserialized['interval'] = interval
-    deserialized['_inputs'] = copy.deepcopy(
-        deserialized['instance'].inputs())
-    deserialized['_outputs'] = copy.deepcopy(
-        deserialized['instance'].outputs())
-
-    return deserialized
-
-
-def deserialize_step(schema, encoded, core):
-    default = core.default(schema)
-    deserialized = deep_merge(default, encoded)
-
-    if not deserialized['address']:
-        return deserialized
-
-    protocol, address = deserialized['address'].split(':', 1)
-
-    existing_instance = 'instance' in deserialized and deserialized['instance']
-    if existing_instance:
-        instantiate = type(deserialized['instance'])
-    else:
-        process_lookup = core.protocol_registry.access(protocol)
-        if not process_lookup:
-            raise Exception(f'protocol "{protocol}" not implemented')
-
-        instantiate = process_lookup(core, address)
-        if not instantiate:
-            raise Exception(f'process "{address}" not found')
-
-    config = core.deserialize(
-        instantiate.config_schema,
-        deserialized.get('config', {}))
-
-    if not existing_instance:
-        process = instantiate(config, core=core)
-        deserialized['instance'] = process
-
-    deserialized['config'] = config
-    deserialized['_inputs'] = copy.deepcopy(
-        deserialized['instance'].inputs())
-    deserialized['_outputs'] = copy.deepcopy(
-        deserialized['instance'].outputs())
-
-    return deserialized
-
-
-# ===================
-# Process Type System
-# ===================
-
-class ProcessTypes(TypeSystem):
-    """
-    ProcessTypes class extends the TypeSystem class to include process types.
-    It maintains a registry of process types and provides methods to register
-    new process types, protocols, and emitters.
-    """
-
-    def __init__(self):
-        super().__init__()
-        self.process_registry = Registry()
-        self.protocol_registry = Registry()
-
-        self.update_types(PROCESS_TYPES)
-        self.register_protocols(BASE_PROTOCOLS)
-
-        self.register_process('composite', Composite)
-
-
-    def register_protocols(self, protocols):
-        """Register protocols with the core"""
-        self.protocol_registry.register_multiple(protocols)
-
-
-    def register_process(
-            self,
-            name,
-            process_data
-    ):
-        """
-        Registers a new process type in the process registry.
-
-        Args:
-            name (str): The name of the process type.
-            process_data: The data associated with the process type.
-        """
-        self.process_registry.register(name, process_data)
-
-
-    def register_processes(self, processes):
-        for process_key, process_data in processes.items():
-            self.register_process(
-                process_key,
-                process_data)
-
-
-    def initialize_edge_state(self, schema, path, edge):
-        """
-        Initialize the state for an edge based on the schema and the edge.
-        """
-        initial_state = edge['instance'].initial_state()
-        if not initial_state:
-            return initial_state
-
-        input_ports = copy.deepcopy(get_path(schema, path + ('_inputs',)))
-        output_ports = copy.deepcopy(get_path(schema, path + ('_outputs',)))
-        ports = {
-            '_inputs': input_ports,
-            '_outputs': output_ports}
-
-        input_state = {}
-        if input_ports:
-            input_state = self.project_edge(
-                ports,
-                edge,
-                path[:-1],
-                initial_state,
-                ports_key='inputs')
-
-        output_state = {}
-        if output_ports:
-            output_state = self.project_edge(
-                ports,
-                edge,
-                path[:-1],
-                initial_state,
-                ports_key='outputs')
-
-        state = deep_merge(input_state, output_state)
-
-        return state
-
-
-    def default_state(self, process_class, initial_state=None):
-        default_config = self.default(
-            process_class.config_schema)
-
-        instance = process_class(
-            default_config,
-            core=self)
-
-        state = {
-            '_type': 'process',
-            'address': f'local:!{process_class.__module__}.{process_class.__name__}',
-            'config': default_config,
-            'inputs': instance.default_inputs(),
-            'outputs': instance.default_outputs()}
-
-        if issubclass(process_class, Process):
-            state['interval'] = 1.0
-
-        if initial_state:
-            state = deep_merge(
-                state,
-                initial_state)
-
-        return state
-
-
-PROCESS_TYPES = {
-    'protocol': {
-        '_type': 'protocol',
-        '_inherit': 'string'},
-
-    'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
-
-    'interval': {
-        '_type': 'interval',
-        '_inherit': 'float',
-        '_apply': 'set',
-        '_default': '1.0'},
-
-    'step': {
-        '_type': 'step',
-        '_inherit': 'edge',
-        '_apply': apply_process,
-        '_serialize': serialize_process,
-        '_deserialize': deserialize_step,
-        '_check': check_process,
-        '_fold': fold_visit,
-        '_divide': divide_process,
-        '_description': '',
-        # TODO: support reference to type parameters from other states
-        'address': 'protocol',
-        'config': 'quote'},
-
-    # TODO: slice process to allow for navigating through a port
-    'process': {
-        '_type': 'process',
-        '_inherit': 'edge',
-        '_apply': apply_process,
-        '_serialize': serialize_process,
-        '_deserialize': deserialize_process,
-        '_check': check_process,
-        '_fold': fold_visit,
-        '_divide': divide_process,
-        '_description': '',
-        # TODO: support reference to type parameters from other states
-        'interval': 'interval',
-        'address': 'protocol',
-        'config': 'quote',
-        'shared': 'map[step]'},
-}
-
-
-BASE_PROTOCOLS = {
-    'local': local_lookup}
-

@@ -1,13 +1,18 @@
 """
+=========================
 Tests for Process Bigraph
+=========================
 """
+
 import pytest
 import random
 
 from bigraph_schema import default
-from process_bigraph import register_types
+from process_bigraph import register_types, ProcessTypes
 
-from process_bigraph.composite import Process, Step, Composite, merge_collections, match_star_path, ProcessTypes
+from process_bigraph.composite import (
+    Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
+)
 
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
 from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
@@ -1034,6 +1039,90 @@ def test_match_star_path(core):
     assert match_star_path(["first", "list", "test"], ["first", "list", "test"])
 
 
+def test_function_wrappers(core):
+    # --- STEP with core ---
+    @as_step(inputs={'a': 'float', 'b': 'float'},
+             outputs={'sum': 'float'},
+             core=core)
+    def update_add(state):
+        return {'sum': state['a'] + state['b']}
+
+    step = update_add(config={}, core=core)
+    out = step.update({'a': 5, 'b': 7})
+    assert out == {'sum': 12}
+    assert core.find('add')
+    print("Step with core:", out)
+
+    # --- PROCESS with core ---
+    @as_process(inputs={'x': 'float'},
+                outputs={'x': 'float'},
+                core=core)
+    def update_decay(state, interval):
+        return {'x': state['x'] * (1 - 0.2 * interval)}
+
+    proc = update_decay(config={}, core=core)
+    out = proc.update({'x': 50.0}, 1.0)
+    assert round(out['x'], 2) == 40.0
+    assert core.find('decay')
+    print("Process with core:", out)
+
+def test_registered_functions_in_composite(core):
+    @as_step(inputs={'a': 'float', 'b': 'float'},
+             outputs={'sum': 'float'},
+             core=core)
+    def update_add(state):
+        return {'sum': state['a'] + state['b']}
+
+    @as_process(inputs={'x': 'float'},
+                outputs={'x': 'float'},
+                core=core)
+    def update_decay(state, interval):
+        return {'x': state['x'] * (1 - 0.1 * interval)}
+
+    # Define Composite
+    state = {
+        'adder': {
+            '_type': 'process',
+            'address': 'local:add',
+            'inputs': {
+                'a': ['Env', 'a'],
+                'b': ['Env', 'b']
+            },
+            'outputs': {
+                'sum': ['Env', 'sum']
+            }
+        },
+        'decayer': {
+            '_type': 'process',
+            'address': 'local:decay',
+            'inputs': {
+                'x': ['Env', 'sum']
+            },
+            'outputs': {
+                'x': ['Env', 'x']
+            }
+        },
+        'Env': {
+            'a': 3.0,
+            'b': 2.0,
+            'sum': 0.0,
+            'x': 0.0
+        }
+    }
+
+    # Run Composite
+    sim = Composite({
+        'state': state
+    }, core=core)
+
+    sim.run(1.0)  # One time step
+
+    final = sim.state['Env']
+    assert round(final['sum'], 2) == 5.0, f"Adder failed: {final}"
+    assert round(final['x'], 2) == 4.5, f"Decay failed: {final}"
+    print("✅ test_registered_functions_in_composite passed:", final)
+
+
 if __name__ == '__main__':
     core = ProcessTypes()
     core = register_types(core)
@@ -1060,4 +1149,6 @@ if __name__ == '__main__':
     test_grow_divide(core)
     test_star_update(core)
     test_match_star_path(core)
+    test_function_wrappers(core)
+    test_registered_functions_in_composite(core)
     test_update_removal(core)

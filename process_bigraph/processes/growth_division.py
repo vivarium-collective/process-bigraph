@@ -92,7 +92,7 @@ def generate_bridge(schema, state, interval=1.0):
 
     composite = {
         '_type': 'process',
-        'address': 'local:composite',
+        'address': 'parallel:composite',
         'interval': interval,
         'config': config,
         'inputs': generate_bridge_wires(schema['inputs']),
