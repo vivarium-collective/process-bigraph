@@ -62,7 +62,7 @@ class Divide(Step):
                                 'agent_id': f'{mother}_{i}'}}}})
                 for i in range(self.config['divisions'])]
 
-            import ipdb; ipdb.set_trace()
+            # import ipdb; ipdb.set_trace()
 
             # return divide reaction
             return {

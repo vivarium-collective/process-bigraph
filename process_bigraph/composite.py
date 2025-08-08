@@ -1475,8 +1475,8 @@ class Composite(Process):
                 series = [series]
 
             for update in series:
-                if update and isinstance(update, dict) and 'environment' in update and update['environment'] and isinstance(update['environment'], dict) and '_react' in update['environment']:
-                    import ipdb; ipdb.set_trace()
+                # if update and isinstance(update, dict) and 'environment' in update and update['environment'] and isinstance(update['environment'], dict) and '_react' in update['environment']:
+                #     import ipdb; ipdb.set_trace()
 
                 # Extract all hierarchical paths touched by this update
                 paths = hierarchy_depth(update)
