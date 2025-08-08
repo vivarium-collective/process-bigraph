@@ -78,8 +78,8 @@ class DockerProcess(Process):
         # wait to start the socket until the container is running (!)
         while self.container.status != "running":
             print(f"'{self.image}' status: {self.container.status} - waiting...")
-            time.sleep(1)  # Wait for 1 second before re-checking
-            self.container.reload() # Refresh the container object's status
+            time.sleep(1)
+            self.container.reload()
 
         print(f'{self.image} now running')
 
@@ -92,11 +92,6 @@ class DockerProcess(Process):
             self.port))
 
         super().__init__(config, core=core)
-
-        # self.multiprocess = mp_ctx.Process( # type: ignore[attr-defined]
-        #     target=_handle_parallel_process,
-        #     args=(child, process, self.profile))
-        # self.multiprocess.start()
 
     def send_command(
             self, command: str, args: Optional[tuple] = None,
