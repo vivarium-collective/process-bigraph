@@ -13,3 +13,4 @@ process_bigraph.egg-info/
 out/
 .devenv*
 devenv.lock
+containers/

@@ -1121,6 +1121,32 @@ def test_registered_functions_in_composite(core):
     print("✅ test_registered_functions_in_composite passed:", final)
 
 
+def test_docker_process(core):
+    state = {
+        'mass': 1.0,
+        'julia-process': {
+            '_type': 'process',
+            'address': {
+                'protocol': 'docker',
+                'data': {
+                    'image': 'julia-process:latest',
+                    'port': 11111}},
+            'config': {
+                'rate': 0.005},
+            'inputs': {
+                'mass': ['mass']},
+            'outputs': {
+                'mass_delta': ['mass']},
+            'interval': 0.7}}
+
+    composite = Composite({
+        'state': state}, core=core)
+
+    composite.run(11.111)
+
+    assert composite.state['mass'] > 1.0
+
+
 if __name__ == '__main__':
     core = ProcessTypes()
     core = register_types(core)
@@ -1150,3 +1176,4 @@ if __name__ == '__main__':
     test_function_wrappers(core)
     test_registered_functions_in_composite(core)
     test_update_removal(core)
+    test_docker_process(core)

@@ -364,15 +364,16 @@ class ProcessTypes(TypeSystem):
 
     def parse_protocol(self, address):
         if isinstance(address, str):
-            protocol_name, address = address.split(':', 1)
+            protocol_name, protocol_data = address.split(':', 1)
         else:
             protocol_name = address['protocol']
+            protocol_data = address['data']
 
         protocol = self.protocol_registry.access(protocol_name)
         if not protocol:
             raise Exception(f'Protocol "{protocol_name}" not implemented')
 
-        instantiate = protocol.interface(self, address) # process_lookup(core, address)
+        instantiate = protocol.interface(self, protocol_data)
         if not instantiate:
             raise Exception(f'Process "{address}" not found')
 
@@ -427,7 +428,7 @@ class ProcessTypes(TypeSystem):
 PROCESS_TYPES = {
     'protocol': {
         '_type': 'protocol',
-        '_inherit': 'string'},
+        '_inherit': 'any'},
 
     'emitter_mode': 'enum[none,all,stores,bridge,paths,ports]',
 
