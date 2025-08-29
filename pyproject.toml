@@ -6,8 +6,11 @@ readme = "README.md"
 requires-python = "==3.12.9"
 dependencies = [
     "bigraph-schema",
+    "docker>=7.1.0",
+    "ipdb>=0.13.13",
     "matplotlib",
-    "pytest"
+    "pint>=0.24.4",
+    "pytest",
 ]
 
 [tool.setuptools]
