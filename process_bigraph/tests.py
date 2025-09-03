@@ -1147,6 +1147,32 @@ def test_docker_process(core):
     assert composite.state['mass'] > 1.0
 
 
+def test_rest_process(core):
+    state = {
+        'mass': 1.0,
+        'rest-process': {
+            '_type': 'process',
+            'address': {
+                'protocol': 'rest',
+                'data': {
+                    'host': 'localhost',
+                    'port': 22222}},
+            'config': {
+                'rate': 0.005},
+            'inputs': {
+                'mass': ['mass']},
+            'outputs': {
+                'mass_delta': ['mass']},
+            'interval': 0.7}}
+
+    composite = Composite({
+        'state': state}, core=core)
+
+    composite.run(11.111)
+
+    assert composite.state['mass'] > 1.0
+
+
 if __name__ == '__main__':
     core = ProcessTypes()
     core = register_types(core)
@@ -1177,3 +1203,5 @@ if __name__ == '__main__':
     test_registered_functions_in_composite(core)
     test_update_removal(core)
     test_docker_process(core)
+
+    test_rest_process(core)

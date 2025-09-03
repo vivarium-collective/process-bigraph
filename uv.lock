@@ -32,6 +32,7 @@ dependencies = [
     { name = "pint" },
     { name = "plum-dispatch" },
     { name = "pytest" },
+    { name = "requests" },
 ]
 
 [package.metadata]
@@ -43,6 +44,7 @@ requires-dist = [
     { name = "pint" },
     { name = "plum-dispatch" },
     { name = "pytest" },
+    { name = "requests", specifier = ">=2.31.0" },
 ]
 
 [[package]]
