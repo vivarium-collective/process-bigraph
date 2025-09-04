@@ -14,3 +14,4 @@ out/
 .devenv*
 devenv.lock
 containers/
+uv.lock

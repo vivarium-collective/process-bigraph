@@ -37,17 +37,25 @@ def rest_post(url, parameters=None):
 class RestProcess(Process):
     def __init__(self, data, config, core) -> None:
         self._ended = False
+
+        self.process_name = data['process']
+
         self.base_url = data['base_url'] or urlparse('http://localhost:22222')
-        self.initialize_url = self.base_url._replace(path='/initialize')
-        self.inputs_url = self.base_url._replace(path='/inputs')
-        self.outputs_url = self.base_url._replace(path='/outputs')
-        self.update_url = self.base_url._replace(path='/update')
 
-        self.process_name = data['process_name']
-
+        self.initialize_url = self.base_url._replace(
+            path=f'/process/{self.process_name}/initialize')
         self.process_id = rest_post(
             self.initialize_url,
             config)
+
+        self.end_url = self.base_url._replace(
+            path=f'/process/{self.process_name}/end/{self.process_id}')
+        self.inputs_url = self.base_url._replace(
+            path=f'/process/{self.process_name}/inputs/{self.process_id}')
+        self.outputs_url = self.base_url._replace(
+            path=f'/process/{self.process_name}/outputs/{self.process_id}')
+        self.update_url = self.base_url._replace(
+            path=f'/process/{self.process_name}/update/{self.process_id}')
 
         super().__init__(config, core=core)
 
@@ -97,9 +105,7 @@ class RestProcess(Process):
         Example:
             {'glucose': 'float', 'biomass': 'map[float]'}
         """
-        inputs_url = self.base_url._replace(
-            path=f'/inputs/{self.process_id}')
-        response = rest_get(inputs_url)
+        response = rest_get(self.inputs_url)
 
         return response
 
@@ -110,16 +116,12 @@ class RestProcess(Process):
         Example:
             {'growth_rate': 'float'}
         """
-        outputs_url = self.base_url._replace(
-            path=f'/outputs/{self.process_id}')
-        response = rest_get(outputs_url)
+        response = rest_get(self.outputs_url)
 
         return response
 
     def update(self, state, interval):
-        update_url = self.base_url._replace(
-            path=f'/update/{self.process_id}')
-        response = rest_post(update_url, {
+        response = rest_post(self.update_url, {
             'state': state,
             'interval': interval})
         return response
@@ -132,9 +134,7 @@ class RestProcess(Process):
         if self._ended:
             return
 
-        end_url = self.base_url._replace(
-            path=f'/end/{self.process_id}')
-        rest_post(end_url)
+        rest_post(self.end_url)
 
         self._ended = True
 
@@ -152,17 +152,18 @@ class RestProtocol(Protocol):
         base_raw = f'http{ssh}://{host}:{port}'
         base_url = urlparse(base_raw)
 
-        config_schema_url = base_url._replace(path='/config-schema')
+        config_schema_url = base_url._replace(
+            path=f'/process/{process_name}/config-schema')
         config_schema = rest_get(
             config_schema_url)
 
-        instant = {
+        instance = {
             'base_url': base_url,
-            'process_name': process_name}
+            'process': process_name}
 
         def instantiate(config, core=None):
             return RestProcess(
-                instant,
+                instance,
                 config,
                 core)
 

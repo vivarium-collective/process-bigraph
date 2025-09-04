@@ -7,6 +7,8 @@ Tests for Process Bigraph
 import pytest
 import random
 
+from urllib.parse import urlparse, urlunparse
+
 from bigraph_schema import default
 from process_bigraph import register_types, ProcessTypes
 
@@ -16,7 +18,7 @@ from process_bigraph.composite import (
 
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
 from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
-
+from process_bigraph.protocols.rest import rest_get, rest_post
 
 @pytest.fixture
 def core():
@@ -1147,6 +1149,111 @@ def test_docker_process(core):
     assert composite.state['mass'] > 1.0
 
 
+def apply_non_negative(schema, current, update, top_schema, top_state, path, core):
+    new_value = current + update
+    return max(0, new_value)
+
+
+def apply_non_negative_array(schema, current, update, top_schema, top_state, path, core):
+    def recursive_update(result_array, current_array, update_dict, index_path=()):
+        if isinstance(update_dict, dict):
+            for key, val in update_dict.items():
+                recursive_update(result_array, current_array, val, index_path + (key,))
+        else:
+            if isinstance(current_array, np.ndarray):
+                current_value = current_array[index_path]
+                result_array[index_path] = np.maximum(0, current_value + update_dict)
+            else:
+                # Scalar fallback
+                return np.maximum(0, current_array + update_dict)
+
+    if not isinstance(current, np.ndarray):
+        if isinstance(update, dict):
+            raise ValueError("Cannot apply dict update to scalar current")
+        return np.maximum(0, current + update)
+
+    result = np.copy(current)
+    recursive_update(result, current, update)
+    return result
+
+
+def test_dfba_process(core):
+    core.register('positive_float', {
+        '_inherit': 'float',
+        '_apply': apply_non_negative})
+
+    core.register('positive_array', {
+        '_inherit': 'array',
+        '_apply': apply_non_negative_array})
+
+    core.register('bounds', {
+        'lower': 'maybe[float]',
+        'upper': 'maybe[float]'})
+
+    dfba_name = 'spatio_flux.processes.DynamicFBA'
+    base_url = urlparse('http://localhost:22222')
+    schema_url = base_url._replace(
+        path=f'/process/{dfba_name}/config-schema')
+    dfba_config_schema = rest_get(schema_url)
+
+    dfba_config = {
+        'model_file': 'textbook',
+        'substrate_update_reactions': {
+            'glucose': 'EX_glc__D_e',
+            'acetate': 'EX_ac_e'},
+        'kinetic_params': {
+            'glucose': (0.5, 1),
+            'acetate': (0.5, 2)},
+        'bounds': {
+            'EX_o2_e': {'lower': -2, 'upper': None},
+            'ATPM': {'lower': 1, 'upper': 1}}}
+
+    biomass_id = 'biomass'
+    substrates = dfba_config['substrate_update_reactions'].keys()
+
+    initial_biomass = 0.1
+    initial_fields = {
+        'glucose': 2,
+        'acetate': 0,
+        biomass_id: initial_biomass}
+
+    for substrate in substrates:
+        if substrate not in initial_fields:
+            initial_fields[substrate] = 10.0
+
+    path = ['fields']
+
+    state = {
+        'fields': initial_fields,
+        'rest-dfba': {
+            '_type': 'process',
+            'address': {
+                'protocol': 'rest',
+                'data': {
+                    'process': dfba_name,
+                    'host': 'localhost',
+                    'port': 22222}},
+            'config': dfba_config,
+            'inputs': {
+                'substrates': {
+                    substrate: path + [substrate]
+                    for substrate in substrates},
+                'biomass': path + [biomass_id]},
+            'outputs': {
+                'substrates': {
+                    substrate: path + [substrate]
+                    for substrate in substrates},
+                'biomass': path + [biomass_id]},
+            'interval': 0.7}}
+
+    composite = Composite({
+        'state': state}, core=core)
+
+    composite.run(11.111)
+
+    assert composite.state['fields'][biomass_id] > initial_biomass
+
+
 def test_rest_process(core):
     state = {
         'mass': 1.0,
@@ -1155,7 +1262,7 @@ def test_rest_process(core):
             'address': {
                 'protocol': 'rest',
                 'data': {
-                    'process': 'composite',
+                    'process': 'grow',
                     'host': 'localhost',
                     'port': 22222}},
             'config': {
@@ -1178,31 +1285,32 @@ if __name__ == '__main__':
     core = ProcessTypes()
     core = register_types(core)
 
-    test_default_config(core)
-    test_default_process_state(core)
-    test_merge_collections(core)
-    test_process(core)
-    test_composite(core)
-    test_infer(core)
-    test_step_initialization(core)
-    test_dependencies(core)
-    test_emitter(core)
-    test_union_tree(core)
+    # test_default_config(core)
+    # test_default_process_state(core)
+    # test_merge_collections(core)
+    # test_process(core)
+    # test_composite(core)
+    # test_infer(core)
+    # test_step_initialization(core)
+    # test_dependencies(core)
+    # test_emitter(core)
+    # test_union_tree(core)
 
-    test_gillespie_composite(core)
-    test_run_process(core)
-    test_nested_wires(core)
-    test_parameter_scan(core)
-    test_shared_steps(core)
+    # test_gillespie_composite(core)
+    # test_run_process(core)
+    # test_nested_wires(core)
+    # test_parameter_scan(core)
+    # test_shared_steps(core)
 
-    test_stochastic_deterministic_composite(core)
-    test_merge_schema(core)
-    test_grow_divide(core)
-    test_star_update(core)
-    test_match_star_path(core)
-    test_function_wrappers(core)
-    test_registered_functions_in_composite(core)
-    test_update_removal(core)
-    test_docker_process(core)
+    # test_stochastic_deterministic_composite(core)
+    # test_merge_schema(core)
+    # test_grow_divide(core)
+    # test_star_update(core)
+    # test_match_star_path(core)
+    # test_function_wrappers(core)
+    # test_registered_functions_in_composite(core)
+    # test_update_removal(core)
+    # test_docker_process(core)
 
     test_rest_process(core)
+    test_dfba_process(core)
