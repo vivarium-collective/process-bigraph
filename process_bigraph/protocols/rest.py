@@ -43,6 +43,8 @@ class RestProcess(Process):
         self.outputs_url = self.base_url._replace(path='/outputs')
         self.update_url = self.base_url._replace(path='/update')
 
+        self.process_name = data['process_name']
+
         self.process_id = rest_post(
             self.initialize_url,
             config)
@@ -144,6 +146,7 @@ class RestProtocol(Protocol):
     @classmethod
     def interface(cls, core, data):
         ssh = ''
+        process_name = data['process']
         host = data['host']
         port = data['port']
         base_raw = f'http{ssh}://{host}:{port}'
@@ -153,7 +156,9 @@ class RestProtocol(Protocol):
         config_schema = rest_get(
             config_schema_url)
 
-        instant = {'base_url': base_url}
+        instant = {
+            'base_url': base_url,
+            'process_name': process_name}
 
         def instantiate(config, core=None):
             return RestProcess(

@@ -1155,6 +1155,7 @@ def test_rest_process(core):
             'address': {
                 'protocol': 'rest',
                 'data': {
+                    'process': 'composite',
                     'host': 'localhost',
                     'port': 22222}},
             'config': {
