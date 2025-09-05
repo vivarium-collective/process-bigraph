@@ -1178,6 +1178,13 @@ def apply_non_negative_array(schema, current, update, top_schema, top_state, pat
 
 
 def test_dfba_process(core):
+    base_url = urlparse('http://localhost:22222')
+    types_url = base_url._replace(path='/list-types')
+    types = rest_get(types_url)
+
+    processes_url = base_url._replace(path='/list-processes')
+    processes = rest_get(processes_url)
+
     core.register('positive_float', {
         '_inherit': 'float',
         '_apply': apply_non_negative})
@@ -1191,7 +1198,7 @@ def test_dfba_process(core):
         'upper': 'maybe[float]'})
 
     dfba_name = 'spatio_flux.processes.DynamicFBA'
-    base_url = urlparse('http://localhost:22222')
+
     schema_url = base_url._replace(
         path=f'/process/{dfba_name}/config-schema')
     dfba_config_schema = rest_get(schema_url)
@@ -1207,6 +1214,10 @@ def test_dfba_process(core):
         'bounds': {
             'EX_o2_e': {'lower': -2, 'upper': None},
             'ATPM': {'lower': 1, 'upper': 1}}}
+
+    assert core.check(
+        dfba_config_schema,
+        dfba_config)
 
     biomass_id = 'biomass'
     substrates = dfba_config['substrate_update_reactions'].keys()
