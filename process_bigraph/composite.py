@@ -903,16 +903,12 @@ class Composite(Process):
         """
         Save the composite to a JSON file.
 
-        WARNING: This method is deprecated. Use Vivarium's native tools instead.
-
         Args:
             filename: Output filename.
             outdir: Output directory.
             schema: Whether to include the serialized schema.
             state: Whether to include the serialized state.
         """
-        print("Warning: save() is deprecated and will be removed in a future version.")
-
         if not schema and not state:
             schema = state = True
 
