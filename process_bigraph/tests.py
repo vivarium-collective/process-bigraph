@@ -1144,6 +1144,8 @@ def test_docker_process(core):
     composite = Composite({
         'state': state}, core=core)
 
+    import ipdb; ipdb.set_trace()
+
     composite.run(11.111)
 
     assert composite.state['mass'] > 1.0
@@ -1185,6 +1187,7 @@ def test_dfba_process(core):
     processes_url = base_url._replace(path='/list-processes')
     processes = rest_get(processes_url)
 
+    # TODO: import types from the server
     core.register('positive_float', {
         '_inherit': 'float',
         '_apply': apply_non_negative})
@@ -1202,6 +1205,8 @@ def test_dfba_process(core):
     schema_url = base_url._replace(
         path=f'/process/{dfba_name}/config-schema')
     dfba_config_schema = rest_get(schema_url)
+
+    import ipdb; ipdb.set_trace()
 
     dfba_config = {
         'model_file': 'textbook',
