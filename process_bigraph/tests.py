@@ -1268,6 +1268,126 @@ def test_dfba_process(core):
     assert composite.state['fields'][biomass_id] > initial_biomass
 
 
+class DFBAConfigTemplate(Template):
+    def substitute(self, values):
+        dfba_config = {
+            'model_file': 'textbook',
+            'substrate_update_reactions': {
+                'glucose': 'EX_glc__D_e',
+                'acetate': 'EX_ac_e'},
+            'kinetic_params': {
+                'glucose': values.get('glucose_rate', (0.5, 1)),
+                'acetate': (0.5, 2)},
+            'bounds': {
+                'EX_o2_e': {'lower': -2, 'upper': None},
+                'ATPM': {'lower': 1, 'upper': 1}}}
+        
+
+class ReaddyTemplate(Template):
+    def substitute(self, values):
+        seed = values.get('seed', 3846384)
+        ......
+
+
+def test_process_template(core):
+    base_url = urlparse('http://localhost:22222')
+    types_url = base_url._replace(path='/list-types')
+    types = rest_get(types_url)
+
+    core.register_template('dfba_config', DFBAConfigTemplate)
+
+    processes_url = base_url._replace(path='/list-processes')
+    processes = rest_get(processes_url)
+
+    # TODO: import types from the server
+    core.register('positive_float', {
+        '_inherit': 'float',
+        '_apply': apply_non_negative})
+
+    core.register('positive_array', {
+        '_inherit': 'array',
+        '_apply': apply_non_negative_array})
+
+    core.register('bounds', {
+        'lower': 'maybe[float]',
+        'upper': 'maybe[float]'})
+
+    dfba_name = 'spatio_flux.processes.DynamicFBA'
+
+    schema_url = base_url._replace(
+        path=f'/process/{dfba_name}/config-schema')
+    dfba_config_schema = rest_get(schema_url)
+
+    # import ipdb; ipdb.set_trace()
+
+    dfba_config = {
+        'model_file': 'textbook',
+        'substrate_update_reactions': {
+            'glucose': 'EX_glc__D_e',
+            'acetate': 'EX_ac_e'},
+        'kinetic_params': {
+            'glucose': (0.5, 1),
+            'acetate': (0.5, 2)},
+        'bounds': {
+            'EX_o2_e': {'lower': -2, 'upper': None},
+            'ATPM': {'lower': 1, 'upper': 1}}}
+
+    # assert core.check(
+    #     dfba_config_schema,
+    #     dfba_config)
+
+    biomass_id = 'biomass'
+    substrates = dfba_config['substrate_update_reactions'].keys()
+
+    initial_biomass = 0.1
+    initial_fields = {
+        'glucose': 2,
+        'acetate': 0,
+        biomass_id: initial_biomass}
+
+    for substrate in substrates:
+        if substrate not in initial_fields:
+            initial_fields[substrate] = 10.0
+
+    path = ['fields']
+
+    state = {
+        'fields': initial_fields,
+        'diffusion': {
+            '_template': 'diffusion_process',
+            '_values': {}},
+        'rest-dfba': {
+            '_type': 'process',
+            'address': {
+                'protocol': 'rest',
+                'data': {
+                    'process': dfba_name,
+                    'host': 'localhost',
+                    'port': 22222}},
+            'config': {
+                '_template': 'dfba_config',
+                '_values': {
+                    'glucose_rate': 0.003}},
+            'inputs': {
+                'substrates': {
+                    substrate: path + [substrate]
+                    for substrate in substrates},
+                'biomass': path + [biomass_id]},
+            'outputs': {
+                'substrates': {
+                    substrate: path + [substrate]
+                    for substrate in substrates},
+                'biomass': path + [biomass_id]},
+            'interval': 0.7}}
+
+    composite = Composite({
+        'state': state}, core=core)
+
+    composite.run(11.111)
+
+    assert composite.state['fields'][biomass_id] > initial_biomass
+
+
 def test_rest_process(core):
     state = {
         'mass': 1.0,
