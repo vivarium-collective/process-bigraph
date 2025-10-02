@@ -16,6 +16,8 @@ from typing import Any, Dict, Optional, Union, List, Tuple
 
 import docker
 
+from docker import DockerClient
+
 from process_bigraph.composite import Process, SyncUpdate
 from process_bigraph.protocols.protocol import Protocol
 from process_bigraph.protocols.local import LocalProtocol
@@ -228,12 +230,21 @@ class DockerProcess(Process):
     def __del__(self) -> None:
         self.end()
 
+def initialize_docker():
+    client: DockerClient = None
+    try:
+        client = docker.from_env()
+    except Exception:
+        pass # We handle this by checking if client is None elsewhere.
+    return client
 
 class DockerProtocol(Protocol):
-    client = docker.from_env()
+    client = initialize_docker()
 
     @classmethod
     def interface(cls, core, data):
+        if cls.client is None:
+            raise NotImplementedError("Docker was unable to be initialized; check your installation and try again.")
         image = cls.client.images.get(
             data['image'])
 
