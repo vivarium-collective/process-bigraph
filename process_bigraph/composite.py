@@ -266,10 +266,12 @@ def build_step_network(steps):
             nodes[path]['after'].add(step_key)
 
         for output_path in output_paths:
-            if output_path not in input_paths:
-                path = tuple(output_path)
-                nodes.setdefault(path, {'before': set(), 'after': set()})
-                nodes[path]['before'].add(step_key)
+            exploded_path = explode_path(output_path)[1:]
+            for explode in exploded_path:
+                if explode not in input_paths:
+                    path = tuple(explode)
+                    nodes.setdefault(path, {'before': set(), 'after': set()})
+                    nodes[path]['before'].add(step_key)
 
     return ancestors, nodes
 
@@ -284,7 +286,9 @@ def build_trigger_state(nodes):
     Returns:
         A mapping of paths to the set of steps waiting on those paths.
     """
-    return {key: value['before'].copy() for key, value in nodes.items()}
+    return {
+        key: value['before'].copy()
+        for key, value in nodes.items()}
 
 
 def find_downstream(steps, nodes, upstream):
@@ -347,8 +351,10 @@ def determine_steps(steps, remaining, fulfilled):
         remaining.remove(step_path)
         step_outputs = steps[step_path].get('output_paths', []) or []
         for output in step_outputs:
-            if step_path in fulfilled.get(output, set()):
-                fulfilled[output].remove(step_path)
+            exploded_path = explode_path(output)[1:]
+            for explode in exploded_path:
+                if step_path in fulfilled.get(explode, set()):
+                    fulfilled[explode].remove(step_path)
 
     return to_run, remaining, fulfilled
 
@@ -1175,6 +1181,22 @@ class Composite(Process):
 
         self.clean_front(self.state)
 
+
+    def initialize_steps(self, steps_to_run):
+        # Identify downstream steps dependent on triggered ones
+        steps_to_run = find_downstream(
+            self.step_dependencies,
+            self.node_dependencies,
+            steps_to_run,
+        )
+
+        # Initialize trigger fulfillment state and steps remaining
+        self.reset_step_state(steps_to_run)
+
+        # Compute the initial set of runnable steps
+        self.to_run = self.cycle_step_state()
+
+
     def reset_step_state(
             self,
             step_paths: Dict[Union[str, Tuple[str, ...]], Any]
@@ -1231,16 +1253,8 @@ class Composite(Process):
                         steps_to_run.append(step_path)
                         self.steps_run.add(step_path)
 
-        # Identify downstream steps dependent on triggered ones
-        steps_to_run = find_downstream(
-            self.step_dependencies,
-            self.node_dependencies,
-            steps_to_run
-        )
-
-        self.reset_step_state(steps_to_run)
-        to_run = self.cycle_step_state()
-        self.run_steps(to_run)
+        self.initialize_steps(steps_to_run)
+        self.run_steps(self.to_run)
 
     def run_steps(self, step_paths: List[Tuple[str, ...]]) -> None:
         """
