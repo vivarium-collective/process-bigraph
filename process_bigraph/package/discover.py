@@ -99,7 +99,5 @@ def discover_packages(core) -> ProcessTypes:
     processes = traverse_modules(core)
     core.register_processes(processes)
 
-    pp(processes)
-
     return core
 
