@@ -1,4 +1,5 @@
 import pprint
+from bigraph_schema import Core, BASE_TYPES
 from bigraph_schema.registry import deep_merge, default
 from process_bigraph.processes import register_processes
 from process_bigraph.composite import Process, Step, Composite, interval_time_precision
@@ -49,10 +50,12 @@ def register_types(core):
 
 
 def allocate_core():
-    core = ProcessTypes()
-    return register_types(core)
+    core = Core(BASE_TYPES)
+    return discover_packages(core)
 
 
 def generate_core():
     core = ProcessTypes()
     return discover_packages(core)
+
+

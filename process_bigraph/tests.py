@@ -10,7 +10,7 @@ import random
 from urllib.parse import urlparse, urlunparse
 
 from bigraph_schema import default
-from process_bigraph import register_types, ProcessTypes
+from process_bigraph import register_types, ProcessTypes, generate_core, allocate_core
 
 from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
@@ -1296,8 +1296,11 @@ def test_rest_process(core):
 
 
 if __name__ == '__main__':
-    core = ProcessTypes()
-    core = register_types(core)
+    core = allocate_core()
+    # core = ProcessTypes()
+    # core = register_types(core)
+
+    import ipdb; ipdb.set_trace()
 
     test_default_config(core)
     test_default_process_state(core)
@@ -1328,3 +1331,7 @@ if __name__ == '__main__':
 
     test_rest_process(core)
     test_dfba_process(core)
+
+
+
+    
