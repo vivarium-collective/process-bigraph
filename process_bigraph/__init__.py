@@ -22,6 +22,9 @@ def pf(x):
 
 
 def register_types(core):
+    core.register_type('interval', {
+        '_inherit': 'float'})
+
     core.register_type('default 1', {
         '_inherit': 'float',
         '_default': 1.0})

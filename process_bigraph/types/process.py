@@ -30,8 +30,10 @@ def default(schema: Process):
 def deserialize(core, schema: Process, state, path=()):
     link_schema, link_state, merges = deserialize_link(core, schema, state, path=path)
 
-    link_state['interval'] = core.fill(
+    _, link_state['interval'], _ = deserialize(
+        core,
         link_schema.interval,
-        state.get('interval'))
+        state.get('interval'),
+        path+('interval',))
 
     return link_schema, link_state, merges

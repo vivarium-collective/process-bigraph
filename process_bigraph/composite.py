@@ -929,7 +929,11 @@ class Composite(Process):
             edge_schema, edge_state,
             self.composition, self.state)
 
-        # Wire the input/output schema for the Composite from the bridge config.        self.process_schema = {
+        self.composition, self.state = self.core.deserialize(
+            self.composition, self.state)
+
+        # Wire the input/output schema for the Composite from the bridge config.
+        self.process_schema = {
             port: self.core.wire_schema(
                 self.composition,
                 self.state,
