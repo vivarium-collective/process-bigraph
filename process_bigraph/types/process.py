@@ -3,7 +3,7 @@ from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
 
 from bigraph_schema.schema import Float, Link
-from bigraph_schema.methods import infer, set_default, serialize, deserialize, render, wrap_default
+from bigraph_schema.methods import resolve, deserialize
 
 
 @dataclass(kw_only=True)
