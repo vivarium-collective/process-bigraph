@@ -663,7 +663,7 @@ def test_gillespie_composite(core):
 
             'emitter': {
                 '_type': 'step',
-                'address': 'local:ram-emitter',
+                'address': 'local:!process_bigraph.emitter.RAMEmitter',
                 'config': {
                     'emit': {
                         'time': 'float',
