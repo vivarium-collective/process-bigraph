@@ -748,13 +748,13 @@ class ProcessEnsemble(Process):
                 inputs_func = getattr(self, attr_name)
                 if callable(inputs_func):
                     inputs = inputs_func()
-                    union_inputs = self.core.resolve_schemas(union_inputs, inputs)
+                    union_inputs = self.core.resolve(union_inputs, inputs)
 
             if attr_name.startswith('outputs_'):
                 outputs_func = getattr(self, attr_name)
                 if callable(outputs_func):
                     outputs = outputs_func()
-                    union_outputs = self.core.resolve_schemas(union_outputs, outputs)
+                    union_outputs = self.core.resolve(union_outputs, outputs)
 
         return {
             'inputs': union_inputs,
@@ -837,7 +837,7 @@ class Composite(Process):
 
     config_schema = {
         'composition': 'schema',
-        'state': 'tree[any]',
+        'state': 'tree[node]',
         'interface': {
             'inputs': 'schema',
             'outputs': 'schema'
@@ -885,7 +885,8 @@ class Composite(Process):
             initial_state['global_time'] = 0.0
 
         # Generate internal schema and state structures using the core engine.
-        self.composition, self.state = self.core.generate(
+        # self.composition, self.state = self.core.generate(
+        self.composition, self.state = self.core.unify(
             initial_composition,
             initial_state)
 
@@ -902,29 +903,41 @@ class Composite(Process):
         self.edge_paths = {**self.process_paths, **self.step_paths}
 
         # Initialize each process/step's state and accumulate it into a unified state tree.
-        edge_state: Dict[str, Any] = {}
+        edge_schema = {}
+        edge_state = {}
         for path, edge in self.edge_paths.items():
             # Generate the initial state for this specific edge (process or step).
-            initial = self.core.initialize_edge_state(
-                self.composition,
-                path,
-                edge)
+            # initial = self.core.initialize_edge_state(
+            #     self.composition,
+            #     path,
+            #     edge)
+
+            initial_schema, initial_state = self.core.link_state(
+                edge,
+                path)
 
             # Merge the new edge state with the global state tree, checking for conflicts.
             try:
-                edge_state = deep_merge(edge_state, initial)
-            except Exception:
+                edge_schema, edge_state = self.core.combine(
+                    edge_schema, edge_state,
+                    initial_schema, initial_state)
+                # edge_state = deep_merge(edge_state, initial)
+            except Exception as e:
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n'
                     f'{path}\n{edge}\n{edge_state}'
+                    f'{e.message}'
                 )
 
         # Apply the merged edge_state into the global state and update instance paths.
-        self.merge(self.composition, edge_state)
+        self.merge(edge_schema, edge_state)
 
         # Wire the input/output schema for the Composite from the bridge config.
         self.process_schema = {
-            port: self.core.wire_schema(self.composition, self.bridge[port])
+            port: self.core.wire_schema(
+                self.composition,
+                self.state,
+                self.bridge[port])
             for port in ['inputs', 'outputs']
         }
 
@@ -999,10 +1012,10 @@ class Composite(Process):
             path: Path where merge should occur (default: root).
         """
         path = path or []
-        self.composition, self.state = self.core.merge(
+        # self.composition, self.state = self.core.merge(
+        self.composition, self.state = self.core.combine(
             self.composition,
             self.state,
-            path,
             schema,
             state)
         self.find_instance_paths(self.state)
@@ -1025,7 +1038,7 @@ class Composite(Process):
         scoped_schema = set_path({}, path, schema)
 
         # Merge it into the existing schema
-        self.composition = self.core.merge_schemas(self.composition, scoped_schema)
+        self.composition = self.core.merge(self.composition, scoped_schema)
 
         # Re-generate state based on the new schema structure
         self.composition, self.state = self.core.generate(self.composition, self.state)
@@ -1268,7 +1281,7 @@ class Composite(Process):
 
             for step_path in step_paths:
                 step = get_path(self.state, step_path)
-                state = self.core.view_edge(
+                state = self.core.view(
                     self.composition, self.state, step_path, 'inputs'
                 )
 
@@ -1387,7 +1400,10 @@ class Composite(Process):
                 state = future_front['state']
             else:
                 # Otherwise, slice the current state for the process
-                state = self.core.view_edge(self.composition, self.state, path)
+                state = self.core.view(
+                    self.composition,
+                    self.state,
+                    path)
                 process_interval = process['interval']
 
             # Determine the target time for the next update
@@ -1455,7 +1471,7 @@ class Composite(Process):
         # This nested function projects the update into the global state at the given path
         def defer_project(update_result: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
             schema, state, process_path = args
-            return self.core.project_edge(schema, state, process_path, update_result, ports_key)
+            return self.core.project(schema, state, process_path, update_result, ports_key)
 
         # Return a deferred object that will project the update when requested
         return Defer(update, defer_project, (self.composition, self.state, path))
@@ -1484,16 +1500,22 @@ class Composite(Process):
             if not isinstance(series, list):
                 series = [series]
 
-            for update in series:
+            for update_schema, update_state in series:
                 # if update and isinstance(update, dict) and 'environment' in update and update['environment'] and isinstance(update['environment'], dict) and '_react' in update['environment']:
                 #     import ipdb; ipdb.set_trace()
 
                 # Extract all hierarchical paths touched by this update
-                paths = hierarchy_depth(update)
+                paths = hierarchy_depth(update_state)
                 update_paths.extend(paths.keys())
 
-                # Apply update directly to the internal state
-                self.state = self.core.apply_update(self.composition, self.state, update)
+                # Apply update directly to the internal state,
+                # using the schema from the link itself
+                self.state, merges = self.core.apply(
+                    update_schema,
+                    self.state,
+                    update_state)
+
+                self.composition = self.core.handle_merges(self.composition, merges)
 
                 # Read updated bridge outputs, if available
                 bridge_update = self.read_bridge(update)
@@ -1549,14 +1571,13 @@ class Composite(Process):
         Returns:
             A list of updates generated for the bridge outputs.
         """
-        projection = self.core.project(
+        project_schema, project_state = self.core.project_ports(
             self.interface()['inputs'],
             self.bridge['inputs'],
             [],
-            state
-        )
+            state)
 
-        self.merge({}, projection)
+        self.merge({}, project_state)
         self.run(interval)
 
         updates = self.bridge_updates

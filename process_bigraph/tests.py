@@ -20,10 +20,13 @@ from process_bigraph.processes.growth_division import grow_divide_agent, Grow, D
 from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
 from process_bigraph.protocols.rest import rest_get, rest_post
 
-@pytest.fixture
-def core():
-    core = ProcessTypes()
-    return register_types(core)
+# @pytest.fixture
+# def core():
+#     core = allocate_core()
+#     return core
+
+#     # core = ProcessTypes()
+#     # return register_types(core)
 
 
 class IncreaseProcess(Process):
@@ -85,11 +88,11 @@ def test_merge_collections(core):
 def test_process(core):
     process = IncreaseProcess({'rate': 0.2}, core=core)
     interface = process.interface()
-    state = core.fill(interface['inputs'])
-    state = core.fill(interface['outputs'])
+    state = core.fill(interface['inputs'], {})
+    state = core.fill(interface['outputs'], state)
     update = process.update({'level': 5.5}, 1.0)
 
-    new_state = core.apply(
+    new_state, merges = core.apply(
         interface['outputs'],
         state,
         update)
@@ -125,9 +128,11 @@ def test_composite(core):
                 'interval': 1.0,
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core=core)
+            'value': 11.11}}, core=core)
 
     initial_state = {'exchange': 3.33}
+
+    import ipdb; ipdb.set_trace()
 
     updates = composite.update(initial_state, 10.0)
 
@@ -1303,7 +1308,7 @@ if __name__ == '__main__':
     import ipdb; ipdb.set_trace()
 
     test_default_config(core)
-    test_default_process_state(core)
+    # test_default_process_state(core)
     test_merge_collections(core)
     test_process(core)
     test_composite(core)

@@ -74,11 +74,16 @@ def load_local_modules(core) -> list[tuple[str, Process | Step ]]:
 def import_processes(core, name):
     processes = {}
     module = importlib.import_module(name)
+
     for attr in dir(module):
         entry = getattr(module, attr)
-        if inspect.isclass(entry) and issubclass(entry, (Process, Step)):
+
+        if attr == 'register_types':
+            core = entry(core)
+        elif inspect.isclass(entry) and issubclass(entry, (Process, Step)):
             processes[attr] = entry
-    return processes
+
+    return core, processes
 
 
 def traverse_modules(core) -> list[tuple[str, Process | Step ]]:
@@ -86,18 +91,19 @@ def traverse_modules(core) -> list[tuple[str, Process | Step ]]:
     package_modules = pkgutil.walk_packages(['.'])
 
     for _, module_name, is_package in package_modules:
-        processes.update(import_processes(core, module_name))
+        core, imported = import_processes(core, module_name)
+        processes.update(imported)
 
-    return processes
+    return core, processes
 
 
 def discover_packages(core) -> ProcessTypes:
     for name, process in load_local_modules(core):
         if name not in core.process_registry.registry:
-            core.register_process(name, process)
+            core.register_link(name, process)
 
-    processes = traverse_modules(core)
-    core.register_processes(processes)
+    core, processes = traverse_modules(core)
+    core.register_links(processes)
 
     return core
 
