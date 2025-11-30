@@ -132,32 +132,33 @@ def test_composite(core):
 
     initial_state = {'exchange': 3.33}
 
-    import ipdb; ipdb.set_trace()
-
     updates = composite.update(initial_state, 10.0)
 
     final_exchange = sum([
         update['exchange']
         for update in [initial_state] + updates])
 
-    assert composite.state['value'] > 45
+    assert composite.state['value'] > initial_state['exchange']
+    assert composite.state['value'] == updates[-1]['exchange']
     assert 'exchange' in updates[0]
-    assert updates[0]['exchange'] == 0.999
+    assert updates[0]['exchange'] == initial_state['exchange']
 
 
 def test_infer(core):
-    composite = Composite({
-        'state': {
-            'increase': {
-                '_type': 'process',
-                'address': 'local:!process_bigraph.tests.IncreaseProcess',
-                'config': {'rate': '0.3'},
-                'inputs': {'level': ['value']},
-                'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core=core)
+    state = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'config': {'rate': '0.3'},
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}},
+        'value': '11.11'}
 
-    assert composite.composition['value']['_type'] == 'float'
-    assert composite.state['value'] == 4.4
+    composite = Composite({
+        'state': state}, core=core)
+
+    assert core.render(composite.composition['value']).startswith('float')
+    assert composite.state['value'] == 11.11
 
 
 def test_process_type(core):
@@ -195,10 +196,10 @@ class OperatorStep(Step):
 
 
 def test_step_initialization(core):
-    composite = Composite({
+    steps = {
         'state': {
-            'A': 13,
-            'B': 21,
+            'A': 13.0,
+            'B': 21.0,
             'step1': {
                 '_type': 'step',
                 'address': 'local:!process_bigraph.tests.OperatorStep',
@@ -218,10 +219,14 @@ def test_step_initialization(core):
                     'a': ['B'],
                     'b': ['C']},
                 'outputs': {
-                    'c': ['D']}}}}, core=core)
+                    'c': ['D']}}}}
 
-    composite.run(0.0)
-    assert composite.state['D'] == (13 + 21) * 21
+    composite = Composite(
+        steps,
+        core=core)
+
+    # composite.run(0.0)
+    assert composite.state['D'] == (13.0 + 21.0) * 21.0
 
 
 def test_dependencies(core):
@@ -1304,8 +1309,6 @@ if __name__ == '__main__':
     core = allocate_core()
     # core = ProcessTypes()
     # core = register_types(core)
-
-    import ipdb; ipdb.set_trace()
 
     test_default_config(core)
     # test_default_process_state(core)

@@ -907,11 +907,6 @@ class Composite(Process):
         edge_state = {}
         for path, edge in self.edge_paths.items():
             # Generate the initial state for this specific edge (process or step).
-            # initial = self.core.initialize_edge_state(
-            #     self.composition,
-            #     path,
-            #     edge)
-
             initial_schema, initial_state = self.core.link_state(
                 edge,
                 path)
@@ -921,7 +916,7 @@ class Composite(Process):
                 edge_schema, edge_state = self.core.combine(
                     edge_schema, edge_state,
                     initial_schema, initial_state)
-                # edge_state = deep_merge(edge_state, initial)
+
             except Exception as e:
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n'
@@ -930,10 +925,11 @@ class Composite(Process):
                 )
 
         # Apply the merged edge_state into the global state and update instance paths.
-        self.merge(edge_schema, edge_state)
+        self.composition, self.state = self.core.combine(
+            edge_schema, edge_state,
+            self.composition, self.state)
 
-        # Wire the input/output schema for the Composite from the bridge config.
-        self.process_schema = {
+        # Wire the input/output schema for the Composite from the bridge config.        self.process_schema = {
             port: self.core.wire_schema(
                 self.composition,
                 self.state,
@@ -1141,13 +1137,12 @@ class Composite(Process):
         """
         state = state or self.state
 
-        bridge_view = self.core.view(
-            self.interface()['outputs'],
-            self.bridge['outputs'],
+        bridge_view = self.core.view_ports(
+            self.composition,
+            self.state,
             (),
-            top_schema=self.composition,
-            top_state=state
-        )
+            self.interface()['outputs'],
+            self.bridge['outputs'])
 
         return bridge_view
 
@@ -1471,7 +1466,13 @@ class Composite(Process):
         # This nested function projects the update into the global state at the given path
         def defer_project(update_result: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
             schema, state, process_path = args
-            return self.core.project(schema, state, process_path, update_result, ports_key)
+
+            return self.core.project(
+                schema,
+                state,
+                process_path,
+                update_result,
+                ports_key)
 
         # Return a deferred object that will project the update when requested
         return Defer(update, defer_project, (self.composition, self.state, path))
@@ -1515,10 +1516,10 @@ class Composite(Process):
                     self.state,
                     update_state)
 
-                self.composition = self.core.handle_merges(self.composition, merges)
+                self.composition = self.core.handle_merges([self.composition] + merges)
 
                 # Read updated bridge outputs, if available
-                bridge_update = self.read_bridge(update)
+                bridge_update = self.read_bridge(update_state)
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
 
@@ -1576,11 +1577,12 @@ class Composite(Process):
             self.bridge['inputs'],
             [],
             state)
-
         self.merge({}, project_state)
+
+        first_update = self.read_bridge(
+            self.state)
+        self.bridge_updates = [first_update]
+
         self.run(interval)
 
-        updates = self.bridge_updates
-        self.bridge_updates = []
-
-        return updates
+        return self.bridge_updates
