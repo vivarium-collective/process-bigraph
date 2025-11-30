@@ -636,6 +636,7 @@ def test_gillespie_composite(core):
                 'DNA': ['DNA'],
                 'mRNA': ['mRNA']},
             'outputs': {
+                'time': ['global_time'],
                 'DNA': ['DNA'],
                 'mRNA': ['mRNA']}},
 
@@ -683,8 +684,8 @@ def test_gillespie_composite(core):
             'A gene': 11.0,
             'B gene': 5.0},
         'mRNA': {
-            'A mRNA': 33.3,
-            'B mRNA': 2.1}},
+            'A mRNA': 33.0,
+            'B mRNA': 2.0}},
         1000.0)
 
     # TODO: make this work

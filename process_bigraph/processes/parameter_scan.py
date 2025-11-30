@@ -64,31 +64,36 @@ class ODE(Process):
 class RunProcess(Step):
     config_schema = {
         'process_address': 'string',
-        'process_config': 'tree[any]',
+        'process_config': 'node',
         'observables': 'list[path]',
-        'initial_state': 'any',
+        'initial_state': 'node',
         'timestep': 'float',
         'runtime': 'float'}
 
     def initialize(self, config):
+        import ipdb; ipdb.set_trace()
 
-        self.process = self.core.deserialize('process', {
+        process_state = {
             '_type': 'process',
             'address': self.config['process_address'],
             'config': self.config['process_config'],
             'inputs': {},
-            'outputs': {}})['instance']
+            'outputs': {}}
+
+        self.process_schema, self.process = self.core.deserialize(
+            'process', process_state)
+        self.process_instance = self.process['instance']
 
         global_time_precision = interval_time_precision(
             self.config['timestep'])
 
-        process_outputs = self.process.outputs()
+        process_outputs = self.process_instance.outputs()
         self.observables_schema = {}
         self.results_schema = {}
         self.inputs_config = {}
 
         for observable in self.config['observables']:
-            subschema, _ = self.core.slice(
+            subschema, _ = self.core.traverse(
                 process_outputs,
                 {},
                 observable)
@@ -121,13 +126,13 @@ class RunProcess(Step):
             '_type': 'process',
             'address': self.config['process_address'],
             'config': self.config['process_config'],
-            'instance': self.process,
+            'instance': self.process_instance,
             'interval': self.config['timestep'],
-            '_inputs': self.process.inputs(),
-            '_outputs': self.process.outputs(),
+            '_inputs': self.process['_inputs'], # self.process_instance.inputs(),
+            '_outputs': self.process['_outputs'], # self.process_instance.outputs(),
             'inputs': {
                 key: [key]
-                for key in self.process.inputs()},
+                for key in self.process['_inputs']}, # self.process_instance.inputs()},
             'outputs': {
                 key: [key]
                 for key in process_outputs}}
@@ -135,7 +140,7 @@ class RunProcess(Step):
         state['emitter'] = {
             '_type': 'step',
             '_inputs': emit_config,
-            'address': 'local:ram-emitter',
+            'address': 'local:RAMEmitter',
             'config': {
                 'emit': emit_config},
             'inputs': dict(
@@ -152,7 +157,7 @@ class RunProcess(Step):
 
 
     def inputs(self):
-        return self.process.inputs()
+        return self.process_instance.inputs()
 
 
     def outputs(self):
@@ -166,6 +171,8 @@ class RunProcess(Step):
         # TODO: instead of the composite being a reference it is
         #   instead read through some port and lives in
         #   the state of the simulation (??)
+
+        import ipdb; ipdb.set_trace()
 
         if self.composite is None:
             self.document['state'] = deep_merge(

@@ -42,7 +42,7 @@ class GillespieInterval(Step):
 
     def outputs(self):
         return {
-            'interval': 'interval'}
+            'interval': 'overwrite[float]'}
 
 
     def initial_state(self):
