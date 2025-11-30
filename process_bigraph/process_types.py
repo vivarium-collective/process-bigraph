@@ -469,5 +469,3 @@ PROCESS_TYPES = {
         'config': 'quote',
         'shared': 'map[step]'},
 }
-
-

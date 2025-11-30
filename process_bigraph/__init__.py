@@ -51,3 +51,8 @@ def register_types(core):
 def allocate_core():
     core = ProcessTypes()
     return register_types(core)
+
+
+def generate_core():
+    core = ProcessTypes()
+    return discover_packages(core)

@@ -1,16 +1,21 @@
 import importlib.metadata
 import pkgutil
 import inspect
+from pprint import pprint as pp
 
 from process_bigraph import Process, Step, ProcessTypes
 
 
-def recursive_dynamic_import(core, package_name: str, verbose: bool = False) -> list[tuple[str, Process | Step ]]:
+def recursive_dynamic_import(core, package_name: str) -> list[tuple[str, Process | Step ]]:
     classes_to_import = []
     adjusted_package_name: str = package_name.replace("-", "_")
+
     # TODO: fix module name discovery based on package name
     if adjusted_package_name == "vivarium_interface":
         adjusted_package_name = "vivarium"
+    if adjusted_package_name == "sed2_demo":
+        adjusted_package_name = "sed2"
+
     try:
         module = importlib.import_module(adjusted_package_name)
     except ModuleNotFoundError:
@@ -25,75 +30,74 @@ def recursive_dynamic_import(core, package_name: str, verbose: bool = False) -> 
         core = module.register_types(core)
 
     class_members = inspect.getmembers(module, inspect.isclass)
-    if verbose:
-        print(f"Processing {len(class_members)} members...")
-    for class_name, clazz in class_members:
-        if clazz == Process:
-            if verbose:
-                print(f'Process `{class_name}` skipped, because it is `Process` itself.')
+    for class_name, cls in class_members:
+        if cls == Process:
             continue
-        if clazz == Step:
-            if verbose:
-                print(f'Process `{class_name}` skipped, because it is `Step` itself.')
+        if cls == Step:
             continue
-        if issubclass(clazz, Process):
-            if verbose:
-                print(f'Process `{class_name}` added to queue!')
-            classes_to_import.append((f"{package_name}.{class_name}", clazz))
-        if issubclass(clazz, Step):
-            if verbose:
-                print(f'Step `{class_name}` added to queue!')
-            classes_to_import.append((f"{package_name}.{class_name}", clazz))
-        if verbose:
-            print(f'Invalid `{class_name}` skipped; not a Process nor Step!')
+        if issubclass(cls, Process):
+            classes_to_import.append((f"{package_name}.{class_name}", cls))
+        if issubclass(cls, Step):
+            classes_to_import.append((f"{package_name}.{class_name}", cls))
 
-    path = module.__path__ if hasattr(module, '__path__') else "<No `__path__` attr>"
     modules_to_check = pkgutil.iter_modules(module.__path__) if hasattr(module, '__path__') else []
-    if verbose:
-        print(f"Checking for modules in `{module.__name__}` [path: {path}]...")
+
     for _module_loader, subname, isPkg in modules_to_check:
-        # if not isPkg: continue
-        if verbose:
-            print(f"Found: {adjusted_package_name}.{subname}")
-        classes_to_import += recursive_dynamic_import(core, f"{adjusted_package_name}.{subname}", verbose)
-    if verbose:
-        print(f'Found {len(classes_to_import)} classes in `{package_name}` to import'"")
+        classes_to_import += recursive_dynamic_import(core, f"{adjusted_package_name}.{subname}")
+
     return classes_to_import
 
 
-def load_local_modules(core, verbose: bool = False) -> list[tuple[str, Process | Step ]]:
-    if verbose:
-        print("Loading local registry...")
-    packages = importlib.metadata.distributions()
-    classes_to_load = []
-    for package in packages:
-        if not does_package_require_process_bigraph(package):
-            continue
-        # If a package requires BSail, it probably has abstractions for us; worth importing.
-        if verbose:
-            print(f'Relevant Processes found in `{package.name}`...')
-        classes_to_load += recursive_dynamic_import(core, package.name, verbose)
+def import_package_modules(core, name, package):
+    import ipdb; ipdb.set_trace()
 
-    return classes_to_load
 
-def does_package_require_process_bigraph(package: importlib.metadata.Distribution) -> bool:
+def is_process_library(package: importlib.metadata.Distribution) -> bool:
     for entry in ([] if package.requires is None else package.requires):
         if "process-bigraph" in entry:
             return True
+
     return False
 
 
-def discover_packages(core, verbose: bool) -> ProcessTypes:
-    # core = ProcessTypes()
-    counter = 0
-    for name, clazz in load_local_modules(core, verbose):
+def load_local_modules(core) -> list[tuple[str, Process | Step ]]:
+    packages = importlib.metadata.distributions()
+    processes = []
+    for package in packages:
+        if not is_process_library(package):
+            continue
+        processes += recursive_dynamic_import(core, package.name)
+ 
+    return processes
+
+
+def import_processes(core, name):
+    processes = {}
+    module = importlib.import_module(name)
+    for attr in dir(module):
+        entry = getattr(module, attr)
+        if inspect.isclass(entry) and issubclass(entry, (Process, Step)):
+            processes[attr] = entry
+    return processes
+
+
+def traverse_modules(core) -> list[tuple[str, Process | Step ]]:
+    processes = {}
+    package_modules = pkgutil.walk_packages(['.'])
+
+    for _, module_name, is_package in package_modules:
+        processes.update(import_processes(core, module_name))
+
+    return processes
+
+
+def discover_packages(core) -> ProcessTypes:
+    for name, process in load_local_modules(core):
         if name not in core.process_registry.registry:
-            core.register_process(name, clazz)
-            if verbose:
-                counter += 1
-                print(f'Registered `{name}` to `{clazz.__name__}`')
-    if verbose:
-        print(f"Registered {counter} processes...")
+            core.register_process(name, process)
+
+    processes = traverse_modules(core)
+    core.register_processes(processes)
 
     return core
 
