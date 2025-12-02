@@ -1,10 +1,10 @@
-from process_bigraph.types.process import Process, Step, deserialize
+from process_bigraph.types.process import ProcessLink, StepLink, deserialize
 
 
 def register_types(core):
     process_types = {
-        'process': Process,
-        'step': Step}
+        'process': ProcessLink,
+        'step': StepLink}
 
     core.register_types(process_types)
 

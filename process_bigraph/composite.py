@@ -1018,6 +1018,7 @@ class Composite(Process):
             self.state,
             schema,
             state)
+
         self.find_instance_paths(self.state)
 
     def merge_schema(

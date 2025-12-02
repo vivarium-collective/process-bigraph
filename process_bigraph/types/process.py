@@ -7,17 +7,17 @@ from bigraph_schema.methods import resolve, deserialize, deserialize_link, defau
 
 
 @dataclass(kw_only=True)
-class Step(Link):
+class StepLink(Link):
     pass
 
 
 @dataclass(kw_only=True)
-class Process(Link):
+class ProcessLink(Link):
     interval: Float = field(default_factory=Float)
 
 
 @dispatch
-def default(schema: Process):
+def default(schema: ProcessLink):
     link = default_link(schema)
 
     link['interval'] = default(
@@ -27,7 +27,7 @@ def default(schema: Process):
 
 
 @deserialize.dispatch
-def deserialize(core, schema: Process, state, path=()):
+def deserialize(core, schema: ProcessLink, state, path=()):
     link_schema, link_state, merges = deserialize_link(core, schema, state, path=path)
 
     _, link_state['interval'], _ = deserialize(
