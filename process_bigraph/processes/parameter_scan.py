@@ -71,8 +71,6 @@ class RunProcess(Step):
         'runtime': 'float'}
 
     def initialize(self, config):
-        import ipdb; ipdb.set_trace()
-
         process_state = {
             '_type': 'process',
             'address': self.config['process_address'],
@@ -171,8 +169,6 @@ class RunProcess(Step):
         # TODO: instead of the composite being a reference it is
         #   instead read through some port and lives in
         #   the state of the simulation (??)
-
-        import ipdb; ipdb.set_trace()
 
         if self.composite is None:
             self.document['state'] = deep_merge(

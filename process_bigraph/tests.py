@@ -1215,8 +1215,6 @@ def test_dfba_process(core):
         path=f'/process/{dfba_name}/config-schema')
     dfba_config_schema = rest_get(schema_url)
 
-    # import ipdb; ipdb.set_trace()
-
     dfba_config = {
         'model_file': 'textbook',
         'substrate_update_reactions': {

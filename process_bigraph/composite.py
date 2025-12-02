@@ -886,7 +886,7 @@ class Composite(Process):
 
         # Generate internal schema and state structures using the core engine.
         # self.composition, self.state = self.core.generate(
-        self.composition, self.state = self.core.unify(
+        self.composition, self.state = self.core.deserialize(
             initial_composition,
             initial_state)
 
