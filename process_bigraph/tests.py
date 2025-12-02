@@ -744,8 +744,6 @@ def test_merge_schema(core):
                 'inputs': {'level': ['..', '..', 'b']},
                 'outputs': {'level': ['..', '..', 'a']}}}}
 
-    import ipdb; ipdb.set_trace()
-
     merge.merge(
         {'atoms': {'_value': nested_increase_schema}},
         {})
