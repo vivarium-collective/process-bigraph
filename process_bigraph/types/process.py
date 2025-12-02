@@ -37,3 +37,5 @@ def deserialize(core, schema: ProcessLink, state, path=()):
         path+('interval',))
 
     return link_schema, link_state, merges
+
+

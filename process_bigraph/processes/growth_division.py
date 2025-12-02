@@ -92,7 +92,7 @@ def generate_bridge(schema, state, interval=1.0):
 
     composite = {
         '_type': 'process',
-        'address': 'parallel:composite',
+        'address': 'parallel:Composite',
         'interval': interval,
         'config': config,
         'inputs': generate_bridge_wires(schema['inputs']),
@@ -134,7 +134,7 @@ def grow_divide_agent(config=None, state=None, path=None):
     grow_divide_state = {
         'grow': {
             '_type': 'process',
-            'address': 'local:grow',
+            'address': 'local:Grow',
             'config': grow_config,
             'inputs': {
                 'mass': ['mass']},
@@ -143,7 +143,7 @@ def grow_divide_agent(config=None, state=None, path=None):
 
         'divide': {
             '_type': 'process',
-            'address': 'local:divide',
+            'address': 'local:Divide',
             'config': divide_config,
             'inputs': {
                 'trigger': ['mass']},

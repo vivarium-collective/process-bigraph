@@ -8,13 +8,18 @@ python multiprocessing
 import sys
 import pstats
 from typing import Any, Dict, Optional, Union, List, Tuple
+from dataclasses import dataclass, is_dataclass, field
 
 import multiprocessing
 from multiprocessing.connection import Connection
 
+from bigraph_schema.schema import String, Protocol
+from bigraph_schema.methods import load_protocol, load_local_protocol
+
 from process_bigraph.composite import Process
-from process_bigraph.protocols.protocol import Protocol
-from process_bigraph.protocols.local import LocalProtocol
+
+# from process_bigraph.protocols.protocol import Protocol
+# from process_bigraph.protocols.local import LocalProtocol
 
 def _handle_parallel_process(
         connection: Connection, process: Process,
@@ -229,13 +234,20 @@ class ParallelProcess(Process):
         self.end()
 
 
+@dataclass(kw_only=True)
 class ParallelProtocol(Protocol):
-    @staticmethod
-    def interface(core, address):
-        local_instantiate = LocalProtocol.interface(core, address)
-        def instantiate(config, core=None):
-            instance = local_instantiate(config, core=core)
-            return ParallelProcess(instance)
+    data: String = field(default_factory=String)
 
-        instantiate.config_schema = local_instantiate.config_schema
-        return instantiate
+
+@load_protocol.dispatch
+def load_protocol(core, protocol: ParallelProtocol, data):
+    local_instantiate = load_local_protocol(core, protocol, data)
+
+    def instantiate(config, core=None):
+        instance = local_instantiate(config, core=core)
+        return ParallelProcess(instance)
+
+    import ipdb; ipdb.set_trace()
+
+    instantiate.config_schema = local_instantiate.config_schema
+    return instantiate
