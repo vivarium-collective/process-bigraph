@@ -567,6 +567,7 @@ def test_parameter_scan(core):
             'outputs': {
                 'results': ['results']}}}
 
+
     scan = Composite({
         'bridge': {
             'outputs': {
@@ -574,9 +575,7 @@ def test_parameter_scan(core):
         'state': state},
         core=core)
 
-    # TODO: make a method so we can run it directly, provide some way to get the result out
-    # result = scan.update({})
-    result = scan.update({}, 0.0)
+    assert len(scan.state['results']) == 4
 
 
 def test_composite_workflow(core):

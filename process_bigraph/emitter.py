@@ -31,9 +31,9 @@ def anyize_paths(tree):
     """Recursively convert all leaves of a nested path tree to 'any'."""
     if isinstance(tree, dict):
         return {key: anyize_paths(value) for key, value in tree.items()}
-    return 'any'
+    return 'node'
 
-def emitter_from_wires(wires, address='local:ram-emitter'):
+def emitter_from_wires(wires, address='local:RAMEmitter'):
     """Create an emitter step spec from wire mappings."""
     return {
         '_type': 'step',

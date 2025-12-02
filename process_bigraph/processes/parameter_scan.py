@@ -239,14 +239,13 @@ class ParameterScan(Step):
     config_schema = {
         'parameter_ranges': 'list[tuple[path,list[float]]]',
         'process_address': 'string',
-        'process_config': 'tree[any]',
-        'initial_state': 'tree[any]',
+        'process_config': 'tree[node]',
+        'initial_state': 'tree[node]',
         'observables': 'list[path]',
         'timestep': 'float',
         'runtime': 'float'}
 
     def initialize(self, config=None):
-
         self.steps_count = int(
             self.config['runtime'] / self.config['timestep']) + 1
         self.observables_count = len(
@@ -305,7 +304,7 @@ class ParameterScan(Step):
                 'time': 'list[float]'}
 
             for observable_path in self.config['observables']:
-                observable_schema, _ = self.core.slice(
+                observable_schema, _ = self.core.traverse(
                     process.outputs(),
                     {},
                     observable_path)
@@ -331,22 +330,21 @@ class ParameterScan(Step):
 
         update = {}
         for result in results:
-            observable_list = []
-            key = list(result.keys())[0]
-            values = list(result.values())[0]
-            update[key] = {'time': values['time']}
+            for key, value in result.items():
+                update[key] = {
+                    'time': value['time']}
 
-            for observable in self.config['observables']:
-                subschema = self.results_schema[key]
-                value_schema, value = self.core.slice(
-                    subschema,
-                    values,
-                    observable)
+                for observable in self.config['observables']:
+                    subschema = self.results_schema[key]
+                    value_schema, value = self.core.traverse(
+                        subschema,
+                        value,
+                        observable)
 
-                set_path(
-                    update[key],
-                    observable,
-                    value)
+                    set_path(
+                        update,
+                        [key] + observable,
+                        value)
 
         return {
             'results': update}
