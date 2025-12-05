@@ -65,10 +65,12 @@ class Divide(Step):
             # return divide reaction
             return {
                 'environment': {
-                    '_react': {
-                        'divide': {
-                            'mother': mother,
-                            'daughters': daughters}}}}
+                    '_remove': [mother],
+                    '_add': daughters}}
+                    # '_react': {
+                    #     'divide': {
+                    #         'mother': mother,
+                    #         'daughters': daughters}}}}
         else:
             return {
                 'environment': {}}

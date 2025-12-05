@@ -10,6 +10,7 @@ import random
 from urllib.parse import urlparse, urlunparse
 
 from bigraph_schema import default
+from bigraph_schema.schema import Path
 from process_bigraph import register_types, ProcessTypes, generate_core, allocate_core
 
 from process_bigraph.composite import (
@@ -546,6 +547,9 @@ def test_parameter_scan(core):
     # TODO: make a parameter scan with a biosimulator process,
     #   ie - Copasi
 
+    ranges = core.access('list[tuple[path,list[float]]]')
+    assert isinstance(ranges._element._values[0], Path)
+
     state = {
         'scan': {
             '_type': 'step',
@@ -611,6 +615,8 @@ def test_grow_divide(core):
             '0': {
                 'mass': 1.1}}},
         100.0)
+
+    import ipdb; ipdb.set_trace()
 
     # TODO: mass is not synchronized between inside and outside the composite?
 
@@ -744,8 +750,6 @@ def test_merge_schema(core):
                 'inputs': {'level': ['..', '..', 'b']},
                 'outputs': {'level': ['..', '..', 'a']}}}}
 
-    import ipdb; ipdb.set_trace()
-
     merge.merge(
         {'atoms': {
             '_type': 'map',
@@ -753,7 +757,7 @@ def test_merge_schema(core):
         {})
 
     assert isinstance(merge.state['atoms']['A']['increase']['instance'], Process)
-    assert merge.composition['atoms']._value['increase']['_type'] == 'process'
+    assert isinstance(merge.composition['atoms']._value['increase'], ProcessLink)
     assert ('atoms', 'A', 'increase') in merge.process_paths
 
     merge.merge(

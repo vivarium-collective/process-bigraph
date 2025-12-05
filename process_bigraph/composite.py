@@ -1464,15 +1464,18 @@ class Composite(Process):
         # Invoke the process and retrieve a wrapped SyncUpdate object
         update = process['instance'].invoke(clean_state, interval)
         # This nested function projects the update into the global state at the given path
-        def defer_project(update_result: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
+        def defer_project(update_results: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
             schema, state, process_path = args
 
-            return self.core.project(
+            if not isinstance(update_results, list):
+                update_results = [update_results]
+
+            return [self.core.project(
                 schema,
                 state,
                 process_path,
                 update_result,
-                ports_key)
+                ports_key) for update_result in update_results]
 
         # Return a deferred object that will project the update when requested
         return Defer(update, defer_project, (self.composition, self.state, path))
