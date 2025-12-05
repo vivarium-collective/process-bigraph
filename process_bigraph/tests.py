@@ -631,11 +631,11 @@ def test_grow_divide(core):
 
     composite.save('test_grow_divide_saved.json')
 
-    import ipdb; ipdb.set_trace()
-
     c2 = Composite.load(
         'out/test_grow_divide_saved.json',
         core=core)
+
+    assert c2.state['environment'].keys() == composite.state['environment'].keys()
 
     # assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
@@ -888,6 +888,8 @@ def test_star_update(core):
                         'glucose': 2.375172278348736},
                     'volume': 300},
                 'position': [0.5, 2.5, 0.0]}}}
+
+    import ipdb; ipdb.set_trace()
 
     star = Composite({
         'composition': composition,

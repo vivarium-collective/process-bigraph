@@ -970,8 +970,6 @@ class Composite(Process):
         """
         with open(path) as data:
             document = json.load(data)
-            composition = document['composition']
-            document['composition'] = core.deserialize('schema', composition)
             return cls(document, core=core)
           
     def clean_front(self, state):
@@ -1078,7 +1076,8 @@ class Composite(Process):
         Returns:
             A serialized schema representation.
         """
-        return self.core.serialize('schema', self.composition)
+        return self.core.render(self.composition)
+        # return self.core.serialize('schema', self.composition)
 
     def save(
             self,
