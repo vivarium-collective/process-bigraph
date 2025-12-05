@@ -62,8 +62,6 @@ class Divide(Step):
                                 'agent_id': f'{mother}_{i}'}}}})
                 for i in range(self.config['divisions'])]
 
-            # import ipdb; ipdb.set_trace()
-
             # return divide reaction
             return {
                 'environment': {
@@ -71,6 +69,9 @@ class Divide(Step):
                         'divide': {
                             'mother': mother,
                             'daughters': daughters}}}}
+        else:
+            return {
+                'environment': {}}
 
 
 def generate_bridge_wires(schema):
@@ -92,7 +93,8 @@ def generate_bridge(schema, state, interval=1.0):
 
     composite = {
         '_type': 'process',
-        'address': 'parallel:Composite',
+        # 'address': 'parallel:Composite',
+        'address': 'local:Composite',
         'interval': interval,
         'config': config,
         'inputs': generate_bridge_wires(schema['inputs']),

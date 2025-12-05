@@ -929,9 +929,6 @@ class Composite(Process):
             edge_schema, edge_state,
             self.composition, self.state)
 
-        self.composition, self.state = self.core.deserialize(
-            self.composition, self.state)
-
         # Wire the input/output schema for the Composite from the bridge config.
         self.process_schema = {
             port: self.core.wire_schema(
@@ -1282,13 +1279,12 @@ class Composite(Process):
             for step_path in step_paths:
                 step = get_path(self.state, step_path)
                 state = self.core.view(
-                    self.composition, self.state, step_path, 'inputs'
-                )
+                    self.composition, self.state, step_path, 'inputs')
 
                 # Steps are always invoked with interval = -1.0
                 step_update = self.process_update(
-                    step_path, step, state, -1.0, 'outputs'
-                )
+                    step_path, step, state, -1.0, 'outputs')
+
                 updates.append(step_update)
 
             update_paths = self.apply_updates(updates)
@@ -1467,7 +1463,6 @@ class Composite(Process):
 
         # Invoke the process and retrieve a wrapped SyncUpdate object
         update = process['instance'].invoke(clean_state, interval)
-
         # This nested function projects the update into the global state at the given path
         def defer_project(update_result: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
             schema, state, process_path = args
@@ -1511,6 +1506,9 @@ class Composite(Process):
                 #     import ipdb; ipdb.set_trace()
 
                 # Extract all hierarchical paths touched by this update
+                if isinstance(update_state, list):
+                    import ipdb; ipdb.set_trace()
+
                 paths = hierarchy_depth(update_state)
                 update_paths.extend(paths.keys())
 

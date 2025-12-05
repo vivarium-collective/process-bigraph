@@ -11,9 +11,14 @@ class StepLink(Link):
     pass
 
 
+def float_default(value):
+    def float_factory():
+        return Float(_default=value)
+    return float_factory
+
 @dataclass(kw_only=True)
 class ProcessLink(Link):
-    interval: Float = field(default_factory=Float)
+    interval: Float = field(default_factory=float_default(1.0))
 
 
 @dispatch
