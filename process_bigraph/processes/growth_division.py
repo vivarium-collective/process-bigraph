@@ -72,6 +72,8 @@ class Divide(Step):
                     #             'agent_id': f'{mother}_{i}'}}}})
 
 
+            print(f'dividing! {[d[0] for d in daughters]}')
+
             # return divide reaction
             return {
                 'environment': {

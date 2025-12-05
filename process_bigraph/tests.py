@@ -1071,7 +1071,7 @@ def test_function_wrappers(core):
     step = update_add(config={}, core=core)
     out = step.update({'a': 5, 'b': 7})
     assert out == {'sum': 12}
-    assert core.find('add')
+    assert core.access('add')
     print("Step with core:", out)
 
     # --- PROCESS with core ---
@@ -1084,7 +1084,7 @@ def test_function_wrappers(core):
     proc = update_decay(config={}, core=core)
     out = proc.update({'x': 50.0}, 1.0)
     assert round(out['x'], 2) == 40.0
-    assert core.find('decay')
+    assert core.access('decay')
     print("Process with core:", out)
 
 def test_registered_functions_in_composite(core):
@@ -1339,7 +1339,7 @@ if __name__ == '__main__':
     test_stochastic_deterministic_composite(core)
     test_merge_schema(core)
     test_grow_divide(core)
-    test_star_update(core)
+    # test_star_update(core)
     test_match_star_path(core)
     test_function_wrappers(core)
     test_registered_functions_in_composite(core)

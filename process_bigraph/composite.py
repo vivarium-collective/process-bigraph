@@ -678,7 +678,7 @@ def as_step(inputs, outputs, core=None):
         FunctionStep.__name__ = step_name + 'Step'
 
         if core is not None:
-            core.register_process(step_name, FunctionStep)
+            core.register_link(step_name, FunctionStep)
 
         return FunctionStep
 
@@ -710,7 +710,7 @@ def as_process(inputs, outputs, core=None):
         FunctionProcess.__name__ = process_name + 'Process'
 
         if core is not None:
-            core.register_process(process_name, FunctionProcess)
+            core.register_link(process_name, FunctionProcess)
 
         return FunctionProcess
 
