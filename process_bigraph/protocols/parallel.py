@@ -247,7 +247,5 @@ def load_protocol(core, protocol: ParallelProtocol, data):
         instance = local_instantiate(config, core=core)
         return ParallelProcess(instance)
 
-    import ipdb; ipdb.set_trace()
-
     instantiate.config_schema = local_instantiate.config_schema
     return instantiate

@@ -124,7 +124,7 @@ def test_composite(core):
                 'exchange': ['value']}},
         'state': {
             'increase': {
-                'address': 'local:!process_bigraph.tests.IncreaseProcess',
+                'address': 'local:IncreaseProcess',
                 'config': {'rate': 0.3},
                 'interval': 1.0,
                 'inputs': {'level': ['value']},
@@ -149,7 +149,7 @@ def test_infer(core):
     state = {
         'increase': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'address': 'local:IncreaseProcess',
             'config': {'rate': '0.3'},
             'inputs': {'level': ['value']},
             'outputs': {'level': ['value']}},
@@ -710,7 +710,7 @@ def test_merge_schema(core):
         'increase': {
             '_type': 'process',
             '_default': {
-                'address': 'local:!process_bigraph.tests.IncreaseProcess',
+                'address': 'local:IncreaseProcess',
                 'config': {'rate': 0.0001},
                 'inputs': {'level': ['b']},
                 'outputs': {'level': ['a']}}}}
@@ -739,7 +739,7 @@ def test_merge_schema(core):
         'increase': {
             '_type': 'process',
             '_default': {
-                'address': 'local:!process_bigraph.tests.IncreaseProcess',
+                'address': 'local:IncreaseProcess',
                 'config': {'rate': 0.0001},
                 'inputs': {'level': ['..', '..', 'b']},
                 'outputs': {'level': ['..', '..', 'a']}}}}
@@ -771,13 +771,13 @@ def test_shared_steps(core):
         'value': 1.1,
         'increase': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'address': 'local:IncreaseProcess',
             'config': {'rate': initial_rate},
             'inputs': {'level': ['value']},
             'outputs': {'level': ['value']},
             'shared': {
                 'accelerate': {
-                    'address': 'local:!process_bigraph.tests.IncreaseRate',
+                    'address': 'local:IncreaseRate',
                     'config': {'acceleration': '3e-20'},
                     'inputs': {'level': ['..', 'value']}}}},
                     # 'inputs': {'level': ['..', '..', 'value']}}}},

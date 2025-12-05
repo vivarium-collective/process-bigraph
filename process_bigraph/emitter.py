@@ -266,13 +266,13 @@ def test_ram_emitter(core):
     composite_spec = {
         'increase': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'address': 'local:IncreaseProcess',
             'config': {'rate': 0.3},
             'inputs': {'level': ['valueA']},
             'outputs': {'level': ['valueA']}},
         'increase2': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'address': 'local:IncreaseProcess',
             'config': {'rate': 0.1},
             'inputs': {'level': ['valueB']},
             'outputs': {'level': ['valueB']}},
@@ -303,7 +303,7 @@ def test_json_emitter(core):
     composite_spec = {
         'increase': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'address': 'local:IncreaseProcess',
             'config': {'rate': 0.3},
             'interval': 1.0,
             'inputs': {'level': ['value']},
