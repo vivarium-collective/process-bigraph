@@ -56,11 +56,21 @@ class Divide(Step):
             mother = self.config['agent_id']
             daughters = [(
                 f'{mother}_{i}', {
-                    'state': {
-                        'divide': {
-                            'config': {
-                                'agent_id': f'{mother}_{i}'}}}})
+                    'grow_divide': grow_divide_agent(
+                        state={
+                            'mass': state['trigger'] / 2,
+                            'divide': {
+                                'config': {
+                                    'agent_id': f'{mother}_{i}'}}},
+                        path=[f'{mother}_{i}'])})
                 for i in range(self.config['divisions'])]
+
+                    # 'state': {
+                    #     'mass': state['trigger'] / 2,
+                    #     'divide': {
+                    #         'config': {
+                    #             'agent_id': f'{mother}_{i}'}}}})
+
 
             # return divide reaction
             return {

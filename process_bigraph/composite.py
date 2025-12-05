@@ -1139,9 +1139,12 @@ class Composite(Process):
         """
         state = state or self.state
 
+        # if 'environment' in state and '_add' in state['environment']:
+        #     import ipdb; ipdb.set_trace()
+
         bridge_view = self.core.view_ports(
             self.composition,
-            self.state,
+            state,
             (),
             self.interface()['outputs'],
             self.bridge['outputs'])
@@ -1509,9 +1512,6 @@ class Composite(Process):
                 #     import ipdb; ipdb.set_trace()
 
                 # Extract all hierarchical paths touched by this update
-                if isinstance(update_state, list):
-                    import ipdb; ipdb.set_trace()
-
                 paths = hierarchy_depth(update_state)
                 update_paths.extend(paths.keys())
 
@@ -1528,6 +1528,8 @@ class Composite(Process):
                 bridge_update = self.read_bridge(update_state)
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
+
+        self.composition, self.state = self.core.deserialize(self.composition, self.state)
 
         # Refresh process and step instance paths
         self.find_instance_paths(self.state)
@@ -1585,9 +1587,11 @@ class Composite(Process):
             state)
         self.merge({}, project_state)
 
-        first_update = self.read_bridge(
-            self.state)
-        self.bridge_updates = [first_update]
+        # first_update = self.read_bridge(
+        #     self.state)
+        # self.bridge_updates = [first_update]
+
+        self.bridge_updates = []
 
         self.run(interval)
 
