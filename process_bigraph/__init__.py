@@ -5,8 +5,8 @@ from process_bigraph.processes import register_processes
 from process_bigraph.composite import Process, Step, Composite, interval_time_precision
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state, BASE_EMITTERS
 from process_bigraph.process_types import ProcessTypes
-from process_bigraph.types import register_types as register_process_types
 from process_bigraph.package.discover import discover_packages
+from process_bigraph.types import StepLink, ProcessLink, CompositeLink
 
 pretty = pprint.PrettyPrinter(indent=2)
 
@@ -43,19 +43,18 @@ def register_types(core):
     core.register_type('ode_config', {
         'stoichiometry': {
             '_type': 'array',
-            '_data': 'integer'},
+            '_data': 'int64'},
         'rates': 'map[float]',
         'species': 'map[float]'})
-
-    # register_processes(
-    #     core)
 
     return core
 
 
 def allocate_core():
     core = Core(BASE_TYPES)
-    return discover_packages(core)
+    core = discover_packages(core)
+
+    return core
 
 
 def generate_core():

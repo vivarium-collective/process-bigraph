@@ -3,18 +3,12 @@ import pkgutil
 import inspect
 from pprint import pprint as pp
 
-from process_bigraph import Process, Step, ProcessTypes
+from bigraph_schema import Edge
 
 
-def recursive_dynamic_import(core, package_name: str) -> list[tuple[str, Process | Step ]]:
+def recursive_dynamic_import(core, package_name: str) -> list[tuple[str, Edge ]]:
     classes_to_import = []
     adjusted_package_name: str = package_name.replace("-", "_")
-
-    # TODO: fix module name discovery based on package name
-    if adjusted_package_name == "vivarium_interface":
-        adjusted_package_name = "vivarium"
-    if adjusted_package_name == "sed2_demo":
-        adjusted_package_name = "sed2"
 
     try:
         module = importlib.import_module(adjusted_package_name)
@@ -31,13 +25,7 @@ def recursive_dynamic_import(core, package_name: str) -> list[tuple[str, Process
 
     class_members = inspect.getmembers(module, inspect.isclass)
     for class_name, cls in class_members:
-        if cls == Process:
-            continue
-        if cls == Step:
-            continue
-        if issubclass(cls, Process):
-            classes_to_import.append((f"{package_name}.{class_name}", cls))
-        if issubclass(cls, Step):
+        if issubclass(cls, Edge):
             classes_to_import.append((f"{package_name}.{class_name}", cls))
 
     modules_to_check = pkgutil.iter_modules(module.__path__) if hasattr(module, '__path__') else []
@@ -53,6 +41,9 @@ def import_package_modules(core, name, package):
 
 
 def is_process_library(package: importlib.metadata.Distribution) -> bool:
+    if package.name == 'process-bigraph':
+        return True
+
     for entry in ([] if package.requires is None else package.requires):
         if "process-bigraph" in entry:
             return True
@@ -60,12 +51,13 @@ def is_process_library(package: importlib.metadata.Distribution) -> bool:
     return False
 
 
-def load_local_modules(core) -> list[tuple[str, Process | Step ]]:
+def load_local_modules(core) -> list[tuple[str, Edge ]]:
     packages = importlib.metadata.distributions()
     processes = []
     for package in packages:
         if not is_process_library(package):
             continue
+
         processes += recursive_dynamic_import(core, package.name)
  
     return processes
@@ -80,13 +72,13 @@ def import_processes(core, name):
 
         if attr == 'register_types':
             core = entry(core)
-        elif inspect.isclass(entry) and issubclass(entry, (Process, Step)):
+        elif inspect.isclass(entry) and issubclass(entry, Edge):
             processes[attr] = entry
 
     return core, processes
 
 
-def traverse_modules(core) -> list[tuple[str, Process | Step ]]:
+def traverse_modules(core) -> list[tuple[str, Edge]]:
     processes = {}
     package_modules = pkgutil.walk_packages(['.'])
 
@@ -97,10 +89,12 @@ def traverse_modules(core) -> list[tuple[str, Process | Step ]]:
     return core, processes
 
 
-def discover_packages(core) -> ProcessTypes:
+def discover_packages(core):
     for name, process in load_local_modules(core):
-        if name not in core.process_registry.registry:
-            core.register_link(name, process)
+        core.register_link(name, process)
+        if '.' in name:
+            final_name = name.split('.')[-1]
+            core.register_link(final_name, process)
 
     core, processes = traverse_modules(core)
     core.register_links(processes)
