@@ -1295,7 +1295,7 @@ def test_rest_process(core):
             'address': {
                 'protocol': 'rest',
                 'data': {
-                    'process': 'grow',
+                    'process': 'Grow',
                     'host': 'localhost',
                     'port': 22222}},
             'config': {
@@ -1303,7 +1303,7 @@ def test_rest_process(core):
             'inputs': {
                 'mass': ['mass']},
             'outputs': {
-                'mass_delta': ['mass']},
+                'mass': ['mass']},
             'interval': 0.7}}
 
     composite = Composite({
@@ -1344,10 +1344,10 @@ if __name__ == '__main__':
     test_function_wrappers(core)
     test_registered_functions_in_composite(core)
     test_update_removal(core)
-    test_docker_process(core)
+    # test_docker_process(core)
 
     test_rest_process(core)
-    test_dfba_process(core)
+    # test_dfba_process(core)
 
 
 

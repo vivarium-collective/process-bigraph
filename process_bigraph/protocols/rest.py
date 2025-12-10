@@ -13,9 +13,14 @@ import pstats
 import socket
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, List, Tuple
+from plum import dispatch
+from dataclasses import dataclass, is_dataclass, field
 
 from urllib.parse import urlparse, urlunparse
 import requests
+
+from bigraph_schema.schema import Node, String, Protocol
+from bigraph_schema.methods import load_protocol
 
 from process_bigraph.composite import Process, SyncUpdate
 from process_bigraph.protocols.protocol import Protocol
@@ -32,6 +37,18 @@ def rest_post(url, parameters=None):
     return requests.post(
         urlunparse(url),
         json=parameters).json()
+
+
+@dataclass(kw_only=True)
+class RestData(Node):
+    process: String = field(default_factory=String)
+    host: String = field(default_factory=String)
+    port: String = field(default_factory=String)
+
+
+@dataclass(kw_only=True)
+class RestProtocol(Protocol):
+    data: RestData = field(default_factory=RestData)
 
 
 class RestProcess(Process):
@@ -124,6 +141,7 @@ class RestProcess(Process):
         response = rest_post(self.update_url, {
             'state': state,
             'interval': interval})
+        import ipdb; ipdb.set_trace()
         return response
 
     def end(self) -> None:
@@ -142,30 +160,37 @@ class RestProcess(Process):
         self.end()
 
 
-class RestProtocol(Protocol):
-    @classmethod
-    def interface(cls, core, data):
-        ssh = ''
-        process_name = data['process']
-        host = data['host']
-        port = data['port']
-        base_raw = f'http{ssh}://{host}:{port}'
-        base_url = urlparse(base_raw)
+@load_protocol.dispatch
+def load_protocol(core, protocol: RestProtocol, data):
+    ssh = ''
+    process_name = data['process']
+    host = data['host']
+    port = data['port']
+    base_raw = f'http{ssh}://{host}:{port}'
+    base_url = urlparse(base_raw)
 
-        config_schema_url = base_url._replace(
-            path=f'/process/{process_name}/config-schema')
-        config_schema = rest_get(
-            config_schema_url)
+    config_schema_url = base_url._replace(
+        path=f'/process/{process_name}/config-schema')
+    config_schema = rest_get(
+        config_schema_url)
 
-        instance = {
-            'base_url': base_url,
-            'process': process_name}
+    instance = {
+        'base_url': base_url,
+        'process': process_name}
 
-        def instantiate(config, core=None):
-            return RestProcess(
-                instance,
-                config,
-                core)
+    def instantiate(config, core=None):
+        return RestProcess(
+            instance,
+            config,
+            core)
 
-        instantiate.config_schema = config_schema
-        return instantiate
+    instantiate.config_schema = config_schema
+    return instantiate
+
+
+def register_types(core):
+    core.register_types({
+        'rest': RestProtocol})
+
+    return core
+

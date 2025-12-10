@@ -23,13 +23,13 @@ class ProcessLink(Link):
 
 
 @dataclass(kw_only=True)
-class CompositeBridge(Node):
+class Bridge(Node):
     inputs: Wires = field(default_factory=Wires)
     outputs: Wires = field(default_factory=Wires)
 
 
 @dataclass(kw_only=True)
-class CompositeInterface(Node):
+class Interface(Node):
     inputs: Schema = field(default_factory=Schema)
     outputs: Schema = field(default_factory=Schema)
 
@@ -38,8 +38,8 @@ class CompositeInterface(Node):
 class CompositeLink(ProcessLink):
     composition: Schema = field(default_factory=Schema)
     state: Node = field(default_factory=Node)
-    interface: CompositeInterface = field(default_factory=CompositeInterface)
-    bridge: CompositeBridge = field(default_factory=CompositeBridge)
+    interface: Interface = field(default_factory=Interface)
+    bridge: Bridge = field(default_factory=Bridge)
 
     
 @default.dispatch
@@ -69,6 +69,8 @@ def register_types(core):
     core.register_types({
         'step': StepLink,
         'process': ProcessLink,
+        'interface': Interface,
+        'bridge': Bridge,
         'composite': CompositeLink})
 
     return core
