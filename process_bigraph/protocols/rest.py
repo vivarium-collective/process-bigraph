@@ -141,7 +141,7 @@ class RestProcess(Process):
         response = rest_post(self.update_url, {
             'state': state,
             'interval': interval})
-        import ipdb; ipdb.set_trace()
+
         return response
 
     def end(self) -> None:

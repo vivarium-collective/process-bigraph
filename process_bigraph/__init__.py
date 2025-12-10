@@ -6,7 +6,7 @@ from process_bigraph.composite import Process, Step, Composite, interval_time_pr
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state, BASE_EMITTERS
 from process_bigraph.process_types import ProcessTypes
 from process_bigraph.package.discover import discover_packages
-from process_bigraph.types import StepLink, ProcessLink, CompositeLink
+from process_bigraph.types import StepLink, ProcessLink, CompositeLink, register_process_types
 
 pretty = pprint.PrettyPrinter(indent=2)
 
@@ -22,6 +22,8 @@ def pf(x):
 
 
 def register_types(core):
+    core = register_process_types(core)
+
     core.register_type('interval', {
         '_inherit': 'float'})
 

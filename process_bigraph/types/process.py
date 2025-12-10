@@ -65,7 +65,7 @@ def deserialize(core, schema: ProcessLink, state, path=()):
     return link_schema, link_state, merges
 
 
-def register_types(core):
+def register_process_types(core):
     core.register_types({
         'step': StepLink,
         'process': ProcessLink,
