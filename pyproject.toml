@@ -10,7 +10,6 @@ dependencies = [
     "ipdb>=0.13.13",
     "matplotlib",
     "pint>=0.24.4",
-    "pytest",
 ]
 
 [tool.setuptools]

@@ -15,7 +15,7 @@ import os
 import json
 import copy
 import uuid
-import pytest
+# import pytest
 import numpy as np
 from typing import Dict
 
@@ -256,11 +256,11 @@ BASE_EMITTERS = {
 # Unit Tests
 # ==========
 
-@pytest.fixture
-def core():
-    from process_bigraph import register_types, ProcessTypes
-    core = ProcessTypes()
-    return register_types(core)
+# @pytest.fixture
+# def core():
+#     from process_bigraph import register_types, ProcessTypes
+#     core = ProcessTypes()
+#     return register_types(core)
 
 def test_ram_emitter(core):
     composite_spec = {
@@ -318,9 +318,9 @@ def test_json_emitter(core):
     print(results)
 
 
-if __name__ == '__main__':
-    from process_bigraph import register_types, ProcessTypes
-    core = ProcessTypes()
-    core = register_types(core)
-    test_ram_emitter(core)
-    test_json_emitter(core)
+# if __name__ == '__main__':
+#     from process_bigraph import register_types, ProcessTypes
+#     core = ProcessTypes()
+#     core = register_types(core)
+#     test_ram_emitter(core)
+#     test_json_emitter(core)

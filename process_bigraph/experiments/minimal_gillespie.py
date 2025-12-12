@@ -9,7 +9,6 @@ general stochastic transcription.
 
 
 import numpy as np
-import pytest
 
 from process_bigraph.composite import Step, Process, Composite, ProcessEnsemble
 

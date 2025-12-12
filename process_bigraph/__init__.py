@@ -1,11 +1,10 @@
 import pprint
-from bigraph_schema import Core, BASE_TYPES
+from bigraph_schema import Core, BASE_TYPES, allocate_core
 from bigraph_schema.registry import deep_merge, default
 from process_bigraph.processes import register_processes
 from process_bigraph.composite import Process, Step, Composite, interval_time_precision
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state, BASE_EMITTERS
 from process_bigraph.process_types import ProcessTypes
-from process_bigraph.package.discover import discover_packages
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink, register_process_types
 
 pretty = pprint.PrettyPrinter(indent=2)
@@ -31,17 +30,6 @@ def register_types(core):
         '_inherit': 'float',
         '_default': 1.0})
 
-    core.register_type('species_dependent_process', {
-        '_inherit': ['process'],
-        '_inputs': {
-            'species': {
-                '_type': 'array',
-                '_data': 'float'}},
-        '_outputs': {
-            'species': {
-                '_type': 'array',
-                '_data': 'float'}}})
-
     core.register_type('ode_config', {
         'stoichiometry': {
             '_type': 'array',
@@ -50,17 +38,4 @@ def register_types(core):
         'species': 'map[float]'})
 
     return core
-
-
-def allocate_core():
-    core = Core(BASE_TYPES)
-    core = discover_packages(core)
-
-    return core
-
-
-def generate_core():
-    core = ProcessTypes()
-    return discover_packages(core)
-
 

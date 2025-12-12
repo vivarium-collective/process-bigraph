@@ -5,14 +5,13 @@ Tests for Process Bigraph
 """
 
 import numpy as np
-import pytest
 import random
 
 from urllib.parse import urlparse, urlunparse
 
 from bigraph_schema import default
 from bigraph_schema.schema import Path
-from process_bigraph import register_types, ProcessTypes, generate_core, allocate_core
+from process_bigraph import allocate_core
 
 from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
@@ -22,14 +21,6 @@ from process_bigraph.processes.growth_division import grow_divide_agent, Grow, D
 from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
 from process_bigraph.protocols.rest import rest_get, rest_post
 from process_bigraph.types import ProcessLink, StepLink
-
-# @pytest.fixture
-# def core():
-#     core = allocate_core()
-#     return core
-
-#     # core = ProcessTypes()
-#     # return register_types(core)
 
 
 class IncreaseProcess(Process):
@@ -207,7 +198,7 @@ def test_step_initialization(core):
             'B': 21.0,
             'step1': {
                 '_type': 'step',
-                'address': 'local:!process_bigraph.tests.OperatorStep',
+                'address': 'local:OperatorStep',
                 'config': {
                     'operator': '+'},
                 'inputs': {
@@ -217,7 +208,7 @@ def test_step_initialization(core):
                     'c': ['C']}},
             'step2': {
                 '_type': 'step',
-                'address': 'local:!process_bigraph.tests.OperatorStep',
+                'address': 'local:OperatorStep',
                 'config': {
                     'operator': '*'},
                 'inputs': {
@@ -242,7 +233,7 @@ def test_dependencies(core):
 
         '1': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '+'},
             'inputs': {
@@ -252,7 +243,7 @@ def test_dependencies(core):
                 'c': ['e']}},
         '2.1': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '-'},
             'inputs': {
@@ -262,7 +253,7 @@ def test_dependencies(core):
                 'c': ['f']}},
         '2.2': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '-'},
             'inputs': {
@@ -272,7 +263,7 @@ def test_dependencies(core):
                 'c': ['g']}},
         '3': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '*'},
             'inputs': {
@@ -282,7 +273,7 @@ def test_dependencies(core):
                 'c': ['h']}},
         '4': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '+'},
             'inputs': {
@@ -350,7 +341,7 @@ class SimpleCompartment(Process):
             #                 'inner': {
             #                     daughter_config['id']: {
             #                         '_type': 'process',
-            #                         'address': 'local:!process_bigraph.tests.SimpleCompartment',
+            #                         'address': 'local:SimpleCompartment',
             #                         'config': daughter_config,
             #                         'inner': daughter_inner,
             #                         'wires': {
@@ -394,13 +385,13 @@ def test_reaction():
                 'inner': {
                     'agent1': {
                         '_type': 'process',
-                        'address': 'local:!process_bigraph.tests.SimpleCompartment',
+                        'address': 'local:SimpleCompartment',
                         'config': {'id': '0'},
                         'concentrations': {},
                         'inner': {
                             'agent2': {
                                 '_type': 'process',
-                                'address': 'local:!process_bigraph.tests.SimpleCompartment',
+                                'address': 'local:SimpleCompartment',
                                 'config': {'id': '0'},
                                 'inner': {},
                                 'inputs': {
@@ -844,7 +835,7 @@ def test_star_update(core):
     state = {
         'write': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.WriteCounts',
+            'address': 'local:WriteCounts',
             'inputs': {
                 'volumes': ['Compartments', '*', 'Shared Environment', 'volume'],
                 'concentrations': ['Compartments', '*', 'Shared Environment', 'concentrations']},
@@ -1011,7 +1002,7 @@ def test_update_removal(core):
                     '_type': 'process',
                     'address': default(
                         'string',
-                        'local:!process_bigraph.tests.BelowProcess'),
+                        'local:BelowProcess'),
                     'config': default('quote', {
                         'creation_probability': 0.01,
                         'annihilation_probability': 0.007}),
@@ -1026,7 +1017,7 @@ def test_update_removal(core):
     state = {
         'above': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.AboveProcess',
+            'address': 'local:AboveProcess',
             'config': {
                 'rate': 0.001},
             'inputs': {
