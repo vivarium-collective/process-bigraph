@@ -1521,7 +1521,9 @@ class Composite(Process):
                     self.state,
                     update_state)
 
-                self.composition = self.core.handle_merges([self.composition] + merges)
+                self.composition = self.core.resolve_merges(
+                    self.composition,
+                    merges)
 
                 # Read updated bridge outputs, if available
                 bridge_update = self.read_bridge(update_state)
