@@ -925,9 +925,10 @@ class Composite(Process):
                 )
 
         # Apply the merged edge_state into the global state and update instance paths.
-        self.composition, self.state = self.core.combine(
-            edge_schema, edge_state,
-            self.composition, self.state)
+        if edge_state:
+            self.composition, self.state = self.core.combine(
+                edge_schema, edge_state,
+                self.composition, self.state)
 
         # Wire the input/output schema for the Composite from the bridge config.
         self.process_schema = {
