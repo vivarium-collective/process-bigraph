@@ -101,7 +101,7 @@ def generate_bridge(schema, state, interval=1.0):
         for port in ['inputs', 'outputs']}
 
     config = {
-        '_type': 'quote',
+        # '_type': 'node',
         'state': state,
         'bridge': bridge}
 

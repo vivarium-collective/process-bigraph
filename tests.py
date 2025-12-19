@@ -1003,7 +1003,7 @@ def test_update_removal(core):
                     'address': default(
                         'string',
                         'local:BelowProcess'),
-                    'config': default('quote', {
+                    'config': default('node', {
                         'creation_probability': 0.01,
                         'annihilation_probability': 0.007}),
                     'inputs': default('wires', {
