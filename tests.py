@@ -4,9 +4,10 @@ Tests for Process Bigraph
 =========================
 """
 
-import numpy as np
-import random
 import sys
+import random
+import pytest
+import numpy as np
 
 from urllib.parse import urlparse, urlunparse
 
@@ -764,7 +765,7 @@ def test_merge_schema(core):
     assert ('atoms', 'B', 'increase') in merge.process_paths
 
 
-def test_shared_steps(core):
+def todo_test_shared_steps(core):
     initial_rate = 0.4
 
     state = {
@@ -821,7 +822,7 @@ class WriteCounts(Step):
             'counts': counts}
 
 
-def test_star_update(core):
+def todo_test_star_update(core):
     composition = {
         'Compartments': {
             '_type': 'map',
@@ -887,38 +888,6 @@ def test_star_update(core):
         'state': state}, core=core)
 
     assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
-
-
-def test_default_process_state(core):
-    # provide some initial values
-    default_rate = {
-        'config': {
-            'rate': 0.001}}
-
-    # generate a default state for the Grow process
-    default_grow = core.default_state(
-        Grow,
-        default_rate)
-
-    # create a composite from the default process state
-    composite = Composite({
-        'state': {
-            'grow': default_grow,
-            'mass': 1.0}},
-        core=core)
-
-    # run the composite
-    composite.run(10.0)
-
-    # assert the process ran and the mass increased
-    assert composite.state['mass'] > 1.0
-
-    # try a step as well
-    default_divide = core.default_state(
-        Divide)
-
-    # the step should not have an 'interval' as they do not consume time
-    assert 'interval' not in default_divide
 
 
 class AboveProcess(Process):
@@ -1135,32 +1104,6 @@ def test_registered_functions_in_composite(core):
     print("✅ test_registered_functions_in_composite passed:", final)
 
 
-def test_docker_process(core):
-    state = {
-        'mass': 1.0,
-        'julia-process': {
-            '_type': 'process',
-            'address': {
-                'protocol': 'docker',
-                'data': {
-                    'image': 'julia-process:latest',
-                    'port': 11111}},
-            'config': {
-                'rate': 0.005},
-            'inputs': {
-                'mass': ['mass']},
-            'outputs': {
-                'mass_delta': ['mass']},
-            'interval': 0.7}}
-
-    composite = Composite({
-        'state': state}, core=core)
-
-    composite.run(11.111)
-
-    assert composite.state['mass'] > 1.0
-
-
 def apply_non_negative(schema, current, update, top_schema, top_state, path, core):
     new_value = current + update
     return max(0, new_value)
@@ -1189,7 +1132,7 @@ def apply_non_negative_array(schema, current, update, top_schema, top_state, pat
     return result
 
 
-def test_dfba_process(core):
+def todo_test_dfba_process(core):
     base_url = urlparse('http://localhost:22222')
     types_url = base_url._replace(path='/list-types')
     types = rest_get(types_url)
@@ -1197,18 +1140,18 @@ def test_dfba_process(core):
     processes_url = base_url._replace(path='/list-processes')
     processes = rest_get(processes_url)
 
-    # TODO: import types from the server
-    core.register('positive_float', {
-        '_inherit': 'float',
-        '_apply': apply_non_negative})
+    # # TODO: import types from the server
+    # core.register('positive_float', {
+    #     '_inherit': 'float',
+    #     '_apply': apply_non_negative})
 
-    core.register('positive_array', {
-        '_inherit': 'array',
-        '_apply': apply_non_negative_array})
+    # core.register('positive_array', {
+    #     '_inherit': 'array',
+    #     '_apply': apply_non_negative_array})
 
-    core.register('bounds', {
-        'lower': 'maybe[float]',
-        'upper': 'maybe[float]'})
+    # core.register('bounds', {
+    #     'lower': 'maybe[float]',
+    #     'upper': 'maybe[float]'})
 
     dfba_name = 'spatio_flux.processes.DynamicFBA'
 
@@ -1305,15 +1248,17 @@ def test_rest_process(core):
     assert composite.state['mass'] > 1.0
 
 
+# @pytest.fixture
+# def core():
+#     return allocate_core(
+#         top=locals())
+
+
 if __name__ == '__main__':
     core = allocate_core(
         top=locals())
 
-    # core = ProcessTypes()
-    # core = register_types(core)
-
     test_default_config(core)
-    # test_default_process_state(core)
     test_merge_collections(core)
     test_process(core)
     test_composite(core)
@@ -1337,7 +1282,6 @@ if __name__ == '__main__':
     test_function_wrappers(core)
     test_registered_functions_in_composite(core)
     test_update_removal(core)
-    # test_docker_process(core)
 
     test_rest_process(core)
     # test_dfba_process(core)

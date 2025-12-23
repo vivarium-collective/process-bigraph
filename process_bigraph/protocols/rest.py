@@ -11,8 +11,10 @@ import time
 import uuid
 import pstats
 import socket
+
 from pathlib import Path
 from typing import Any, Dict, Optional, Union, List, Tuple
+
 from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
 
@@ -23,8 +25,6 @@ from bigraph_schema.schema import Node, String, Protocol
 from bigraph_schema.methods import load_protocol
 
 from process_bigraph.composite import Process, SyncUpdate
-from process_bigraph.protocols.protocol import Protocol
-from process_bigraph.protocols.local import LocalProtocol
 
 
 def rest_get(url, parameters=None):

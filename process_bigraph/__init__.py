@@ -1,17 +1,16 @@
-import pprint
-from bigraph_schema import Core, BASE_TYPES, allocate_core
+from bigraph_schema import allocate_core
+
 from process_bigraph.composite import Process, Step, Composite, interval_time_precision
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state, BASE_EMITTERS
-# from process_bigraph.process_types import ProcessTypes
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink
 
-pretty = pprint.PrettyPrinter(indent=2)
 
+import pprint
+pretty = pprint.PrettyPrinter(indent=2)
 
 def pp(x):
     """Print ``x`` in a pretty format."""
     pretty.pprint(x)
-
 
 def pf(x):
     """Format ``x`` for display."""
