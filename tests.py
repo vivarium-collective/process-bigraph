@@ -6,11 +6,11 @@ Tests for Process Bigraph
 
 import numpy as np
 import random
+import sys
 
 from urllib.parse import urlparse, urlunparse
 
-from bigraph_schema import default
-from bigraph_schema.schema import Path
+from bigraph_schema.schema import Path, make_default
 from process_bigraph import allocate_core
 
 from process_bigraph.composite import (
@@ -51,7 +51,7 @@ class IncreaseProcess(Process):
 
 class IncreaseRate(Step):
     config_schema = {
-        'acceleration': default('float', 0.001)}
+        'acceleration': make_default('float', 0.001)}
 
     def inputs(self):
         return {
@@ -1000,19 +1000,19 @@ def test_update_removal(core):
             '_value': {
                 'below': {
                     '_type': 'process',
-                    'address': default(
+                    'address': make_default(
                         'string',
                         'local:BelowProcess'),
-                    'config': default('node', {
+                    'config': make_default('node', {
                         'creation_probability': 0.01,
                         'annihilation_probability': 0.007}),
-                    'inputs': default('wires', {
+                    'inputs': make_default('wires', {
                         'mass': ['mass'],
                         'entropy': ['entropy']}),
-                    'outputs': default('wires', {
+                    'outputs': make_default('wires', {
                         'entropy': ['entropy'],
                         'environment': ['..']}),
-                    'interval': default('float', 0.4)}}}}
+                    'interval': make_default('float', 0.4)}}}}
 
     state = {
         'above': {
@@ -1306,7 +1306,9 @@ def test_rest_process(core):
 
 
 if __name__ == '__main__':
-    core = allocate_core()
+    core = allocate_core(
+        top=locals())
+
     # core = ProcessTypes()
     # core = register_types(core)
 

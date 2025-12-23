@@ -318,9 +318,10 @@ def test_json_emitter(core):
     print(results)
 
 
-# if __name__ == '__main__':
-#     from process_bigraph import register_types, ProcessTypes
-#     core = ProcessTypes()
-#     core = register_types(core)
-#     test_ram_emitter(core)
-#     test_json_emitter(core)
+
+if __name__ == '__main__':
+    from bigraph_schema import allocate_core
+    core = allocate_core(locals())
+
+    test_ram_emitter(core)
+    test_json_emitter(core)

@@ -24,8 +24,8 @@ from typing import (
 import collections
 
 from bigraph_schema import (
-    Edge, Registry, TypeSystem, visit_method,
-    get_path, set_path, resolve_path, hierarchy_depth, deep_merge,
+    Edge,
+    get_path, set_path, resolve_path, hierarchy_depth,
     is_schema_key, strip_schema_keys)
 
 from bigraph_schema.protocols import local_lookup_module
@@ -120,6 +120,8 @@ def find_step_triggers(
 
     for wire in wire_paths:
         trigger_path = resolve_path(prefix + tuple(wire))
+        if isinstance(trigger_path, list):
+            import ipdb; ipdb.set_trace()
         triggers.setdefault(trigger_path, []).append(path)
 
     return triggers

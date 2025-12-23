@@ -1,4 +1,5 @@
-from process_bigraph.composite import Step, Process, deep_merge
+from bigraph_schema import deep_merge
+from process_bigraph.composite import Step, Process
 
 
 class Grow(Process):
