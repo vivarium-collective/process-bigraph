@@ -985,7 +985,10 @@ class Composite(Process):
             - self.step_paths
         """
         self.process_paths = find_instance_paths(state, 'process_bigraph.composite.Process')
+        previous_step_paths = self.step_paths.keys() if hasattr(self, 'step_paths') else {}
         self.step_paths = find_instance_paths(state, 'process_bigraph.composite.Step')
+        if previous_step_paths != self.step_paths.keys():
+            self.build_step_network()
 
         all_paths = set(
             list(self.process_paths.keys()) +
@@ -1533,6 +1536,7 @@ class Composite(Process):
 
         self.composition, self.state = self.core.deserialize(self.composition, self.state)
 
+        # TODO: are we doing this twice?
         # Refresh process and step instance paths
         self.find_instance_paths(self.state)
 

@@ -1306,7 +1306,7 @@ def test_rest_process(core):
 
 
 if __name__ == '__main__':
-    core = allocate_core()
+    core = allocate_core(locals())
     # core = ProcessTypes()
     # core = register_types(core)
 
