@@ -5,12 +5,14 @@ python multiprocessing
 ===============================================
 """
 
+import time
 import sys
 import pstats
 from typing import Any, Dict, Optional, Union, List, Tuple
 from dataclasses import dataclass, is_dataclass, field
 
 import multiprocessing
+
 from multiprocessing.connection import Connection
 
 from bigraph_schema.schema import String, Protocol
@@ -92,10 +94,12 @@ class ParallelProcess(Process):
         self._pending_command: Optional[
             Tuple[str, Optional[tuple], Optional[dict]]] = None
         self.process = process
+        self.result = None
 
         super().__init__(process.config, core=process.core)
 
         self.profile = profile
+
         self._stats_objs = stats_objs
         assert not self.profile or self._stats_objs is not None
         # Linux's default ``fork`` start method causes a lot of random
@@ -107,6 +111,7 @@ class ParallelProcess(Process):
             start_method = "forkserver"
         else:
             start_method = "spawn"
+
         mp_ctx = multiprocessing.get_context(start_method)
         self.parent, child = mp_ctx.Pipe()
         self.multiprocess = mp_ctx.Process( # type: ignore[attr-defined]
@@ -125,7 +130,7 @@ class ParallelProcess(Process):
         '''
         if run_pre_check:
             self.pre_send_command(command, args, kwargs)
-        import ipdb; ipdb.set_trace()
+
         self.parent.send((command, args, kwargs))
 
     def get_command_result(self):
@@ -141,11 +146,17 @@ class ParallelProcess(Process):
             The command result.
         """
         if not self._pending_command:
-            raise RuntimeError(
-                'Trying to retrieve command result, but no command is '
-                'pending.')
-        self._pending_command = None
-        return self.parent.recv()
+            import ipdb; ipdb.set_trace()
+            print(f'using existing result {self.result}')
+            return self.result
+
+        else:
+            if self.parent.poll(timeout=1.0):
+                self._pending_command = None
+                self.result = self.parent.recv()
+                return self.result
+            else:
+                return self.get_command_result()
 
     def get(self):
         return self.get_command_result()
@@ -246,7 +257,6 @@ def load_protocol(core, protocol: ParallelProtocol, data):
     def instantiate(config, core=None):
         instance = local_instantiate(config, core=core)
 
-        import ipdb; ipdb.set_trace()
         return ParallelProcess(instance)
 
     instantiate.config_schema = local_instantiate.config_schema
