@@ -18,11 +18,10 @@ from bigraph_schema.methods import load_protocol, load_local_protocol
 
 from process_bigraph.composite import Process
 
-# from process_bigraph.protocols.protocol import Protocol
-# from process_bigraph.protocols.local import LocalProtocol
 
 def _handle_parallel_process(
-        connection: Connection, process: Process,
+        connection: Connection,
+        process: Process,
         profile: bool) -> None:
     '''Handle a parallel Vivarium :term:`process`.
 
@@ -126,6 +125,7 @@ class ParallelProcess(Process):
         '''
         if run_pre_check:
             self.pre_send_command(command, args, kwargs)
+        import ipdb; ipdb.set_trace()
         self.parent.send((command, args, kwargs))
 
     def get_command_result(self):
@@ -245,7 +245,17 @@ def load_protocol(core, protocol: ParallelProtocol, data):
 
     def instantiate(config, core=None):
         instance = local_instantiate(config, core=core)
+
+        import ipdb; ipdb.set_trace()
         return ParallelProcess(instance)
 
     instantiate.config_schema = local_instantiate.config_schema
     return instantiate
+
+
+def register_types(core):
+    core.register_types({
+        'parallel': ParallelProtocol})
+
+    return core
+

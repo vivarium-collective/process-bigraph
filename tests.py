@@ -6,9 +6,10 @@ Tests for Process Bigraph
 
 import sys
 import random
-import pytest
+import inspect
 import numpy as np
 
+import pytest
 from urllib.parse import urlparse, urlunparse
 
 from bigraph_schema.schema import Path, make_default
@@ -19,7 +20,7 @@ from process_bigraph.composite import (
 )
 
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
-from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
+from process_bigraph.emitter import emitter_from_wires, gather_emitter_results, add_emitter_to_composite
 from process_bigraph.protocols.rest import rest_get, rest_post
 from process_bigraph.types import ProcessLink, StepLink
 
@@ -159,7 +160,7 @@ def test_infer(core):
 
 
 def test_process_type(core):
-    assert core.access('process')['_type'] == 'process'
+    assert type(core.access('process')) == ProcessLink
 
 
 class OperatorStep(Step):
@@ -1248,14 +1249,76 @@ def test_rest_process(core):
     assert composite.state['mass'] > 1.0
 
 
-# @pytest.fixture
-# def core():
-#     return allocate_core(
-#         top=locals())
+def test_ram_emitter(core):
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.3},
+            'inputs': {'level': ['valueA']},
+            'outputs': {'level': ['valueA']}},
+        'increase2': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.1},
+            'inputs': {'level': ['valueB']},
+            'outputs': {'level': ['valueB']}},
+        'emitter': emitter_from_wires({
+            'time': ['global_time'],
+            'valueA': ['valueA'],
+            'valueB': ['valueB']})}
+
+    composite = Composite({'state': composite_spec}, core=core)
+    composite.run(10)
+
+    results = composite.state['emitter']['instance'].query()
+    assert len(results) == 11
+    assert results[-1]['time'] == 10
+    assert 'valueA' in results[0] and 'valueB' in results[0]
+
+    composite_spec['emitter'] = emitter_from_wires({
+        'time': ['global_time'],
+        'valueA': ['valueA']})
+    composite2 = Composite({'state': composite_spec}, core=core)
+    composite2.run(10)
+
+    results2 = composite2.state['emitter']['instance'].query()
+    assert 'valueA' in results2[0] and 'valueB' not in results2[0]
+    print(results2)
+
+def test_json_emitter(core):
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.3},
+            'interval': 1.0,
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}}}
+    composite = Composite({'state': composite_spec}, core)
+    composite = add_emitter_to_composite(composite, core, emitter_mode='all', address='local:JSONEmitter')
+    composite.run(10)
+
+    results = composite.state['emitter']['instance'].query()
+    assert len(results) == 10
+    assert results[-1]['global_time'] == 10
+    print(results)
+
+
+
+def make_test_core():
+    members = dict(inspect.getmembers(sys.modules[__name__]))
+    return allocate_core(
+        top=members)
+
+
+@pytest.fixture
+def core():
+    return make_test_core()
 
 
 if __name__ == '__main__':
-    core = allocate_core(locals())
+    core = make_test_core()
 
     test_default_config(core)
     test_merge_collections(core)
@@ -1272,6 +1335,9 @@ if __name__ == '__main__':
     test_nested_wires(core)
     test_parameter_scan(core)
     # test_shared_steps(core)
+
+    test_ram_emitter(core)
+    test_json_emitter(core)
 
     test_stochastic_deterministic_composite(core)
     test_merge_schema(core)

@@ -3,7 +3,7 @@ from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
 
 from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema
-from bigraph_schema.methods import resolve, deserialize, deserialize_link, default, default_link
+from bigraph_schema.methods import resolve, realize, realize_link, default, default_link
 
 
 @dataclass(kw_only=True)
@@ -52,11 +52,11 @@ def default(schema: ProcessLink):
     return link
 
 
-@deserialize.dispatch
-def deserialize(core, schema: ProcessLink, state, path=()):
-    link_schema, link_state, merges = deserialize_link(core, schema, state, path=path)
+@realize.dispatch
+def realize(core, schema: ProcessLink, state, path=()):
+    link_schema, link_state, merges = realize_link(core, schema, state, path=path)
 
-    _, link_state['interval'], _ = deserialize(
+    _, link_state['interval'], _ = realize(
         core,
         link_schema.interval,
         state.get('interval'),

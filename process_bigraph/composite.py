@@ -888,7 +888,7 @@ class Composite(Process):
 
         # Generate internal schema and state structures using the core engine.
         # self.composition, self.state = self.core.generate(
-        self.composition, self.state = self.core.deserialize(
+        self.composition, self.state = self.core.realize(
             initial_composition,
             initial_state)
 
@@ -1539,7 +1539,7 @@ class Composite(Process):
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
 
-        self.composition, self.state = self.core.deserialize(self.composition, self.state)
+        self.composition, self.state = self.core.realize(self.composition, self.state)
 
         # TODO: are we doing this twice?
         # Refresh process and step instance paths

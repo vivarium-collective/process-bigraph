@@ -78,7 +78,7 @@ class RunProcess(Step):
             'inputs': {},
             'outputs': {}}
 
-        self.process_schema, self.process = self.core.deserialize(
+        self.process_schema, self.process = self.core.realize(
             'process', process_state)
         self.process_instance = self.process['instance']
 
