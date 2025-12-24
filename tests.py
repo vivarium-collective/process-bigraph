@@ -1255,8 +1255,7 @@ def test_rest_process(core):
 
 
 if __name__ == '__main__':
-    core = allocate_core(
-        top=locals())
+    core = allocate_core(locals())
 
     test_default_config(core)
     test_merge_collections(core)
