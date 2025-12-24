@@ -987,10 +987,13 @@ class Composite(Process):
             - self.step_paths
         """
         self.process_paths = find_instance_paths(state, 'process_bigraph.composite.Process')
-        previous_step_paths = self.step_paths.keys() if hasattr(self, 'step_paths') else {}
-        self.step_paths = find_instance_paths(state, 'process_bigraph.composite.Step')
-        if previous_step_paths != self.step_paths.keys():
-            self.build_step_network()
+        if hasattr(self, 'step_paths'):
+            previous_step_paths = self.step_paths.keys()
+            self.step_paths = find_instance_paths(state, 'process_bigraph.composite.Step')
+            if previous_step_paths != self.step_paths.keys():
+                self.build_step_network()
+        else:
+            self.step_paths = find_instance_paths(state, 'process_bigraph.composite.Step')
 
         all_paths = set(
             list(self.process_paths.keys()) +
