@@ -1,6 +1,6 @@
 [project]
 name = "process-bigraph"
-version = "1.0.0"
+version = "1.0.1"
 description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -17,6 +17,7 @@ packages = [
     "process_bigraph.processes",
     "process_bigraph.protocols",
     "process_bigraph.experiments",
+    "process_bigraph.types",
 ]
 
 # [tool.uv.sources]
