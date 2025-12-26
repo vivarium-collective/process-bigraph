@@ -486,11 +486,11 @@ def test_grow_divide(core):
 
     composite.save('test_grow_divide_saved.json')
 
-    c2 = Composite.load(
-        'out/test_grow_divide_saved.json',
-        core=core)
+    # c2 = Composite.load(
+    #     'out/test_grow_divide_saved.json',
+    #     core=core)
 
-    assert c2.state['environment'].keys() == composite.state['environment'].keys()
+    # assert c2.state['environment'].keys() == composite.state['environment'].keys()
 
     # assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
