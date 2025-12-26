@@ -5,19 +5,29 @@ python multiprocessing
 ===============================================
 """
 
+import time
 import sys
 import pstats
 from typing import Any, Dict, Optional, Union, List, Tuple
+from dataclasses import dataclass, is_dataclass, field
 
 import multiprocessing
+
 from multiprocessing.connection import Connection
 
+from bigraph_schema.schema import String, Protocol
+from bigraph_schema.methods import load_protocol, load_local_protocol
+
 from process_bigraph.composite import Process
-from process_bigraph.protocols.protocol import Protocol
-from process_bigraph.protocols.local import LocalProtocol
+
+
+def find_agent_id(process):
+    return process.config['state']['divide']['config']['agent_id']
+
 
 def _handle_parallel_process(
-        connection: Connection, process: Process,
+        connection: Connection,
+        process: Process,
         profile: bool) -> None:
     '''Handle a parallel Vivarium :term:`process`.
 
@@ -46,13 +56,17 @@ def _handle_parallel_process(
     running = True
 
     while running:
-        command, args, kwargs = connection.recv()
+        try:
+            command, args, kwargs = connection.recv()
+            if command == 'end':
+                running = False
+            else:
+                # print(f'{find_agent_id(process)} - handle running process command: {command} with args: {args} and kwargs: {kwargs}')
+                result = process.run_command(command, args, kwargs)
+                connection.send(result)
 
-        if command == 'end':
+        except EOFError:
             running = False
-        else:
-            result = process.run_command(command, args, kwargs)
-            connection.send(result)
 
     if profile:
         profiler.disable()
@@ -88,10 +102,12 @@ class ParallelProcess(Process):
         self._pending_command: Optional[
             Tuple[str, Optional[tuple], Optional[dict]]] = None
         self.process = process
+        self.result = None
 
         super().__init__(process.config, core=process.core)
 
         self.profile = profile
+
         self._stats_objs = stats_objs
         assert not self.profile or self._stats_objs is not None
         # Linux's default ``fork`` start method causes a lot of random
@@ -103,12 +119,19 @@ class ParallelProcess(Process):
             start_method = "forkserver"
         else:
             start_method = "spawn"
+
         mp_ctx = multiprocessing.get_context(start_method)
         self.parent, child = mp_ctx.Pipe()
+
+        agent_id = find_agent_id(process)
+        # print(f'{agent_id} - starting multiprocess')
+
         self.multiprocess = mp_ctx.Process( # type: ignore[attr-defined]
             target=_handle_parallel_process,
             args=(child, process, self.profile))
         self.multiprocess.start()
+
+        # print(f'{find_agent_id(process)} - multiprocess started')
 
     def send_command(
             self, command: str, args: Optional[tuple] = None,
@@ -121,7 +144,14 @@ class ParallelProcess(Process):
         '''
         if run_pre_check:
             self.pre_send_command(command, args, kwargs)
-        self.parent.send((command, args, kwargs))
+
+        # print(f'{find_agent_id(self.process)} - sending: {command} with args: {args} and kwargs: {kwargs}')
+
+        if not self.parent.closed:
+            try:
+                self.parent.send((command, args, kwargs))
+            except BrokenPipeError:
+                pass
 
     def get_command_result(self):
         """Get the result of a command sent to the parallel process.
@@ -136,11 +166,25 @@ class ParallelProcess(Process):
             The command result.
         """
         if not self._pending_command:
-            raise RuntimeError(
-                'Trying to retrieve command result, but no command is '
-                'pending.')
-        self._pending_command = None
-        return self.parent.recv()
+            return self.result
+
+        else:
+            if self.parent.closed:
+                self._pending_command = None
+                return self.result
+            else:
+                # print(f'{find_agent_id(self.process)} - receiving {self._pending_command}')
+
+                self._pending_command = None
+
+                try:
+                    self.result = self.parent.recv()
+                except EOFError:
+                    return self.result
+
+                # print(f'{find_agent_id(self.process)} - received result! for {old_command}: {self.result}')
+
+                return self.result
 
     def get(self):
         return self.get_command_result()
@@ -159,12 +203,12 @@ class ParallelProcess(Process):
         self.run_command('set_config', (config,))
 
     @property
-    def composition(self) -> Dict[str, Any]:
-        return self.run_command('composition')
+    def schema(self) -> Dict[str, Any]:
+        return self.run_command('schema')
 
-    @composition.setter
-    def composition(self, composition):
-        self.run_command('set_composition', (composition,))
+    @schema.setter
+    def schema(self, schema):
+        self.run_command('set_schema', (schema,))
 
     @property
     def state(self) -> Dict[str, Any]:
@@ -221,21 +265,36 @@ class ParallelProcess(Process):
             stats.stats = self.get_command_result()  # type: ignore
             assert self._stats_objs is not None
             self._stats_objs.append(stats)
+        self.multiprocess.terminate()
         self.multiprocess.join()
-        self.multiprocess.close()
+        # self.multiprocess.close()
         self._ended = True
 
     def __del__(self) -> None:
         self.end()
 
 
+@dataclass(kw_only=True)
 class ParallelProtocol(Protocol):
-    @staticmethod
-    def interface(core, address):
-        local_instantiate = LocalProtocol.interface(core, address)
-        def instantiate(config, core=None):
-            instance = local_instantiate(config, core=core)
-            return ParallelProcess(instance)
+    data: String = field(default_factory=String)
 
-        instantiate.config_schema = local_instantiate.config_schema
-        return instantiate
+
+@load_protocol.dispatch
+def load_protocol(core, protocol: ParallelProtocol, data):
+    local_instantiate = load_local_protocol(core, protocol, data)
+
+    def instantiate(config, core=None):
+        instance = local_instantiate(config, core=core)
+
+        return ParallelProcess(instance)
+
+    instantiate.config_schema = local_instantiate.config_schema
+    return instantiate
+
+
+def register_types(core):
+    core.register_types({
+        'parallel': ParallelProtocol})
+
+    return core
+

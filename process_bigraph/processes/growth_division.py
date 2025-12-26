@@ -1,4 +1,5 @@
-from process_bigraph.composite import Step, Process, deep_merge
+from bigraph_schema import deep_merge
+from process_bigraph.composite import Step, Process
 
 
 class Grow(Process):
@@ -56,21 +57,36 @@ class Divide(Step):
             mother = self.config['agent_id']
             daughters = [(
                 f'{mother}_{i}', {
-                    'state': {
-                        'divide': {
-                            'config': {
-                                'agent_id': f'{mother}_{i}'}}}})
+                    'grow_divide': grow_divide_agent(
+                        state={
+                            'mass': state['trigger'] / 2,
+                            'divide': {
+                                'config': {
+                                    'agent_id': f'{mother}_{i}'}}},
+                        path=[f'{mother}_{i}'])})
                 for i in range(self.config['divisions'])]
 
-            # import ipdb; ipdb.set_trace()
+                    # 'state': {
+                    #     'mass': state['trigger'] / 2,
+                    #     'divide': {
+                    #         'config': {
+                    #             'agent_id': f'{mother}_{i}'}}}})
+
+
+            print(f'dividing! {[d[0] for d in daughters]}')
 
             # return divide reaction
             return {
                 'environment': {
-                    '_react': {
-                        'divide': {
-                            'mother': mother,
-                            'daughters': daughters}}}}
+                    '_remove': [mother],
+                    '_add': daughters}}
+                    # '_react': {
+                    #     'divide': {
+                    #         'mother': mother,
+                    #         'daughters': daughters}}}}
+        else:
+            return {
+                'environment': {}}
 
 
 def generate_bridge_wires(schema):
@@ -86,13 +102,14 @@ def generate_bridge(schema, state, interval=1.0):
         for port in ['inputs', 'outputs']}
 
     config = {
-        '_type': 'quote',
+        # '_type': 'node',
         'state': state,
         'bridge': bridge}
 
     composite = {
         '_type': 'process',
-        'address': 'parallel:composite',
+        # 'address': 'parallel:Composite',
+        'address': 'local:Composite',
         'interval': interval,
         'config': config,
         'inputs': generate_bridge_wires(schema['inputs']),
@@ -134,7 +151,7 @@ def grow_divide_agent(config=None, state=None, path=None):
     grow_divide_state = {
         'grow': {
             '_type': 'process',
-            'address': 'local:grow',
+            'address': 'local:Grow',
             'config': grow_config,
             'inputs': {
                 'mass': ['mass']},
@@ -143,7 +160,7 @@ def grow_divide_agent(config=None, state=None, path=None):
 
         'divide': {
             '_type': 'process',
-            'address': 'local:divide',
+            'address': 'local:Divide',
             'config': divide_config,
             'inputs': {
                 'trigger': ['mass']},

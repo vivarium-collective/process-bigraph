@@ -1,7 +1,6 @@
-import fire
 import json
 
-from process_bigraph import generate_core, Composite
+from process_bigraph import allocate_core, Composite
 
 
 def run(document=None, time=None):
@@ -12,7 +11,7 @@ def run(document=None, time=None):
         with open(document, 'r') as path:
             document = json.load(path)
 
-    core = generate_core()
+    core = allocate_core()
     composite = Composite(
         document,
         core=core)
@@ -26,4 +25,5 @@ def run(document=None, time=None):
 
     
 if __name__ == '__main__':
+    import fire
     fire.Fire(run)

@@ -9,7 +9,6 @@ general stochastic transcription.
 
 
 import numpy as np
-import pytest
 
 from process_bigraph.composite import Step, Process, Composite, ProcessEnsemble
 
@@ -42,7 +41,7 @@ class GillespieInterval(Step):
 
     def outputs(self):
         return {
-            'interval': 'interval'}
+            'interval': 'overwrite[float]'}
 
 
     def initial_state(self):

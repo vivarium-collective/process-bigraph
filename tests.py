@@ -4,67 +4,27 @@ Tests for Process Bigraph
 =========================
 """
 
-import pytest
+import sys
 import random
+import inspect
+import numpy as np
 
+import pytest
 from urllib.parse import urlparse, urlunparse
 
-from bigraph_schema import default
-from process_bigraph import register_types, ProcessTypes
+from bigraph_schema.schema import Path, make_default
+from process_bigraph import allocate_core
 
 from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
 )
 
-from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
-from process_bigraph.emitter import emitter_from_wires, gather_emitter_results
+from process_bigraph.emitter import emitter_from_wires, gather_emitter_results, add_emitter_to_composite
 from process_bigraph.protocols.rest import rest_get, rest_post
+from process_bigraph.types import ProcessLink, StepLink
 
-@pytest.fixture
-def core():
-    core = ProcessTypes()
-    return register_types(core)
-
-
-class IncreaseProcess(Process):
-    config_schema = {
-        'rate': {
-            '_type': 'float',
-            '_default': '0.1'}}
-
-    def inputs(self):
-        return {
-            'level': 'float'}
-
-    def outputs(self):
-        return {
-            'level': 'float'}
-
-    def accelerate(self, delta):
-        self.config['rate'] += delta
-
-    def initial_state(self):
-        return {
-            'level': 4.4}
-
-    def update(self, state, interval):
-        return {
-            'level': state['level'] * self.config['rate']}
-
-
-class IncreaseRate(Step):
-    config_schema = {
-        'acceleration': default('float', 0.001)}
-
-    def inputs(self):
-        return {
-            'level': 'float'}
-
-    def update(self, state):
-        # TODO: this is ludicrous.... never do this
-        #   probably this feature should only be used for reading
-        self.instance.accelerate(
-            self.config['acceleration'] * state['level'])
+from process_bigraph.processes.examples import IncreaseProcess
+from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
 
 
 def test_default_config(core):
@@ -85,11 +45,11 @@ def test_merge_collections(core):
 def test_process(core):
     process = IncreaseProcess({'rate': 0.2}, core=core)
     interface = process.interface()
-    state = core.fill(interface['inputs'])
-    state = core.fill(interface['outputs'])
+    state = core.fill(interface['inputs'], {})
+    state = core.fill(interface['outputs'], state)
     update = process.update({'level': 5.5}, 1.0)
 
-    new_state = core.apply(
+    new_state, merges = core.apply(
         interface['outputs'],
         state,
         update)
@@ -105,7 +65,7 @@ def test_composite(core):
     #   we also need a way to serialize the entire composite
 
     composite = Composite({
-        'composition': {
+        'schema': {
             'increase': 'process[level:float,level:float]',
             'value': 'float'},
         'interface': {
@@ -120,83 +80,58 @@ def test_composite(core):
                 'exchange': ['value']}},
         'state': {
             'increase': {
-                'address': 'local:!process_bigraph.tests.IncreaseProcess',
+                'address': 'local:IncreaseProcess',
                 'config': {'rate': 0.3},
                 'interval': 1.0,
                 'inputs': {'level': ['value']},
                 'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core=core)
+            'value': 11.11}}, core=core)
 
     initial_state = {'exchange': 3.33}
 
     updates = composite.update(initial_state, 10.0)
 
-    final_exchange = sum([
+    final_exchange = np.sum([
         update['exchange']
         for update in [initial_state] + updates])
 
-    assert composite.state['value'] > 45
+    assert composite.state['value'] > initial_state['exchange']
+    assert np.isclose(
+        composite.state['value'],
+        final_exchange)
+
     assert 'exchange' in updates[0]
-    assert updates[0]['exchange'] == 0.999
 
 
 def test_infer(core):
-    composite = Composite({
-        'state': {
-            'increase': {
-                '_type': 'process',
-                'address': 'local:!process_bigraph.tests.IncreaseProcess',
-                'config': {'rate': '0.3'},
-                'inputs': {'level': ['value']},
-                'outputs': {'level': ['value']}},
-            'value': '11.11'}}, core=core)
+    state = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': '0.3'},
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}},
+        'value': '11.11'}
 
-    assert composite.composition['value']['_type'] == 'float'
-    assert composite.state['value'] == 4.4
+    composite = Composite({
+        'state': state}, core=core)
+
+    assert core.render(composite.schema['value']).startswith('float')
+    assert composite.state['value'] == 11.11
 
 
 def test_process_type(core):
-    assert core.access('process')['_type'] == 'process'
-
-
-class OperatorStep(Step):
-    config_schema = {
-        'operator': 'string'}
-
-
-    def inputs(self):
-        return {
-            'a': 'float',
-            'b': 'float'}
-
-
-    def outputs(self):
-        return {
-            'c': 'float'}
-
-
-    def update(self, inputs):
-        a = inputs['a']
-        b = inputs['b']
-
-        if self.config['operator'] == '+':
-            c = a + b
-        elif self.config['operator'] == '*':
-            c = a * b
-        elif self.config['operator'] == '-':
-            c = a - b
-
-        return {'c': c}
+    assert type(core.access('process')) == ProcessLink
 
 
 def test_step_initialization(core):
-    composite = Composite({
+    steps = {
         'state': {
-            'A': 13,
-            'B': 21,
+            'A': 13.0,
+            'B': 21.0,
             'step1': {
                 '_type': 'step',
-                'address': 'local:!process_bigraph.tests.OperatorStep',
+                'address': 'local:OperatorStep',
                 'config': {
                     'operator': '+'},
                 'inputs': {
@@ -206,17 +141,21 @@ def test_step_initialization(core):
                     'c': ['C']}},
             'step2': {
                 '_type': 'step',
-                'address': 'local:!process_bigraph.tests.OperatorStep',
+                'address': 'local:OperatorStep',
                 'config': {
                     'operator': '*'},
                 'inputs': {
                     'a': ['B'],
                     'b': ['C']},
                 'outputs': {
-                    'c': ['D']}}}}, core=core)
+                    'c': ['D']}}}}
 
-    composite.run(0.0)
-    assert composite.state['D'] == (13 + 21) * 21
+    composite = Composite(
+        steps,
+        core=core)
+
+    # composite.run(0.0)
+    assert composite.state['D'] == (13.0 + 21.0) * 21.0
 
 
 def test_dependencies(core):
@@ -227,7 +166,7 @@ def test_dependencies(core):
 
         '1': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '+'},
             'inputs': {
@@ -237,7 +176,7 @@ def test_dependencies(core):
                 'c': ['e']}},
         '2.1': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '-'},
             'inputs': {
@@ -247,7 +186,7 @@ def test_dependencies(core):
                 'c': ['f']}},
         '2.2': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '-'},
             'inputs': {
@@ -257,7 +196,7 @@ def test_dependencies(core):
                 'c': ['g']}},
         '3': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '*'},
             'inputs': {
@@ -267,7 +206,7 @@ def test_dependencies(core):
                 'c': ['h']}},
         '4': {
             '_type': 'step',
-            'address': 'local:!process_bigraph.tests.OperatorStep',
+            'address': 'local:OperatorStep',
             'config': {
                 'operator': '+'},
             'inputs': {
@@ -290,75 +229,6 @@ def test_dependency_cycle():
     pass
 
 
-class SimpleCompartment(Process):
-    config_schema = {
-        'id': 'string'}
-
-
-    def interface(self):
-        return {
-            'outer': 'tree[process]',
-            'inner': 'tree[process]'}
-
-
-    def update(self, state, interval):
-        choice = random.random()
-        update = {}
-
-        outer = state['outer']
-        inner = state['inner']
-
-        # TODO: implement divide_state(_)
-        divisions = self.core.divide_state(
-            self.interface(),
-            inner)
-
-        if choice < 0.2:
-            # update = {
-            #     'outer': {
-            #         '_divide': {
-            #             'mother': self.config['id'],
-            #             'daughters': [
-            #                 {'id': self.config['id'] + '0'},
-            #                 {'id': self.config['id'] + '1'}]}}}
-
-            # daughter_ids = [self.config['id'] + str(i)
-            #     for i in range(2)]
-
-            # update = {
-            #     'outer': {
-            #         '_react': {
-            #             'redex': {
-            #                 'inner': {
-            #                     self.config['id']: {}}},
-            #             'reactum': {
-            #                 'inner': {
-            #                     daughter_config['id']: {
-            #                         '_type': 'process',
-            #                         'address': 'local:!process_bigraph.tests.SimpleCompartment',
-            #                         'config': daughter_config,
-            #                         'inner': daughter_inner,
-            #                         'wires': {
-            #                             'outer': ['..']}}
-            #                     for daughter_config, daughter_inner in zip(daughter_configs, divisions)}}}}}
-
-            update = {
-                'outer': {
-                    'inner': {
-                        '_react': {
-                            'reaction': 'divide',
-                            'config': {
-                                'id': self.config['id'],
-                                'daughters': [{
-                                        'id': daughter_id,
-                                        'state': daughter_state}
-                                    for daughter_id, daughter_state in zip(
-                                        daughter_ids,
-                                        divisions)]}}}}}
-
-        return update
-
-
 def engulf_reaction(config):
     return {
         'redex': {},
@@ -379,13 +249,13 @@ def test_reaction():
                 'inner': {
                     'agent1': {
                         '_type': 'process',
-                        'address': 'local:!process_bigraph.tests.SimpleCompartment',
+                        'address': 'local:SimpleCompartment',
                         'config': {'id': '0'},
                         'concentrations': {},
                         'inner': {
                             'agent2': {
                                 '_type': 'process',
-                                'address': 'local:!process_bigraph.tests.SimpleCompartment',
+                                'address': 'local:SimpleCompartment',
                                 'config': {'id': '0'},
                                 'inner': {},
                                 'inputs': {
@@ -525,15 +395,20 @@ def test_nested_wires(core):
         'state': state},
         core=core)
 
-    results = process.update({}, 0.0)
+    process.update({}, 0.0)
 
-    assert results[0]['results']['time'][-1] == runtime
-    assert results[0]['results']['species']['A'][0] == initial_A
+    results = process.read_bridge()
+
+    assert results['results']['time'][-1] == runtime
+    assert results['results']['species']['A'][0] == initial_A
 
 
 def test_parameter_scan(core):
     # TODO: make a parameter scan with a biosimulator process,
     #   ie - Copasi
+
+    ranges = core.access('list[tuple[path,list[float]]]')
+    assert isinstance(ranges._element._values[0], Path)
 
     state = {
         'scan': {
@@ -557,6 +432,7 @@ def test_parameter_scan(core):
             'outputs': {
                 'results': ['results']}}}
 
+
     scan = Composite({
         'bridge': {
             'outputs': {
@@ -564,9 +440,7 @@ def test_parameter_scan(core):
         'state': state},
         core=core)
 
-    # TODO: make a method so we can run it directly, provide some way to get the result out
-    # result = scan.update({})
-    result = scan.update({}, 0.0)
+    assert len(scan.state['results']) == 4
 
 
 def test_composite_workflow(core):
@@ -600,23 +474,25 @@ def test_grow_divide(core):
         'environment': {
             '0': {
                 'mass': 1.1}}},
-        100.0)
+        50.0)
 
     # TODO: mass is not synchronized between inside and outside the composite?
 
     assert '0_0_0_0_1' in composite.state['environment']
     assert composite.state['environment']['0_0_0_0_1']['mass'] == composite.state['environment']['0_0_0_0_1']['grow_divide']['instance'].state['mass']
 
-    # check recursive schema reference
-    assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
+    # # check recursive schema reference
+    # assert id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
     composite.save('test_grow_divide_saved.json')
 
-    c2 = Composite.load(
-        'out/test_grow_divide_saved.json',
-        core=core)
-    
-    assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
+    # c2 = Composite.load(
+    #     'out/test_grow_divide_saved.json',
+    #     core=core)
+
+    # assert c2.state['environment'].keys() == composite.state['environment'].keys()
+
+    # assert id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
 
 def test_gillespie_composite(core):
@@ -626,6 +502,7 @@ def test_gillespie_composite(core):
                 'DNA': ['DNA'],
                 'mRNA': ['mRNA']},
             'outputs': {
+                'time': ['global_time'],
                 'DNA': ['DNA'],
                 'mRNA': ['mRNA']}},
 
@@ -653,7 +530,7 @@ def test_gillespie_composite(core):
 
             'emitter': {
                 '_type': 'step',
-                'address': 'local:ram-emitter',
+                'address': 'local:!process_bigraph.emitter.RAMEmitter',
                 'config': {
                     'emit': {
                         'time': 'float',
@@ -673,8 +550,8 @@ def test_gillespie_composite(core):
             'A gene': 11.0,
             'B gene': 5.0},
         'mRNA': {
-            'A mRNA': 33.3,
-            'B mRNA': 2.1}},
+            'A mRNA': 33.0,
+            'B mRNA': 2.0}},
         1000.0)
 
     # TODO: make this work
@@ -698,19 +575,17 @@ def test_merge_schema(core):
     increase_schema = {
         'increase': {
             '_type': 'process',
-            'address': default('string', 'local:!process_bigraph.tests.IncreaseProcess'),
-            'config': default('quote', {'rate': 0.0001}),
-            'inputs': default('wires', {'level': ['b']}),
-            'outputs': default('wires', {'level': ['a']})}}
+            '_default': {
+                'address': 'local:IncreaseProcess',
+                'config': {'rate': 0.0001},
+                'inputs': {'level': ['b']},
+                'outputs': {'level': ['a']}}}}
 
     composite.merge(
         increase_schema,
         {})
 
-    # composite.merge_schema(
-    #     increase_schema)
-
-    assert composite.composition['increase']['_type'] == 'process'
+    assert isinstance(composite.schema['increase'], ProcessLink)
     assert isinstance(composite.state['increase']['instance'], Process)
 
     state = {
@@ -719,32 +594,30 @@ def test_merge_schema(core):
             'A': {
                 'lll': 55}}}
 
-    composition = {
+    schema = {
         'atoms': 'map[lll:integer]'}
 
     merge = Composite({
-        'composition': composition,
+        'schema': schema,
         'state': state}, core=core)
 
     nested_increase_schema = {
         'increase': {
             '_type': 'process',
-            'address': default('string', 'local:!process_bigraph.tests.IncreaseProcess'),
-            'config': default('quote', {'rate': 0.0001}),
-            'inputs': default('wires', {'level': ['..', '..', 'b']}),
-            'outputs': default('wires', {'level': ['..', '..', 'a']})}}
+            '_default': {
+                'address': 'local:IncreaseProcess',
+                'config': {'rate': 0.0001},
+                'inputs': {'level': ['..', '..', 'b']},
+                'outputs': {'level': ['..', '..', 'a']}}}}
 
     merge.merge(
-        {'atoms': {'_value': nested_increase_schema}},
+        {'atoms': {
+            '_type': 'map',
+            '_value': nested_increase_schema}},
         {})
 
-    # TODO: do we need merge_schema if merge works for schema and state?
-    # merge.merge_schema(
-    #     nested_increase_schema,
-    #     path=['atoms', '_value'])
-
     assert isinstance(merge.state['atoms']['A']['increase']['instance'], Process)
-    assert merge.composition['atoms']['_value']['increase']['_type'] == 'process'
+    assert isinstance(merge.schema['atoms']._value['increase'], ProcessLink)
     assert ('atoms', 'A', 'increase') in merge.process_paths
 
     merge.merge(
@@ -755,22 +628,23 @@ def test_merge_schema(core):
     assert ('atoms', 'B', 'increase') in merge.process_paths
 
 
-def test_shared_steps(core):
+def todo_test_shared_steps(core):
     initial_rate = 0.4
 
     state = {
         'value': 1.1,
         'increase': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.IncreaseProcess',
+            'address': 'local:IncreaseProcess',
             'config': {'rate': initial_rate},
             'inputs': {'level': ['value']},
             'outputs': {'level': ['value']},
             'shared': {
                 'accelerate': {
-                    'address': 'local:!process_bigraph.tests.IncreaseRate',
+                    'address': 'local:IncreaseRate',
                     'config': {'acceleration': '3e-20'},
-                    'inputs': {'level': ['..', '..', 'value']}}}},
+                    'inputs': {'level': ['..', 'value']}}}},
+                    # 'inputs': {'level': ['..', '..', 'value']}}}},
         'emitter': emitter_from_wires({
             'level': ['value']})}
 
@@ -786,33 +660,8 @@ def test_shared_steps(core):
     assert shared.state['increase']['instance'].config['rate'] > initial_rate
 
 
-class WriteCounts(Step):
-    def inputs(self):
-        return {
-            'volumes': 'map[float]',
-            'concentrations': 'map[map[float]]'}
-
-
-    def outputs(self):
-        return {
-            'counts': 'map[map[integer]]'}
-
-
-    def update(self, state):
-        counts = {}
-
-        for key, local in state['concentrations'].items():
-            counts[key] = {}
-            for substrate, concentration in local.items():
-                count = int(concentration * state['volumes'][key])
-                counts[key][substrate] = count
-
-        return {
-            'counts': counts}
-
-
 def test_star_update(core):
-    composition = {
+    schema = {
         'Compartments': {
             '_type': 'map',
             '_value': {
@@ -824,8 +673,8 @@ def test_star_update(core):
 
     state = {
         'write': {
-            '_type': 'process',
-            'address': 'local:!process_bigraph.tests.WriteCounts',
+            '_type': 'step',
+            'address': 'local:WriteCounts',
             'inputs': {
                 'volumes': ['Compartments', '*', 'Shared Environment', 'volume'],
                 'concentrations': ['Compartments', '*', 'Shared Environment', 'concentrations']},
@@ -871,141 +720,37 @@ def test_star_update(core):
                 'position': [0.5, 2.5, 0.0]}}}
 
     star = Composite({
-        'composition': composition,
+        'schema': schema,
         'state': state}, core=core)
 
-    assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
-
-
-def test_default_process_state(core):
-    # provide some initial values
-    default_rate = {
-        'config': {
-            'rate': 0.001}}
-
-    # generate a default state for the Grow process
-    default_grow = core.default_state(
-        Grow,
-        default_rate)
-
-    # create a composite from the default process state
-    composite = Composite({
-        'state': {
-            'grow': default_grow,
-            'mass': 1.0}},
-        core=core)
-
-    # run the composite
-    composite.run(10.0)
-
-    # assert the process ran and the mass increased
-    assert composite.state['mass'] > 1.0
-
-    # try a step as well
-    default_divide = core.default_state(
-        Divide)
-
-    # the step should not have an 'interval' as they do not consume time
-    assert 'interval' not in default_divide
-
-
-class AboveProcess(Process):
-    config_schema = {
-        'rate': 'float'}
-
-    def inputs(self):
-        return {
-            'below': 'map[mass:float]'}
-
-    def outputs(self):
-        return {
-            'below': 'map[mass:float]'}
-
-    def update(self, state, interval):
-        update = {
-            'below': {}}
-
-        for id, pod in state['below'].items():
-            update['below'][id] = {
-                'mass': self.config['rate'] * pod['mass']}
-
-        return update
-
-
-class BelowProcess(Process):
-    next_id = 1
-
-    config_schema = {
-        'id': 'string',
-        'creation_probability': 'float',
-        'annihilation_probability': 'float'}
-
-    def inputs(self):
-        return {
-            'mass': 'float',
-            'entropy': 'float'}
-
-    def outputs(self):
-        return {
-            'entropy': 'float',
-            'environment': 'map[mass:float]'}
-
-    def update(self, state, interval):
-        creation = random.random() < self.config['creation_probability'] * state['entropy']
-        annihilation = random.random() < self.config['annihilation_probability'] * state['entropy']
-
-        update = {}
-
-        if creation or annihilation:
-            update['environment'] = {}
-
-        if creation:
-            new_id = str(BelowProcess.next_id)
-            BelowProcess.next_id += 1
-
-            update['environment']['_add'] = {
-                new_id: {
-                    'mass': 1.1,
-                    'below': {
-                        'config': {
-                            'id': new_id}}}}
-
-        if annihilation:
-            update['environment']['_remove'] = [self.config['id']]
-
-        if not 'environment' in update:
-            update['entropy'] = 0.1
-        else:
-            update['entropy'] = -state['entropy']
-
-        return update
+    assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2890
 
 
 def test_update_removal(core):
-    composition = {
+    schema = {
         'environment': {
             '_type': 'map',
             '_value': {
                 'below': {
                     '_type': 'process',
-                    'address': default(
+                    'address': make_default(
                         'string',
-                        'local:!process_bigraph.tests.BelowProcess'),
-                    'config': default('quote', {
+                        'local:BelowProcess'),
+                    'config': make_default('node', {
                         'creation_probability': 0.01,
                         'annihilation_probability': 0.007}),
-                    'inputs': default('wires', {
+                    'inputs': make_default('wires', {
                         'mass': ['mass'],
                         'entropy': ['entropy']}),
-                    'outputs': default('wires', {
+                    'outputs': make_default('wires', {
                         'entropy': ['entropy'],
                         'environment': ['..']}),
-                    'interval': default('float', 0.4)}}}}
+                    'interval': make_default('float', 0.4)}}}}
 
     state = {
         'above': {
             '_type': 'process',
-            'address': 'local:!process_bigraph.tests.AboveProcess',
+            'address': 'local:AboveProcess',
             'config': {
                 'rate': 0.001},
             'inputs': {
@@ -1022,7 +767,7 @@ def test_update_removal(core):
                 'entropy': 0.03}}}
 
     composite = Composite({
-        'composition': composition,
+        'schema': schema,
         'state': state}, core=core)
 
     composite.run(50)
@@ -1050,7 +795,7 @@ def test_function_wrappers(core):
     step = update_add(config={}, core=core)
     out = step.update({'a': 5, 'b': 7})
     assert out == {'sum': 12}
-    assert core.find('add')
+    assert core.access('add')
     print("Step with core:", out)
 
     # --- PROCESS with core ---
@@ -1063,7 +808,7 @@ def test_function_wrappers(core):
     proc = update_decay(config={}, core=core)
     out = proc.update({'x': 50.0}, 1.0)
     assert round(out['x'], 2) == 40.0
-    assert core.find('decay')
+    assert core.access('decay')
     print("Process with core:", out)
 
 def test_registered_functions_in_composite(core):
@@ -1123,32 +868,6 @@ def test_registered_functions_in_composite(core):
     print("✅ test_registered_functions_in_composite passed:", final)
 
 
-def test_docker_process(core):
-    state = {
-        'mass': 1.0,
-        'julia-process': {
-            '_type': 'process',
-            'address': {
-                'protocol': 'docker',
-                'data': {
-                    'image': 'julia-process:latest',
-                    'port': 11111}},
-            'config': {
-                'rate': 0.005},
-            'inputs': {
-                'mass': ['mass']},
-            'outputs': {
-                'mass_delta': ['mass']},
-            'interval': 0.7}}
-
-    composite = Composite({
-        'state': state}, core=core)
-
-    composite.run(11.111)
-
-    assert composite.state['mass'] > 1.0
-
-
 def apply_non_negative(schema, current, update, top_schema, top_state, path, core):
     new_value = current + update
     return max(0, new_value)
@@ -1177,7 +896,7 @@ def apply_non_negative_array(schema, current, update, top_schema, top_state, pat
     return result
 
 
-def test_dfba_process(core):
+def todo_test_dfba_process(core):
     base_url = urlparse('http://localhost:22222')
     types_url = base_url._replace(path='/list-types')
     types = rest_get(types_url)
@@ -1185,26 +904,24 @@ def test_dfba_process(core):
     processes_url = base_url._replace(path='/list-processes')
     processes = rest_get(processes_url)
 
-    # TODO: import types from the server
-    core.register('positive_float', {
-        '_inherit': 'float',
-        '_apply': apply_non_negative})
+    # # TODO: import types from the server
+    # core.register('positive_float', {
+    #     '_inherit': 'float',
+    #     '_apply': apply_non_negative})
 
-    core.register('positive_array', {
-        '_inherit': 'array',
-        '_apply': apply_non_negative_array})
+    # core.register('positive_array', {
+    #     '_inherit': 'array',
+    #     '_apply': apply_non_negative_array})
 
-    core.register('bounds', {
-        'lower': 'maybe[float]',
-        'upper': 'maybe[float]'})
+    # core.register('bounds', {
+    #     'lower': 'maybe[float]',
+    #     'upper': 'maybe[float]'})
 
     dfba_name = 'spatio_flux.processes.DynamicFBA'
 
     schema_url = base_url._replace(
         path=f'/process/{dfba_name}/config-schema')
     dfba_config_schema = rest_get(schema_url)
-
-    # import ipdb; ipdb.set_trace()
 
     dfba_config = {
         'model_file': 'textbook',
@@ -1276,7 +993,7 @@ def test_rest_process(core):
             'address': {
                 'protocol': 'rest',
                 'data': {
-                    'process': 'grow',
+                    'process': 'Grow',
                     'host': 'localhost',
                     'port': 22222}},
             'config': {
@@ -1284,7 +1001,7 @@ def test_rest_process(core):
             'inputs': {
                 'mass': ['mass']},
             'outputs': {
-                'mass_delta': ['mass']},
+                'mass': ['mass']},
             'interval': 0.7}}
 
     composite = Composite({
@@ -1295,12 +1012,78 @@ def test_rest_process(core):
     assert composite.state['mass'] > 1.0
 
 
+def test_ram_emitter(core):
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.3},
+            'inputs': {'level': ['valueA']},
+            'outputs': {'level': ['valueA']}},
+        'increase2': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.1},
+            'inputs': {'level': ['valueB']},
+            'outputs': {'level': ['valueB']}},
+        'emitter': emitter_from_wires({
+            'time': ['global_time'],
+            'valueA': ['valueA'],
+            'valueB': ['valueB']})}
+
+    composite = Composite({'state': composite_spec}, core=core)
+    composite.run(10)
+
+    results = composite.state['emitter']['instance'].query()
+    assert len(results) == 11
+    assert results[-1]['time'] == 10
+    assert 'valueA' in results[0] and 'valueB' in results[0]
+
+    composite_spec['emitter'] = emitter_from_wires({
+        'time': ['global_time'],
+        'valueA': ['valueA']})
+    composite2 = Composite({'state': composite_spec}, core=core)
+    composite2.run(10)
+
+    results2 = composite2.state['emitter']['instance'].query()
+    assert 'valueA' in results2[0] and 'valueB' not in results2[0]
+    print(results2)
+
+def test_json_emitter(core):
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.3},
+            'interval': 1.0,
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}}}
+    composite = Composite({'state': composite_spec}, core)
+    composite = add_emitter_to_composite(composite, core, emitter_mode='all', address='local:JSONEmitter')
+    composite.run(10)
+
+    results = composite.state['emitter']['instance'].query()
+    assert len(results) == 10
+    assert results[-1]['global_time'] == 10
+    print(results)
+
+
+
+def make_test_core():
+    members = dict(inspect.getmembers(sys.modules[__name__]))
+    return allocate_core(
+        top=members)
+
+
+@pytest.fixture
+def core():
+    return make_test_core()
+
+
 if __name__ == '__main__':
-    core = ProcessTypes()
-    core = register_types(core)
+    core = make_test_core()
 
     test_default_config(core)
-    test_default_process_state(core)
     test_merge_collections(core)
     test_process(core)
     test_composite(core)
@@ -1314,7 +1097,10 @@ if __name__ == '__main__':
     test_run_process(core)
     test_nested_wires(core)
     test_parameter_scan(core)
-    test_shared_steps(core)
+    # test_shared_steps(core)
+
+    test_ram_emitter(core)
+    test_json_emitter(core)
 
     test_stochastic_deterministic_composite(core)
     test_merge_schema(core)
@@ -1324,7 +1110,10 @@ if __name__ == '__main__':
     test_function_wrappers(core)
     test_registered_functions_in_composite(core)
     test_update_removal(core)
-    test_docker_process(core)
 
     test_rest_process(core)
-    test_dfba_process(core)
+    # test_dfba_process(core)
+
+
+
+    

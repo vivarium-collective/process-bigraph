@@ -1,8 +1,8 @@
 import copy
 import numpy as np
 
-from bigraph_schema import get_path, set_path, transform_path
-from process_bigraph.composite import Step, Process, Composite, interval_time_precision, deep_merge
+from bigraph_schema import get_path, set_path, transform_path, deep_merge
+from process_bigraph.composite import Step, Process, Composite, interval_time_precision
 from process_bigraph.emitter import gather_emitter_results
 
 
@@ -64,31 +64,34 @@ class ODE(Process):
 class RunProcess(Step):
     config_schema = {
         'process_address': 'string',
-        'process_config': 'tree[any]',
+        'process_config': 'node',
         'observables': 'list[path]',
-        'initial_state': 'any',
+        'initial_state': 'node',
         'timestep': 'float',
         'runtime': 'float'}
 
     def initialize(self, config):
-
-        self.process = self.core.deserialize('process', {
+        process_state = {
             '_type': 'process',
             'address': self.config['process_address'],
             'config': self.config['process_config'],
             'inputs': {},
-            'outputs': {}})['instance']
+            'outputs': {}}
+
+        self.process_schema, self.process = self.core.realize(
+            'process', process_state)
+        self.process_instance = self.process['instance']
 
         global_time_precision = interval_time_precision(
             self.config['timestep'])
 
-        process_outputs = self.process.outputs()
+        process_outputs = self.process_instance.outputs()
         self.observables_schema = {}
         self.results_schema = {}
         self.inputs_config = {}
 
         for observable in self.config['observables']:
-            subschema, _ = self.core.slice(
+            subschema, _ = self.core.traverse(
                 process_outputs,
                 {},
                 observable)
@@ -121,13 +124,13 @@ class RunProcess(Step):
             '_type': 'process',
             'address': self.config['process_address'],
             'config': self.config['process_config'],
-            'instance': self.process,
+            'instance': self.process_instance,
             'interval': self.config['timestep'],
-            '_inputs': self.process.inputs(),
-            '_outputs': self.process.outputs(),
+            '_inputs': self.process['_inputs'], # self.process_instance.inputs(),
+            '_outputs': self.process['_outputs'], # self.process_instance.outputs(),
             'inputs': {
                 key: [key]
-                for key in self.process.inputs()},
+                for key in self.process['_inputs']}, # self.process_instance.inputs()},
             'outputs': {
                 key: [key]
                 for key in process_outputs}}
@@ -135,7 +138,7 @@ class RunProcess(Step):
         state['emitter'] = {
             '_type': 'step',
             '_inputs': emit_config,
-            'address': 'local:ram-emitter',
+            'address': 'local:RAMEmitter',
             'config': {
                 'emit': emit_config},
             'inputs': dict(
@@ -152,7 +155,7 @@ class RunProcess(Step):
 
 
     def inputs(self):
-        return self.process.inputs()
+        return self.process_instance.inputs()
 
 
     def outputs(self):
@@ -236,14 +239,13 @@ class ParameterScan(Step):
     config_schema = {
         'parameter_ranges': 'list[tuple[path,list[float]]]',
         'process_address': 'string',
-        'process_config': 'tree[any]',
-        'initial_state': 'tree[any]',
+        'process_config': 'tree[node]',
+        'initial_state': 'tree[node]',
         'observables': 'list[path]',
         'timestep': 'float',
         'runtime': 'float'}
 
     def initialize(self, config=None):
-
         self.steps_count = int(
             self.config['runtime'] / self.config['timestep']) + 1
         self.observables_count = len(
@@ -302,7 +304,7 @@ class ParameterScan(Step):
                 'time': 'list[float]'}
 
             for observable_path in self.config['observables']:
-                observable_schema, _ = self.core.slice(
+                observable_schema, _ = self.core.traverse(
                     process.outputs(),
                     {},
                     observable_path)
@@ -328,22 +330,21 @@ class ParameterScan(Step):
 
         update = {}
         for result in results:
-            observable_list = []
-            key = list(result.keys())[0]
-            values = list(result.values())[0]
-            update[key] = {'time': values['time']}
+            for key, value in result.items():
+                update[key] = {
+                    'time': value['time']}
 
-            for observable in self.config['observables']:
-                subschema = self.results_schema[key]
-                value_schema, value = self.core.slice(
-                    subschema,
-                    values,
-                    observable)
+                for observable in self.config['observables']:
+                    subschema = self.results_schema[key]
+                    value_schema, value = self.core.traverse(
+                        subschema,
+                        value,
+                        observable)
 
-                set_path(
-                    update[key],
-                    observable,
-                    value)
+                    set_path(
+                        update,
+                        [key] + observable,
+                        value)
 
         return {
             'results': update}

@@ -1,16 +1,14 @@
 [project]
 name = "process-bigraph"
-version = "0.0.51"
+version = "1.0.0"
 description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "bigraph-schema",
-    "docker>=7.1.0",
     "ipdb>=0.13.13",
     "matplotlib",
     "pint>=0.24.4",
-    "pytest",
 ]
 
 [tool.setuptools]
@@ -19,8 +17,7 @@ packages = [
     "process_bigraph.processes",
     "process_bigraph.protocols",
     "process_bigraph.experiments",
-    "process_bigraph.package"
 ]
 
-[tool.uv.sources]
-bigraph-schema = { path = "../bigraph-schema", editable = true }
+# [tool.uv.sources]
+# bigraph-schema = { path = "../bigraph-schema", editable = true }
