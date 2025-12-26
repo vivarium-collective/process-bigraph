@@ -19,5 +19,5 @@ packages = [
     "process_bigraph.experiments",
 ]
 
-[tool.uv.sources]
-bigraph-schema = { path = "../bigraph-schema", editable = true }
+# [tool.uv.sources]
+# bigraph-schema = { path = "../bigraph-schema", editable = true }
