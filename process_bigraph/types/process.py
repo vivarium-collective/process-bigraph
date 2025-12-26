@@ -36,7 +36,7 @@ class Interface(Node):
 
 @dataclass(kw_only=True)
 class CompositeLink(ProcessLink):
-    composition: Schema = field(default_factory=Schema)
+    schema: Schema = field(default_factory=Schema)
     state: Node = field(default_factory=Node)
     interface: Interface = field(default_factory=Interface)
     bridge: Bridge = field(default_factory=Bridge)

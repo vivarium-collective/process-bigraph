@@ -406,7 +406,7 @@ class Open(Edge):
         'initial_state', 'inputs', 'outputs', 'update')
 
     ATTRIBUTE_READ_COMMANDS = (
-        'config', 'composition', 'state')
+        'config', 'schema', 'state')
 
 
     def __init__(self, config=None, core=None):
@@ -838,7 +838,7 @@ class Composite(Process):
     """
 
     config_schema = {
-        'composition': 'schema',
+        'schema': 'schema',
         'state': 'tree[node]',
         'interface': {
             'inputs': 'schema',
@@ -862,7 +862,7 @@ class Composite(Process):
 
         This method:
         - Adds `global_time` to schema/state if missing
-        - Generates the full composition/state tree
+        - Generates the full schema/state tree
         - Finds all step/process instances
         - Resolves the schema bridge
         - Prepares the step execution network
@@ -872,12 +872,12 @@ class Composite(Process):
             config: Optional override configuration (usually not needed).
         """
 
-        # Get the initial composition schema from config.
-        initial_composition = self.config.get('composition', {})
+        # Get the initial schema schema from config.
+        initial_schema = self.config.get('schema', {})
 
         # Ensure 'global_time' is explicitly declared in the schema.
-        if 'global_time' not in initial_composition:
-            initial_composition['global_time'] = 'float'
+        if 'global_time' not in initial_schema:
+            initial_schema['global_time'] = 'float'
 
         # Get the initial state from config.
         initial_state = self.config.get('state', {})
@@ -887,9 +887,9 @@ class Composite(Process):
             initial_state['global_time'] = 0.0
 
         # Generate internal schema and state structures using the core engine.
-        # self.composition, self.state = self.core.generate(
-        self.composition, self.state = self.core.realize(
-            initial_composition,
+        # self.schema, self.state = self.core.generate(
+        self.schema, self.state = self.core.realize(
+            initial_schema,
             initial_state)
 
         # Load the bridge configuration, which defines how inputs/outputs connect to the world.
@@ -928,14 +928,14 @@ class Composite(Process):
 
         # Apply the merged edge_state into the global state and update instance paths.
         if edge_state:
-            self.composition, self.state = self.core.combine(
+            self.schema, self.state = self.core.combine(
                 edge_schema, edge_state,
-                self.composition, self.state)
+                self.schema, self.state)
 
         # Wire the input/output schema for the Composite from the bridge config.
         self.process_schema = {
             port: self.core.wire_schema(
-                self.composition,
+                self.schema,
                 self.state,
                 self.bridge[port])
             for port in ['inputs', 'outputs']
@@ -965,7 +965,7 @@ class Composite(Process):
         Load a Composite from a saved JSON file.
 
         Args:
-            path: Path to the saved composition file.
+            path: Path to the saved schema file.
             core: Optional core context providing deserialization.
 
         Returns:
@@ -1016,9 +1016,9 @@ class Composite(Process):
             path: Path where merge should occur (default: root).
         """
         path = path or []
-        # self.composition, self.state = self.core.merge(
-        self.composition, self.state = self.core.combine(
-            self.composition,
+        # self.schema, self.state = self.core.merge(
+        self.schema, self.state = self.core.combine(
+            self.schema,
             self.state,
             schema,
             state)
@@ -1043,10 +1043,10 @@ class Composite(Process):
         scoped_schema = set_path({}, path, schema)
 
         # Merge it into the existing schema
-        self.composition = self.core.merge(self.composition, scoped_schema)
+        self.schema = self.core.merge(self.schema, scoped_schema)
 
         # Re-generate state based on the new schema structure
-        self.composition, self.state = self.core.generate(self.composition, self.state)
+        self.schema, self.state = self.core.generate(self.schema, self.state)
 
         # Re-scan the state tree for processes and steps
         self.find_instance_paths(self.state)
@@ -1061,7 +1061,7 @@ class Composite(Process):
         """
         path = path or []
         scoped_update = set_path({}, path, update)
-        self.state = self.core.apply(self.composition, self.state, scoped_update)
+        self.state = self.core.apply(self.schema, self.state, scoped_update)
         self.find_instance_paths(self.state)
 
 
@@ -1076,17 +1076,17 @@ class Composite(Process):
         Returns:
             A serialized representation of the current state.
         """
-        return self.core.serialize(self.composition, self.state)
+        return self.core.serialize(self.schema, self.state)
 
     def serialize_schema(self) -> Dict[str, Any]:
         """
-        Serialize the composition (schema) using the core serializer.
+        Serialize the schema (schema) using the core serializer.
 
         Returns:
             A serialized schema representation.
         """
-        return self.core.render(self.composition)
-        # return self.core.serialize('schema', self.composition)
+        return self.core.render(self.schema)
+        # return self.core.serialize('schema', self.schema)
 
     def save(
             self,
@@ -1111,7 +1111,7 @@ class Composite(Process):
         if state:
             document['state'] = self.serialize_state()
         if schema:
-            document['composition'] = self.serialize_schema()
+            document['schema'] = self.serialize_schema()
 
         os.makedirs(outdir, exist_ok=True)
         filepath = os.path.join(outdir, filename)
@@ -1151,7 +1151,7 @@ class Composite(Process):
         #     import ipdb; ipdb.set_trace()
 
         bridge_view = self.core.view_ports(
-            self.composition,
+            self.schema,
             state,
             (),
             self.interface()['outputs'],
@@ -1290,7 +1290,7 @@ class Composite(Process):
             for step_path in step_paths:
                 step = get_path(self.state, step_path)
                 state = self.core.view(
-                    self.composition, self.state, step_path, 'inputs')
+                    self.schema, self.state, step_path, 'inputs')
 
                 # Steps are always invoked with interval = -1.0
                 step_update = self.process_update(
@@ -1384,7 +1384,7 @@ class Composite(Process):
         and captures its update as a deferred computation.
 
         Args:
-            path: The path to the process in the state/composition tree.
+            path: The path to the process in the state/schema tree.
             process: The dictionary representing the process (must contain 'interval').
             end_time: The simulation time to run up to.
             full_step: The current smallest time step among all processes.
@@ -1408,7 +1408,7 @@ class Composite(Process):
             else:
                 # Otherwise, slice the current state for the process
                 state = self.core.view(
-                    self.composition,
+                    self.schema,
                     self.state,
                     path)
                 process_interval = process['interval']
@@ -1460,7 +1460,7 @@ class Composite(Process):
         into absolute state terms until `.get()` is called on the returned `Defer` object.
 
         Args:
-            path: The path to the process in the state/composition tree.
+            path: The path to the process in the state/schema tree.
             process: The dictionary representing the process instance (must include 'instance').
             states: The current state values at the process’s ports.
             interval: The time interval to simulate.
@@ -1489,7 +1489,7 @@ class Composite(Process):
                 ports_key) for update_result in update_results]
 
         # Return a deferred object that will project the update when requested
-        return Defer(update, defer_project, (self.composition, self.state, path))
+        return Defer(update, defer_project, (self.schema, self.state, path))
 
     def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
         """
@@ -1530,8 +1530,8 @@ class Composite(Process):
                     self.state,
                     update_state)
 
-                self.composition = self.core.resolve_merges(
-                    self.composition,
+                self.schema = self.core.resolve_merges(
+                    self.schema,
                     merges)
 
                 # Read updated bridge outputs, if available
@@ -1539,7 +1539,7 @@ class Composite(Process):
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
 
-        self.composition, self.state = self.core.realize(self.composition, self.state)
+        self.schema, self.state = self.core.realize(self.schema, self.state)
 
         # TODO: are we doing this twice?
         # Refresh process and step instance paths

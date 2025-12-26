@@ -153,7 +153,7 @@ class WriteCounts(Step):
 
     def outputs(self):
         return {
-            'counts': 'map[map[integer]]'}
+            'counts': 'map[map[overwrite[integer]]]'}
 
 
     def update(self, state):

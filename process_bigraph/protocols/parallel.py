@@ -203,12 +203,12 @@ class ParallelProcess(Process):
         self.run_command('set_config', (config,))
 
     @property
-    def composition(self) -> Dict[str, Any]:
-        return self.run_command('composition')
+    def schema(self) -> Dict[str, Any]:
+        return self.run_command('schema')
 
-    @composition.setter
-    def composition(self, composition):
-        self.run_command('set_composition', (composition,))
+    @schema.setter
+    def schema(self, schema):
+        self.run_command('set_schema', (schema,))
 
     @property
     def state(self) -> Dict[str, Any]:

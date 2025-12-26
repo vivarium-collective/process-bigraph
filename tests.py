@@ -65,7 +65,7 @@ def test_composite(core):
     #   we also need a way to serialize the entire composite
 
     composite = Composite({
-        'composition': {
+        'schema': {
             'increase': 'process[level:float,level:float]',
             'value': 'float'},
         'interface': {
@@ -116,7 +116,7 @@ def test_infer(core):
     composite = Composite({
         'state': state}, core=core)
 
-    assert core.render(composite.composition['value']).startswith('float')
+    assert core.render(composite.schema['value']).startswith('float')
     assert composite.state['value'] == 11.11
 
 
@@ -482,7 +482,7 @@ def test_grow_divide(core):
     assert composite.state['environment']['0_0_0_0_1']['mass'] == composite.state['environment']['0_0_0_0_1']['grow_divide']['instance'].state['mass']
 
     # # check recursive schema reference
-    # assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
+    # assert id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
     composite.save('test_grow_divide_saved.json')
 
@@ -492,7 +492,7 @@ def test_grow_divide(core):
 
     # assert c2.state['environment'].keys() == composite.state['environment'].keys()
 
-    # assert id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.composition['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
+    # assert id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']) == id(composite.schema['environment']['_value']['grow_divide']['_outputs']['environment']['_value']['grow_divide']['_outputs']['environment'])
 
 
 def test_gillespie_composite(core):
@@ -585,7 +585,7 @@ def test_merge_schema(core):
         increase_schema,
         {})
 
-    assert isinstance(composite.composition['increase'], ProcessLink)
+    assert isinstance(composite.schema['increase'], ProcessLink)
     assert isinstance(composite.state['increase']['instance'], Process)
 
     state = {
@@ -594,11 +594,11 @@ def test_merge_schema(core):
             'A': {
                 'lll': 55}}}
 
-    composition = {
+    schema = {
         'atoms': 'map[lll:integer]'}
 
     merge = Composite({
-        'composition': composition,
+        'schema': schema,
         'state': state}, core=core)
 
     nested_increase_schema = {
@@ -617,7 +617,7 @@ def test_merge_schema(core):
         {})
 
     assert isinstance(merge.state['atoms']['A']['increase']['instance'], Process)
-    assert isinstance(merge.composition['atoms']._value['increase'], ProcessLink)
+    assert isinstance(merge.schema['atoms']._value['increase'], ProcessLink)
     assert ('atoms', 'A', 'increase') in merge.process_paths
 
     merge.merge(
@@ -661,7 +661,7 @@ def todo_test_shared_steps(core):
 
 
 def test_star_update(core):
-    composition = {
+    schema = {
         'Compartments': {
             '_type': 'map',
             '_value': {
@@ -719,17 +719,15 @@ def test_star_update(core):
                     'volume': 300},
                 'position': [0.5, 2.5, 0.0]}}}
 
-    import ipdb; ipdb.set_trace()
-
     star = Composite({
-        'composition': composition,
+        'schema': schema,
         'state': state}, core=core)
 
-    assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2899
+    assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2890
 
 
 def test_update_removal(core):
-    composition = {
+    schema = {
         'environment': {
             '_type': 'map',
             '_value': {
@@ -769,7 +767,7 @@ def test_update_removal(core):
                 'entropy': 0.03}}}
 
     composite = Composite({
-        'composition': composition,
+        'schema': schema,
         'state': state}, core=core)
 
     composite.run(50)

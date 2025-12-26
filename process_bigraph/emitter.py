@@ -118,7 +118,7 @@ def add_emitter_to_composite(composite, core, emitter_mode='all', address='local
     composite.merge({}, set_path({}, path, emitter_state))
 
     # TODO -- this is a hack to get the emitter to show up in the state
-    _, instance = core.traverse(composite.composition, composite.state, path)
+    _, instance = core.traverse(composite.schema, composite.state, path)
     composite.step_paths[path] = instance
     composite.build_step_network()
     return composite
