@@ -660,7 +660,7 @@ def todo_test_shared_steps(core):
     assert shared.state['increase']['instance'].config['rate'] > initial_rate
 
 
-def todo_test_star_update(core):
+def test_star_update(core):
     composition = {
         'Compartments': {
             '_type': 'map',
@@ -673,7 +673,7 @@ def todo_test_star_update(core):
 
     state = {
         'write': {
-            '_type': 'process',
+            '_type': 'step',
             'address': 'local:WriteCounts',
             'inputs': {
                 'volumes': ['Compartments', '*', 'Shared Environment', 'volume'],
@@ -1107,7 +1107,7 @@ if __name__ == '__main__':
     test_stochastic_deterministic_composite(core)
     test_merge_schema(core)
     test_grow_divide(core)
-    # test_star_update(core)
+    test_star_update(core)
     test_match_star_path(core)
     test_function_wrappers(core)
     test_registered_functions_in_composite(core)
