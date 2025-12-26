@@ -21,6 +21,10 @@ from bigraph_schema.methods import load_protocol, load_local_protocol
 from process_bigraph.composite import Process
 
 
+def find_agent_id(process):
+    return process.config['state']['divide']['config']['agent_id']
+
+
 def _handle_parallel_process(
         connection: Connection,
         process: Process,
@@ -52,13 +56,17 @@ def _handle_parallel_process(
     running = True
 
     while running:
-        command, args, kwargs = connection.recv()
+        try:
+            command, args, kwargs = connection.recv()
+            if command == 'end':
+                running = False
+            else:
+                # print(f'{find_agent_id(process)} - handle running process command: {command} with args: {args} and kwargs: {kwargs}')
+                result = process.run_command(command, args, kwargs)
+                connection.send(result)
 
-        if command == 'end':
+        except EOFError:
             running = False
-        else:
-            result = process.run_command(command, args, kwargs)
-            connection.send(result)
 
     if profile:
         profiler.disable()
@@ -114,10 +122,16 @@ class ParallelProcess(Process):
 
         mp_ctx = multiprocessing.get_context(start_method)
         self.parent, child = mp_ctx.Pipe()
+
+        agent_id = find_agent_id(process)
+        # print(f'{agent_id} - starting multiprocess')
+
         self.multiprocess = mp_ctx.Process( # type: ignore[attr-defined]
             target=_handle_parallel_process,
             args=(child, process, self.profile))
         self.multiprocess.start()
+
+        # print(f'{find_agent_id(process)} - multiprocess started')
 
     def send_command(
             self, command: str, args: Optional[tuple] = None,
@@ -131,7 +145,13 @@ class ParallelProcess(Process):
         if run_pre_check:
             self.pre_send_command(command, args, kwargs)
 
-        self.parent.send((command, args, kwargs))
+        # print(f'{find_agent_id(self.process)} - sending: {command} with args: {args} and kwargs: {kwargs}')
+
+        if not self.parent.closed:
+            try:
+                self.parent.send((command, args, kwargs))
+            except BrokenPipeError:
+                pass
 
     def get_command_result(self):
         """Get the result of a command sent to the parallel process.
@@ -146,17 +166,25 @@ class ParallelProcess(Process):
             The command result.
         """
         if not self._pending_command:
-            import ipdb; ipdb.set_trace()
-            print(f'using existing result {self.result}')
             return self.result
 
         else:
-            if self.parent.poll(timeout=1.0):
+            if self.parent.closed:
                 self._pending_command = None
-                self.result = self.parent.recv()
                 return self.result
             else:
-                return self.get_command_result()
+                # print(f'{find_agent_id(self.process)} - receiving {self._pending_command}')
+
+                self._pending_command = None
+
+                try:
+                    self.result = self.parent.recv()
+                except EOFError:
+                    return self.result
+
+                # print(f'{find_agent_id(self.process)} - received result! for {old_command}: {self.result}')
+
+                return self.result
 
     def get(self):
         return self.get_command_result()
@@ -237,8 +265,9 @@ class ParallelProcess(Process):
             stats.stats = self.get_command_result()  # type: ignore
             assert self._stats_objs is not None
             self._stats_objs.append(stats)
+        self.multiprocess.terminate()
         self.multiprocess.join()
-        self.multiprocess.close()
+        # self.multiprocess.close()
         self._ended = True
 
     def __del__(self) -> None:
