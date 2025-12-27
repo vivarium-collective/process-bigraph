@@ -831,7 +831,7 @@ def test_registered_functions_in_composite(core):
     # Define Composite
     state = {
         'adder': {
-            '_type': 'process',
+            '_type': 'step',
             'address': 'local:add',
             'inputs': {
                 'a': ['Env', 'a'],

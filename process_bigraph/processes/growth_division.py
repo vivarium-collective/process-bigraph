@@ -159,7 +159,7 @@ def grow_divide_agent(config=None, state=None, path=None):
                 'mass': ['mass']}},
 
         'divide': {
-            '_type': 'process',
+            '_type': 'step',
             'address': 'local:Divide',
             'config': divide_config,
             'inputs': {

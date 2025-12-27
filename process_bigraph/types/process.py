@@ -6,15 +6,15 @@ from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema
 from bigraph_schema.methods import resolve, realize, realize_link, default, default_link
 
 
-@dataclass(kw_only=True)
-class StepLink(Link):
-    pass
-
-
 def float_default(value):
     def float_factory():
         return Float(_default=value)
     return float_factory
+
+
+@dataclass(kw_only=True)
+class StepLink(Link):
+    priority: Float = field(default_factory=float_default(0.0))
 
 
 @dataclass(kw_only=True)
@@ -43,6 +43,16 @@ class CompositeLink(ProcessLink):
 
     
 @default.dispatch
+def default(schema: StepLink):
+    link = default_link(schema)
+
+    link['priority'] = default(
+        schema.priority)
+
+    return link
+
+
+@default.dispatch
 def default(schema: ProcessLink):
     link = default_link(schema)
 
@@ -61,6 +71,19 @@ def realize(core, schema: ProcessLink, state, path=()):
         link_schema.interval,
         state.get('interval'),
         path+('interval',))
+
+    return link_schema, link_state, merges
+
+
+@realize.dispatch
+def realize(core, schema: StepLink, state, path=()):
+    link_schema, link_state, merges = realize_link(core, schema, state, path=path)
+
+    _, link_state['priority'], _ = realize(
+        core,
+        link_schema.priority,
+        state.get('priority'),
+        path+('priority',))
 
     return link_schema, link_state, merges
 

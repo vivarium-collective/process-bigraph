@@ -116,7 +116,7 @@ def find_step_triggers(
     """
     prefix = tuple(path[:-1])
     triggers: Dict[Tuple[str, ...], List[Union[List[str], Tuple[str, ...]]]] = {}
-    wire_paths = find_leaves(step['inputs'])
+    wire_paths = find_leaves(step['inputs'], path=prefix)
 
     for wire in wire_paths:
         trigger_path = resolve_path(tuple(wire))
@@ -242,7 +242,7 @@ def build_step_network(steps):
         - nodes: A mapping from paths to sets of steps that are dependent on them.
     """
     ancestors = {
-        step_key: {'input_paths': None, 'output_paths': None}
+        step_key: {'input_paths': None, 'output_paths': None, 'priority': None}
         for step_key in steps
     }
     nodes = {}
@@ -258,6 +258,10 @@ def build_step_network(steps):
         # Compute output paths once per step
         if ancestors[step_key]['output_paths'] is None:
             ancestors[step_key]['output_paths'] = find_leaves(step.get('outputs', {}), path=step_key[:-1])
+
+        # Assign the priority
+        if ancestors[step_key]['priority'] is None:
+            ancestors[step_key]['priority'] = step['priority']
 
         input_paths = ancestors[step_key]['input_paths'] or []
         output_paths = ancestors[step_key]['output_paths'] or []
@@ -279,7 +283,7 @@ def build_step_network(steps):
     return ancestors, nodes
 
 
-def build_trigger_state(nodes):
+def build_trigger_state(nodes, paths):
     """
     Initialize the trigger state from dependency nodes.
 
@@ -289,8 +293,10 @@ def build_trigger_state(nodes):
     Returns:
         A mapping of paths to the set of steps waiting on those paths.
     """
+    path_set = set(paths)
+
     return {
-        key: value['before'].copy()
+        key: set(value['before']).intersection(path_set)
         for key, value in nodes.items()}
 
 
@@ -345,13 +351,51 @@ def determine_steps(steps, remaining, fulfilled):
     """
     to_run = []
 
+    if not remaining:
+        return to_run, remaining, fulfilled
+
     for step_path in list(remaining):
         step_inputs = steps[step_path].get('input_paths', []) or []
         if all(len(fulfilled[input]) == 0 for input in step_inputs):
             to_run.append(step_path)
 
+    if not to_run:
+        # cycles
+        visited = set([])
+        cycle = set([])
+        look = list(remaining)
+
+        while look:
+            step_path = look[0]
+            look = look[1:]
+
+            if step_path in visited:
+                if step_path in remaining:
+                    cycle.add(step_path)
+
+            else:
+                visited.add(step_path)
+
+                inputs = steps[step_path]['input_paths']
+                for input_path in inputs:
+                    if input_path in fulfilled:
+                        unfulfilled = fulfilled[input_path]
+                        look += unfulfilled
+
+        if not cycle:
+            return to_run, remaining, fulfilled
+
+        order = sorted(
+            cycle,
+            key=lambda path: steps[path]['priority'])
+
+        priority = order[-1]
+        to_run = [priority]
+
     for step_path in to_run:
-        remaining.remove(step_path)
+        if step_path in remaining:
+            remaining.remove(step_path)
+
         step_outputs = steps[step_path].get('output_paths', []) or []
         for output in step_outputs:
             exploded_path = explode_path(output)[1:]
@@ -1227,7 +1271,7 @@ class Composite(Process):
             step_paths: A dictionary of step paths (as keys).
         """
         # Start with a fresh trigger state from the dependency graph
-        self.trigger_state = build_trigger_state(self.node_dependencies)
+        self.trigger_state = build_trigger_state(self.node_dependencies, step_paths)
 
         # Track steps still waiting to be executed in this cycle
         self.steps_remaining: Set[Union[str, Tuple[str, ...]]] = set(step_paths)
@@ -1303,8 +1347,6 @@ class Composite(Process):
 
             if to_run:
                 self.run_steps(to_run)
-            elif self.steps_remaining:
-                import ipdb; ipdb.set_trace()
             else:
                 self.steps_run = set()
         else:
