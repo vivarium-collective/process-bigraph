@@ -210,7 +210,7 @@ def find_leaves(tree_structure, path=None):
         list: List of leaf paths as tuples.
     """
     leaves = []
-    path = ()
+    path = path or ()
 
     if tree_structure is None:
         pass
@@ -252,11 +252,11 @@ def build_step_network(steps):
 
         # Compute input paths once per step
         if ancestors[step_key]['input_paths'] is None:
-            ancestors[step_key]['input_paths'] = find_leaves(step['inputs'])
+            ancestors[step_key]['input_paths'] = find_leaves(step['inputs'], path=step_key[:-1])
 
         # Compute output paths once per step
         if ancestors[step_key]['output_paths'] is None:
-            ancestors[step_key]['output_paths'] = find_leaves(step.get('outputs', {}))
+            ancestors[step_key]['output_paths'] = find_leaves(step.get('outputs', {}), path=step_key[:-1])
 
         input_paths = ancestors[step_key]['input_paths'] or []
         output_paths = ancestors[step_key]['output_paths'] or []
@@ -1191,6 +1191,8 @@ class Composite(Process):
         # Track which steps have already executed in the current cycle
         self.steps_run: Set[Union[str, Tuple[str, ...]]] = set()
 
+        import ipdb; ipdb.set_trace()
+
         # Build the step execution dependency graph
         self.step_dependencies, self.node_dependencies = build_step_network(self.step_paths)
 
@@ -1305,6 +1307,8 @@ class Composite(Process):
 
             if to_run:
                 self.run_steps(to_run)
+            elif self.steps_remaining:
+                import ipdb; ipdb.set_trace()
             else:
                 self.steps_run = set()
         else:

@@ -198,7 +198,6 @@ class RunProcess(Step):
         all_results = {}
         for timeseries in results.values():
             all_results = deep_merge(all_results, timeseries)
-
         return {
             'results': all_results}
 

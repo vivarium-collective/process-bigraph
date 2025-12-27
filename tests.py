@@ -384,15 +384,21 @@ def test_nested_wires(core):
                 'observables': [['species', 'A']],
                 'timestep': timestep,
                 'runtime': runtime},
-            # '_outputs': {'results': {'_emit': True}},
             'inputs': {'species': ['species']},
             'outputs': {'results': ['A_results']}}}
 
-    process = Composite({
-        'bridge': {
-            'outputs': {
-                'results': ['A_results']}},
-        'state': state},
+    bridge = {
+        'outputs': {
+            'results': ['A_results']}}
+
+    composition = {
+        'bridge': bridge,
+        'state': state}
+
+    import ipdb; ipdb.set_trace()
+
+    process = Composite(
+        composition,
         core=core)
 
     process.update({}, 0.0)
