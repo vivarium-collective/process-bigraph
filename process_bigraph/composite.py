@@ -119,7 +119,8 @@ def find_step_triggers(
     wire_paths = find_leaves(step['inputs'])
 
     for wire in wire_paths:
-        trigger_path = resolve_path(prefix + tuple(wire))
+        trigger_path = resolve_path(tuple(wire))
+        # trigger_path = resolve_path(prefix + tuple(wire))
         if isinstance(trigger_path, list):
             import ipdb; ipdb.set_trace()
         triggers.setdefault(trigger_path, []).append(path)
@@ -221,7 +222,7 @@ def find_leaves(tree_structure, path=None):
     else:
         for key, value in tree_structure.items():
             if isinstance(value, dict):
-                subleaves = find_leaves(value, path + (key,))
+                subleaves = find_leaves(value, path=path)
                 leaves.extend(subleaves)
             else:
                 leaves.append(path + tuple(value))
@@ -1147,9 +1148,6 @@ class Composite(Process):
         """
         state = state or self.state
 
-        # if 'environment' in state and '_add' in state['environment']:
-        #     import ipdb; ipdb.set_trace()
-
         bridge_view = self.core.view_ports(
             self.schema,
             state,
@@ -1190,8 +1188,6 @@ class Composite(Process):
 
         # Track which steps have already executed in the current cycle
         self.steps_run: Set[Union[str, Tuple[str, ...]]] = set()
-
-        import ipdb; ipdb.set_trace()
 
         # Build the step execution dependency graph
         self.step_dependencies, self.node_dependencies = build_step_network(self.step_paths)
