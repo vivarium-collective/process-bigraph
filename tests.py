@@ -395,8 +395,6 @@ def test_nested_wires(core):
         'bridge': bridge,
         'state': state}
 
-    import ipdb; ipdb.set_trace()
-
     process = Composite(
         composition,
         core=core)
