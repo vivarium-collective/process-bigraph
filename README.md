@@ -3,32 +3,27 @@
 [![PyPI](https://img.shields.io/pypi/v/process-bigraph.svg)](https://pypi.org/project/process-bigraph/)
 [![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/process-bigraph/notebooks/process-bigraphs.html)
 
-**Process-Bigraph** is an extension of the [bigraph-schema](https://github.com/vivarium-collective/bigraph-schema) 
-library, offering a computational framework that integrates process modules into bigraphs. This allows for the 
-representation of complex, multiscale systems, that combine the structural capabilities of bigraphs with modular dynamic
-processes. It serves as a tool for creating, simulating, and analyzing intricate and dynamic models, 
-fostering a more comprehensive understanding of complex systems. 
+**Process-Bigraph** is a compositional runtime and protocol for building and executing multiscale models from interoperable processes.
 
-<p align="center">
-    <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/process-bigraph.png?raw=true" width="800" alt="Process Bigraph">
-</p>
+Rather than defining a single modeling method, process-bigraph provides a shared architectural layer for declaring process interfaces, wiring processes through typed shared state, orchestrating execution across heterogeneous timescales, and supporting dynamic structural change such as workflows, division, and graph rewrites. It is the execution core of **Vivarium 2.0**, designed to integrate models built with different formalisms—including ODEs, FBA, agent-based models, spatial solvers, and machine-learning components—into a single coherent simulation.
 
-## What are Process Bigraphs?
+<p align="center"> <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/composition_framework.png?raw=true" width="800" alt="Process Bigraph"> </p>
 
-Process Bigraphs are based on a mathematical formalism introduced by Robin Milner, which was expanded in Vivarium with 
-the addition of Processes, and standardized with the introduction of the Schema format. Bigraphs provide a powerful 
-framework for compositional modeling due to their ability to represent complex systems through hierarchical structures 
-and flexible reconfigurations, thus enabling the seamless composition and decomposition of system components. Variables 
-are contained in Stores (circles), which can be embedded in the place graph hierarchy, represented by the dark edges. 
-Instead of hyperedges, CBS employs Processes (the rectangles) which have ports (solid black dots) connect via wires 
-(dashed edges) to variables within the Stores. Processes are functions that read and write to variables through their 
-ports. They can be used to rewrite the bigraph by adding new structure and new processes.
+
+## What is a Process Bigraph?
+
+A process bigraph combines typed **stores** (hierarchical state), executable **processes** with explicit input/output ports, **composites** that encapsulate entire sub-simulations behind an interface, and **orchestration patterns** such as multi-timestepping, directed workflows, and event-driven graph rewrites.
+
+Processes do not mutate state directly. Instead, they emit typed deltas that are merged by the runtime, allowing numerical updates, structural rewrites, and scheduling to coexist under a single execution semantics. This makes process-bigraph a **composition protocol**, not a domain-specific simulator.
+
+The conceptual framework and formal semantics of process bigraphs are introduced in:
+
+> Agmon, E. & Spangler, R. K. *Process Bigraphs and the Architecture of Compositional Systems Biology*.  
+> https://arxiv.org/abs/2512.23754
 
 ## Getting Started
 
 ### Installation
-
-You can install `process-bigraph` using pip:
 
 ```console
 pip install process-bigraph

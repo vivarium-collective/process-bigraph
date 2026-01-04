@@ -26,6 +26,17 @@ from process_bigraph.types import ProcessLink, StepLink
 from process_bigraph.processes.examples import IncreaseProcess
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
 
+import socket
+
+
+def _port_open(host: str, port: int, timeout: float = 0.2) -> bool:
+    """Return True if TCP connect succeeds."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
 
 def test_default_config(core):
     process = IncreaseProcess(core=core)
@@ -990,6 +1001,12 @@ def todo_test_dfba_process(core):
 
 
 def test_rest_process(core):
+    host = "localhost"
+    port = 22222
+
+    if not _port_open(host, port):
+        pytest.skip(f"REST server not running at {host}:{port} (skipping integration test)")
+
     state = {
         'mass': 1.0,
         'rest-process': {
@@ -998,22 +1015,19 @@ def test_rest_process(core):
                 'protocol': 'rest',
                 'data': {
                     'process': 'Grow',
-                    'host': 'localhost',
-                    'port': 22222}},
+                    'host': host,
+                    'port': port}},
             'config': {
                 'rate': 0.005},
-            'inputs': {
-                'mass': ['mass']},
-            'outputs': {
-                'mass': ['mass']},
+            'inputs': {'mass': ['mass']},
+            'outputs': {'mass': ['mass']},
             'interval': 0.7}}
 
-    composite = Composite({
-        'state': state}, core=core)
-
+    composite = Composite({'state': state}, core=core)
     composite.run(11.111)
 
     assert composite.state['mass'] > 1.0
+
 
 
 def test_ram_emitter(core):
