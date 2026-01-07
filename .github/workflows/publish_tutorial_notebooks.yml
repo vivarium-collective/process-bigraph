@@ -1,0 +1,45 @@
+name: publish_tutorial_notebooks
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - "notebooks/tutorial_1.ipynb"
+      - ".github/workflows/publish_tutorial_notebooks.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install nbconvert
+
+      - name: Convert tutorial notebooks to HTML
+        run: |
+          mkdir -p site/notebooks
+          jupyter nbconvert --to html \
+            --output tutorial_1.html \
+            notebooks/tutorial_1.ipynb
+          mv tutorial_1.html site/notebooks/tutorial_1.html
+
+      - name: Publish to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: site
+          publish_branch: gh-pages

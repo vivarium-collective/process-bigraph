@@ -29,15 +29,28 @@ The conceptual framework and formal semantics of process bigraphs are introduced
 pip install process-bigraph
 ```
 
-## Tutorial
+## Tutorials
 
-To get started with Bigraph-viz, explore our resources: 
-* [Process Bigraphs Intro](https://vivarium-collective.github.io/process-bigraph/notebooks/process-bigraphs.html).
-* [Bigraph Schema Basics Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html). For an introduction to the basic elements of process-bigraph schema.
-* [Formatting Tutorial](https://vivarium-collective.github.io/bigraph-viz/notebooks/format.html) for examples
-about how to adjust the final look of your bigraph figure.
-* [Ecoli](https://raw.githubusercontent.com/vivarium-collective/bigraph-viz/main/doc/_static/ecoli.png) for the wiring
-diagraph of a whole-cell E. coli model.
+### Process-Bigraph Tutorials
+
+These tutorials introduce the core concepts of process-bigraph through executable, minimal examples.
+
+- **Tutorial 1 — Process-Bigraph Basics**  
+  A hands-on introduction to Processes, Steps, ports, Composites, workflows, and emitters.  
+  - Source: `notebooks/tutorial_1.ipynb`  
+  - HTML: https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_1.html
+
+### Related Resources
+
+- **Bigraph Schema Basics Tutorial**  
+  https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html  
+
+- **Formatting Tutorial**  
+  https://vivarium-collective.github.io/bigraph-viz/notebooks/format.html  
+
+- **E. coli Whole-Cell Wiring Diagram**  
+  https://raw.githubusercontent.com/vivarium-collective/bigraph-viz/main/doc/_static/ecoli.png
+
 
 ## License
 
