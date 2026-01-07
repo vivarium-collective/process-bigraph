@@ -1,7 +1,7 @@
 # Process-Bigraph
 
 [![PyPI](https://img.shields.io/pypi/v/process-bigraph.svg)](https://pypi.org/project/process-bigraph/)
-[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/process-bigraph/notebooks/process-bigraphs.html)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_1.html)
 
 **Process-Bigraph** is a compositional runtime and protocol for building and executing multiscale models from interoperable processes.
 
