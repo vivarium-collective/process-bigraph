@@ -803,12 +803,17 @@ def test_function_wrappers(core):
     # --- STEP with core ---
     @as_step(inputs={'a': 'float', 'b': 'float'},
              outputs={'sum': 'float'},
-             core=core)
+             name='add',  # optional but makes intent explicit
+             aliases=['add'],  # optional
+             )
     def update_add(state):
         return {'sum': state['a'] + state['b']}
 
     step = update_add(config={}, core=core)
     out = step.update({'a': 5, 'b': 7})
+
+    core.register_link('add', update_add)
+
     assert out == {'sum': 12}
     assert core.access('add')
     print("Step with core:", out)
@@ -816,7 +821,9 @@ def test_function_wrappers(core):
     # --- PROCESS with core ---
     @as_process(inputs={'x': 'float'},
                 outputs={'x': 'float'},
-                core=core)
+                name='decay',
+                aliases=['decay'],
+                )
     def update_decay(state, interval):
         return {'x': state['x'] * (1 - 0.2 * interval)}
 
@@ -829,15 +836,22 @@ def test_function_wrappers(core):
 def test_registered_functions_in_composite(core):
     @as_step(inputs={'a': 'float', 'b': 'float'},
              outputs={'sum': 'float'},
-             core=core)
+             name='add',  # optional but makes intent explicit
+             aliases=['add'],  # optional
+             )
     def update_add(state):
         return {'sum': state['a'] + state['b']}
 
     @as_process(inputs={'x': 'float'},
                 outputs={'x': 'float'},
-                core=core)
+                name='decay',
+                aliases=['decay'],
+                )
     def update_decay(state, interval):
         return {'x': state['x'] * (1 - 0.1 * interval)}
+
+    core.register_link('add', update_add)
+    core.register_link('decay', update_decay)
 
     # Define Composite
     state = {

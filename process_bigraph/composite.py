@@ -703,54 +703,75 @@ class Process(Open):
         return {}
 
 
-def _resolve_core_for_registration(core, func):
-    # Priority:
-    # 1) explicitly passed core
-    # 2) a global variable named `core` in the function’s module/global scope
-    if core is not None:
-        return core
-    return func.__globals__.get("core", None)
+def as_step(inputs, outputs, name=None, aliases=None):
+    """
+    Decorator: convert an `update_*` pure function into a Step subclass.
 
-
-def as_step(inputs, outputs, core=None):
+    - Does NOT register into any core.
+    - Adds metadata so discover_packages can register nice aliases (e.g. "add").
+    """
     def decorator(func):
-        assert func.__name__.startswith('update_'), "Function name must be of the form update_*"
-        step_name = func.__name__[len('update_'):]
+        if not func.__name__.startswith("update_"):
+            raise AssertionError("Function name must be of the form update_*")
+
+        step_name = name or func.__name__[len("update_"):]
+        step_aliases = list(aliases or [])
+        # default alias: the function-derived name, e.g. update_add -> "add"
+        if step_name not in step_aliases:
+            step_aliases.insert(0, step_name)
 
         class FunctionStep(Step):
             def inputs(self): return inputs
             def outputs(self): return outputs
             def update(self, state): return func(state)
 
-        FunctionStep.__name__ = step_name + 'Step'
+        FunctionStep.__name__ = f"{step_name}Step"
 
-        resolved_core = _resolve_core_for_registration(core, func)
-        if resolved_core is not None:
-            resolved_core.register_link(step_name, FunctionStep)
+        # IMPORTANT: make this class look like it belongs to the user's module
+        FunctionStep.__module__ = func.__module__
+
+        # Discovery metadata
+        FunctionStep.__pb_kind__ = "step"
+        FunctionStep.__pb_aliases__ = step_aliases
+        FunctionStep.__pb_wrapped__ = func
 
         return FunctionStep
     return decorator
 
 
-def as_process(inputs, outputs, core=None):
+def as_process(inputs, outputs, name=None, aliases=None):
+    """
+    Decorator: convert an `update_*` function into a Process subclass.
+
+    - Does NOT register into any core.
+    - Adds metadata so discover_packages can register nice aliases (e.g. "odeint").
+    """
     def decorator(func):
-        assert func.__name__.startswith('update_'), "Function name must be of the form update_*"
-        process_name = func.__name__[len('update_'):]
+        if not func.__name__.startswith("update_"):
+            raise AssertionError("Function name must be of the form update_*")
+
+        process_name = name or func.__name__[len("update_"):]
+        process_aliases = list(aliases or [])
+        if process_name not in process_aliases:
+            process_aliases.insert(0, process_name)
 
         class FunctionProcess(Process):
             def inputs(self): return inputs
             def outputs(self): return outputs
             def update(self, state, interval): return func(state, interval)
 
-        FunctionProcess.__name__ = process_name + 'Process'
+        FunctionProcess.__name__ = f"{process_name}Process"
 
-        resolved_core = _resolve_core_for_registration(core, func)
-        if resolved_core is not None:
-            resolved_core.register_link(process_name, FunctionProcess)
+        # IMPORTANT: make this class look like it belongs to the user's module
+        FunctionProcess.__module__ = func.__module__
+
+        # Discovery metadata
+        FunctionProcess.__pb_kind__ = "process"
+        FunctionProcess.__pb_aliases__ = process_aliases
+        FunctionProcess.__pb_wrapped__ = func
 
         return FunctionProcess
     return decorator
-
 
 
 class ProcessEnsemble(Process):
@@ -1390,6 +1411,7 @@ class Composite(Process):
                         paths.append(path)
 
                 update_paths = self.apply_updates(updates)
+                update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
 
