@@ -33,9 +33,9 @@ jobs:
         run: |
           mkdir -p site/notebooks
           jupyter nbconvert --to html \
+            --output-dir site/notebooks \
             --output tutorial_1.html \
             notebooks/tutorial_1.ipynb
-          mv tutorial_1.html site/notebooks/tutorial_1.html
 
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4
