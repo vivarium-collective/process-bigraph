@@ -803,7 +803,8 @@ def test_function_wrappers(core):
     # --- STEP with core ---
     @as_step(inputs={'a': 'float', 'b': 'float'},
              outputs={'sum': 'float'},
-             core=core)
+             # core=core
+             )
     def update_add(state):
         return {'sum': state['a'] + state['b']}
 
@@ -829,13 +830,15 @@ def test_function_wrappers(core):
 def test_registered_functions_in_composite(core):
     @as_step(inputs={'a': 'float', 'b': 'float'},
              outputs={'sum': 'float'},
-             core=core)
+             # core=core
+             )
     def update_add(state):
         return {'sum': state['a'] + state['b']}
 
     @as_process(inputs={'x': 'float'},
                 outputs={'x': 'float'},
-                core=core)
+                # core=core
+                )
     def update_decay(state, interval):
         return {'x': state['x'] * (1 - 0.1 * interval)}
 

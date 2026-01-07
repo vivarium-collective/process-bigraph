@@ -1411,6 +1411,7 @@ class Composite(Process):
                         paths.append(path)
 
                 update_paths = self.apply_updates(updates)
+                update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
 
