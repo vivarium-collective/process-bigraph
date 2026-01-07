@@ -4,7 +4,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - "notebooks/tutorial_1.ipynb"
+      - "notebooks/tutorial_*.ipynb"
       - ".github/workflows/publish_tutorial_notebooks.yml"
 
 permissions:
@@ -27,15 +27,39 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install nbconvert
+          pip install nbconvert jupyter
 
       - name: Convert tutorial notebooks to HTML
         run: |
           mkdir -p site/notebooks
-          jupyter nbconvert --to html \
-            --output-dir site/notebooks \
-            --output tutorial_1.html \
-            notebooks/tutorial_1.ipynb
+          for nb in notebooks/tutorial_*.ipynb; do
+            echo "Converting $nb"
+            jupyter nbconvert --to html --output-dir site/notebooks "$nb"
+          done
+
+      - name: Generate tutorial index
+        run: |
+          python - << 'PY'
+          from pathlib import Path
+
+          out = Path("site/notebooks")
+          htmls = sorted(out.glob("tutorial_*.html"))
+
+          lines = [
+              "<!doctype html>",
+              "<meta charset='utf-8'>",
+              "<title>Process-Bigraph Tutorials</title>",
+              "<h1>Process-Bigraph Tutorials</h1>",
+              "<ul>",
+          ]
+          for h in htmls:
+              lines.append(f"<li><a href='{h.name}'>{h.stem}</a></li>")
+          lines.append("</ul>")
+
+          (out / "index.html").write_text("\n".join(lines), encoding="utf-8")
+          print("Wrote tutorial index")
+          PY
+
 
       - name: Publish to gh-pages
         uses: peaceiris/actions-gh-pages@v4

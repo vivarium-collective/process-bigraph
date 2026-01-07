@@ -1,7 +1,7 @@
 # Process-Bigraph
 
 [![PyPI](https://img.shields.io/pypi/v/process-bigraph.svg)](https://pypi.org/project/process-bigraph/)
-[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Tutorial-brightgreen)](https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_1.html)
+[![GitHub Pages](https://img.shields.io/badge/GitHub%20Pages-Tutorials-brightgreen)](https://vivarium-collective.github.io/process-bigraph/notebooks/index.html)
 
 **Process-Bigraph** is a compositional runtime and protocol for building and executing multiscale models from interoperable processes.
 
@@ -31,14 +31,24 @@ pip install process-bigraph
 
 ## Tutorials
 
-### Process-Bigraph Tutorials
+## Tutorials
 
-These tutorials introduce the core concepts of process-bigraph through executable, minimal examples.
+The Process-Bigraph tutorials are executable Jupyter notebooks rendered to HTML
+and published automatically on GitHub Pages.
+
+- 📚 **Tutorial Index (all tutorials)**  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/index.html
+
+### Featured Tutorials
 
 - **Tutorial 1 — Process-Bigraph Basics**  
-  A hands-on introduction to Processes, Steps, ports, Composites, workflows, and emitters.  
-  - Source: `notebooks/tutorial_1.ipynb`  
-  - HTML: https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_1.html
+  Processes, Steps, ports, Composites, workflows, and emitters  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_1.html
+
+- **Tutorial 2 — Wrapping an ODE Solver (odeint)**  
+  How to expose an existing scientific API as a Process  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_2.html
+
 
 ### Related Resources
 
