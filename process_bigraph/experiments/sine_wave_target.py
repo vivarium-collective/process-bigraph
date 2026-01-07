@@ -37,7 +37,7 @@ def update_sine_target(state):
     period = 8.0
     omega = 2.0 * np.pi / period
 
-    print(f'state {state}, target: {center + amplitude * np.sin(omega * t)}')
+    print(f'sine target: state {state}, target {center + amplitude * np.sin(omega * t)}')
     return {"target": center + amplitude * np.sin(omega * t)}
 
 @as_step(
@@ -46,7 +46,6 @@ def update_sine_target(state):
 )
 def update_error(state):
     return {"error": float(state["target"]) - float(state["x"])}
-
 
 
 
@@ -86,12 +85,6 @@ class MoveToward(Process):
 MT_ADDR = f"local:!{MoveToward.__module__}.MoveToward"
 print("Using MoveToward address:", MT_ADDR)
 
-# Quick sanity check: instantiate + run once
-p = MoveToward(config={"rate": 2.0}, core=core)
-print("update:", p.update({"x": 0.0, "target": 10.0}, interval=1.0))  # expect x=2.0
-print("✅ MoveToward Process defined")
-
-
 
 def run_1():
     # ---- Initial conditions ----
@@ -102,7 +95,7 @@ def run_1():
         "error": 0.0,
     }
 
-    workflow_with_emitter = Composite(
+    workflow = Composite(
         {
             "state": {
                 "Env": {
@@ -162,15 +155,14 @@ def run_1():
         core=core,
     )
 
-    # Run and then read back recorded rows
-    workflow_with_emitter.run(10.0)
+    # Run and then read back records
+    workflow.run(10.0)
 
-    records = workflow_with_emitter.state["emitter"]["instance"].query()
+    records = workflow.state["emitter"]["instance"].query()
     print("n records:", len(records))
     print("first record:", records[0])
     print("last record:", records[-1])
-
-    records  # in notebooks, this will display nicely
+    records
 
 
     # Convert records (list of dicts) to columns
