@@ -243,6 +243,48 @@ def make_test_core():
 def core():
     return make_test_core()
 
+def plot_single_eval(state, *, inputs=("a", "b", "c"), outputs=("z",), expected=None, title=None):
+    """
+    Plot a single evaluation of MathExpressionStep: inputs and outputs as bars.
+
+    Parameters
+    ----------
+    state : dict-like
+        Typically sim.state (or a nested dict) containing the variables.
+    inputs, outputs : tuple[str]
+        Names to plot from the state.
+    expected : dict[str, float] | None
+        Optional expected values to overlay for outputs, e.g. {"z": ...}.
+    title : str | None
+        Plot title.
+    """
+    names = list(inputs) + list(outputs)
+    values = [float(state[n]) for n in names]
+
+    plt.figure()
+    plt.bar(names, values)
+    plt.ylabel("value")
+    plt.title(title or "Single evaluation: inputs → outputs")
+    plt.show()
+
+    if expected:
+        # Small companion plot: output vs expected
+        out_names = list(outputs)
+        out_vals = [float(state[n]) for n in out_names]
+        exp_vals = [float(expected[n]) for n in out_names]
+
+        x = np.arange(len(out_names))
+        width = 0.35
+
+        plt.figure()
+        plt.bar(x - width/2, out_vals, width, label="computed")
+        plt.bar(x + width/2, exp_vals, width, label="expected")
+        plt.xticks(x, out_names)
+        plt.ylabel("value")
+        plt.title("Outputs: computed vs expected")
+        plt.legend()
+        plt.show()
+
 def plot_timeseries(records, series, *, x="t", title=None, xlabel=None, ylabel=None,
                     marker=".", linewidth=None, legend=True):
     if not records:

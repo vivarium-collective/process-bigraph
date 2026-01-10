@@ -84,6 +84,10 @@ rendered to HTML and published automatically on GitHub Pages.
   *How to expose an existing scientific API as a Process*  
   https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_2.html
 
+- **Tutorial 3 — Declarative Math**  
+  *Defining mathematical relationships, signal pipelines, and events using `MathExpressionStep`*  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_3.html
+
 More tutorials are added continuously and appear automatically in the index.
 
 ---
