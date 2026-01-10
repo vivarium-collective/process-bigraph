@@ -25,12 +25,51 @@ class Tick(Process):
 
 
 # ---------- the Step ----------
-import sympy as sp
-import numpy as np
-from process_bigraph.composite import Step
-
-
 class MathExpressionStep(Step):
+    """
+    Evaluate a set of user-configured mathematical expressions as a single Step.
+
+    This Step parses a list of named expressions, infers the required input ports
+    from the expressions' free symbols, and creates output ports for each named
+    expression. Expressions may reference other outputs; the Step will compute a
+    dependency-respecting evaluation order automatically via a topological sort.
+
+    Key behaviors
+    -------------
+    - Dynamic ports:
+        * Outputs are exactly the set of `out` names in `config["expressions"]`.
+        * Inputs are any free symbols that are not output names and not parameters.
+    - Dependency ordering:
+        * If an expression references another output, it becomes a dependency.
+        * Expressions are evaluated in topological order, not list order.
+        * Cycles (algebraic loops) raise a ValueError with a dependency hint.
+    - Compilation:
+        * Each expression is parsed with SymPy and compiled once in `initialize()`
+          using `sympy.lambdify` with the selected backend (default: NumPy).
+        * During `update()`, expressions are evaluated using current state inputs
+          and any outputs computed earlier in the dependency order.
+    - Semantics:
+        * Returns overwrite patches for all outputs computed during `update()`.
+
+    Configuration
+    -------------
+    expressions : list[dict]
+        List of {"out": <str>, "expr": <str>} entries. Each `out` becomes an
+        output port and state field.
+    params : dict[str, float], optional
+        Named constants available to expressions without becoming input ports.
+    functions : str, optional
+        SymPy lambdify backend module name (e.g. "numpy").
+    debug : bool, optional
+        If True, prints inferred ports, dependency order, and compilation details.
+
+    Notes
+    -----
+    - This Step performs a single-pass evaluation in dependency order; it is not
+      a simultaneous equation solver. Cyclic dependencies require a different
+      approach (e.g., fixed-point iteration or root finding).
+    """
+
     config_schema = {
         "expressions": "node",  # list[{"out": str, "expr": str}]
         "params": {"_type": "node", "_default": {}},
@@ -204,22 +243,36 @@ def make_test_core():
 def core():
     return make_test_core()
 
-def run_math_step_tick_only(core, total_time=12.0, dt=0.1):
-    """
-    Interesting + intuitive demo with ONLY:
-      - Tick (Process): advances time t
-      - MathExpressionStep (Step): generates signals from time and combines them
+def plot_timeseries(records, series, *, x="t", title=None, xlabel=None, ylabel=None,
+                    marker=".", linewidth=None, legend=True):
+    if not records:
+        raise ValueError("No records to plot")
 
-    Story:
-      - a(t): "daily activity"  (fast-ish sine)
-      - b(t): "weekly mood"     (slower cosine)
-      - c(t): "seasonal shift"  (very slow sine, used inside sin(c))
-      - k(t): "knob" (0..~3) that modulates w = z/(k+1)
-      - z(t): combined interaction: a*b + sin(c)
-      - w(t): normalized z by a varying knob
-      - u(t): damped oscillation (classic intuitive signal)
-      - energy(t): a simple scalar summary
-    """
+    ts = np.array([r[x] for r in records], dtype=float)
+
+    if isinstance(series, dict):
+        keys = list(series.keys())
+        labels = series
+    else:
+        keys = list(series)
+        labels = {k: k for k in keys}
+
+    plt.figure()
+    for k in keys:
+        ys = np.array([r[k] for r in records], dtype=float)
+        plt.plot(ts, ys, marker=marker, linewidth=linewidth, label=labels[k])
+
+    plt.xlabel(xlabel or x)
+    if ylabel is not None:
+        plt.ylabel(ylabel)
+    if title is not None:
+        plt.title(title)
+    if legend and len(keys) > 1:
+        plt.legend()
+    plt.show()
+
+
+def run_math_step_tick_only(core, total_time=12.0, dt=0.1):
     MATH_ADDR = f"local:!{MathExpressionStep.__module__}.MathExpressionStep"
     TICK_ADDR = f"local:!{Tick.__module__}.Tick"
     print("Using addresses:", {"tick": TICK_ADDR, "math": MATH_ADDR})
@@ -227,20 +280,10 @@ def run_math_step_tick_only(core, total_time=12.0, dt=0.1):
     sim = Composite(
         {
             "state": {
-                # time
                 "t": 0.0,
+                "a": 0.0, "b": 0.0, "c": 0.0, "k": 0.0,
+                "z": 0.0, "w": 0.0, "u": 0.0, "energy": 0.0,
 
-                # outputs (pre-init optional)
-                "a": 0.0,
-                "b": 0.0,
-                "c": 0.0,
-                "k": 0.0,
-                "z": 0.0,
-                "w": 0.0,
-                "u": 0.0,
-                "energy": 0.0,
-
-                # Tick is the ONLY Process
                 "tick": {
                     "_type": "process",
                     "address": TICK_ADDR,
@@ -250,55 +293,34 @@ def run_math_step_tick_only(core, total_time=12.0, dt=0.1):
                     "outputs": {"t": ["t"]},
                 },
 
-                # MathExpressionStep is the ONLY Step
-                # It generates the "inputs" a,b,c,k from time t, then computes z,w,u,energy.
                 "math": {
                     "_type": "step",
                     "address": MATH_ADDR,
                     "config": {
                         "expressions": [
-                            # Time-driven signals (intuitive)
-                            {"out": "a", "expr": "2.0 + 1.2*sin(2*pi*0.35*t)"},                # fast wave
-                            {"out": "b", "expr": "3.0 + 0.8*cos(2*pi*0.10*t + 0.4)"},         # slower wave
-                            {"out": "c", "expr": "0.5 + 0.6*sin(2*pi*0.04*t)"},                # slow drift
-                            {"out": "k", "expr": "1.0 + 2.0*(0.5 + 0.5*sin(2*pi*0.06*t))"},    # knob in [1,3]
-
-                            # Combine them
-                            {"out": "z", "expr": "a*b + sin(c)"},                               # interaction + nonlinearity
-                            {"out": "w", "expr": "z / (k + 1)"},                                # normalized by knob
-                            {"out": "u", "expr": "exp(-0.12*t) * cos(2*pi*0.55*t)"},            # damped oscillator
-                            {"out": "energy", "expr": "0.5*(a**2 + b**2) + w**2 + 0.25*u**2"},  # scalar summary
+                            {"out": "a", "expr": "2.0 + 1.2*sin(2*pi*0.35*t)"},
+                            {"out": "b", "expr": "3.0 + 0.8*cos(2*pi*0.10*t + 0.4)"},
+                            {"out": "c", "expr": "0.5 + 0.6*sin(2*pi*0.04*t)"},
+                            {"out": "k", "expr": "1.0 + 2.0*(0.5 + 0.5*sin(2*pi*0.06*t))"},
+                            {"out": "z", "expr": "a*b + sin(c)"},
+                            {"out": "w", "expr": "z / (k + 1)"},
+                            {"out": "u", "expr": "exp(-0.12*t) * cos(2*pi*0.55*t)"},
+                            {"out": "energy", "expr": "0.5*(a**2 + b**2) + w**2 + 0.25*u**2"},
                         ],
-                        # params are constants (not ports). Provide pi here.
                         "params": {"pi": float(np.pi)},
                         "functions": "numpy",
+                        "debug": False,
                     },
                     "inputs": {"t": ["t"]},
                     "outputs": {
-                        "a": ["a"],
-                        "b": ["b"],
-                        "c": ["c"],
-                        "k": ["k"],
-                        "z": ["z"],
-                        "w": ["w"],
-                        "u": ["u"],
-                        "energy": ["energy"],
+                        "a": ["a"], "b": ["b"], "c": ["c"], "k": ["k"],
+                        "z": ["z"], "w": ["w"], "u": ["u"], "energy": ["energy"],
                     },
                 },
 
-                # Record everything
                 "emitter": emitter_from_wires(
-                    {
-                        "t": ["t"],
-                        "a": ["a"],
-                        "b": ["b"],
-                        "c": ["c"],
-                        "k": ["k"],
-                        "z": ["z"],
-                        "w": ["w"],
-                        "u": ["u"],
-                        "energy": ["energy"],
-                    }
+                    {"t": ["t"], "a": ["a"], "b": ["b"], "c": ["c"], "k": ["k"],
+                     "z": ["z"], "w": ["w"], "u": ["u"], "energy": ["energy"]}
                 ),
             }
         },
@@ -312,72 +334,92 @@ def run_math_step_tick_only(core, total_time=12.0, dt=0.1):
     print("first record:", records[0])
     print("last record :", records[-1])
 
-    # Plot a few key curves
-    ts = np.array([r["t"] for r in records], dtype=float)
-    z  = np.array([r["z"] for r in records], dtype=float)
-    w  = np.array([r["w"] for r in records], dtype=float)
-    u  = np.array([r["u"] for r in records], dtype=float)
-    en = np.array([r["energy"] for r in records], dtype=float)
-    a  = np.array([r["a"] for r in records], dtype=float)
-    b  = np.array([r["b"] for r in records], dtype=float)
-    k  = np.array([r["k"] for r in records], dtype=float)
+    plot_timeseries(records, ["a", "b", "k"], title="Time-driven signals: a(t), b(t), k(t)")
+    plot_timeseries(records, ["z"], title="z(t) = a(t)*b(t) + sin(c(t))", legend=False)
+    plot_timeseries(records, ["w"], title="w(t) = z(t)/(k(t)+1)", legend=False)
+    plot_timeseries(records, ["u"], title="u(t) damped oscillator", legend=False)
+    plot_timeseries(records, ["energy"], title="energy(t)", legend=False)
 
-    plt.figure()
-    plt.plot(ts, z, marker=".")
-    plt.xlabel("t")
-    plt.ylabel("z")
-    plt.title("z(t) = a(t)*b(t) + sin(c(t))")
-    plt.show()
 
-    plt.figure()
-    plt.plot(ts, w, marker=".")
-    plt.xlabel("t")
-    plt.ylabel("w")
-    plt.title("w(t) = z(t)/(k(t)+1)  (k is a time-varying knob)")
-    plt.show()
+def run_math_step_tick_only(core, total_time=12.0, dt=0.1):
+    MATH_ADDR = f"local:!{MathExpressionStep.__module__}.MathExpressionStep"
+    TICK_ADDR = f"local:!{Tick.__module__}.Tick"
+    print("Using addresses:", {"tick": TICK_ADDR, "math": MATH_ADDR})
 
-    plt.figure()
-    plt.plot(ts, u, marker=".")
-    plt.xlabel("t")
-    plt.ylabel("u")
-    plt.title("u(t) = exp(-0.12 t) * cos(2π·0.55 t)  (damped oscillation)")
-    plt.show()
+    sim = Composite(
+        {
+            "state": {
+                "t": 0.0,
+                "a": 0.0, "b": 0.0, "c": 0.0, "k": 0.0,
+                "z": 0.0, "w": 0.0, "u": 0.0, "energy": 0.0,
 
-    plt.figure()
-    plt.plot(ts, en, marker=".")
-    plt.xlabel("t")
-    plt.ylabel("energy")
-    plt.title("energy(t) = 0.5(a²+b²) + w² + 0.25 u²")
-    plt.show()
+                "tick": {
+                    "_type": "process",
+                    "address": TICK_ADDR,
+                    "config": {},
+                    "interval": dt,
+                    "inputs": {"t": ["t"]},
+                    "outputs": {"t": ["t"]},
+                },
 
-    plt.figure()
-    plt.plot(ts, a, marker=".", label="a(t)")
-    plt.plot(ts, b, marker=".", label="b(t)")
-    plt.plot(ts, k, marker=".", label="k(t)")
-    plt.xlabel("t")
-    plt.ylabel("signals")
-    plt.title("Time-driven signals generated by MathExpressionStep")
-    plt.legend()
-    plt.show()
+                "math": {
+                    "_type": "step",
+                    "address": MATH_ADDR,
+                    "config": {
+                        "expressions": [
+                            {"out": "a", "expr": "2.0 + 1.2*sin(2*pi*0.35*t)"},
+                            {"out": "b", "expr": "3.0 + 0.8*cos(2*pi*0.10*t + 0.4)"},
+                            {"out": "c", "expr": "0.5 + 0.6*sin(2*pi*0.04*t)"},
+                            {"out": "k", "expr": "1.0 + 2.0*(0.5 + 0.5*sin(2*pi*0.06*t))"},
+                            {"out": "z", "expr": "a*b + sin(c)"},
+                            {"out": "w", "expr": "z / (k + 1)"},
+                            {"out": "u", "expr": "exp(-0.12*t) * cos(2*pi*0.55*t)"},
+                            {"out": "energy", "expr": "0.5*(a**2 + b**2) + w**2 + 0.25*u**2"},
+                        ],
+                        "params": {"pi": float(np.pi)},
+                        "functions": "numpy",
+                        "debug": False,
+                    },
+                    "inputs": {"t": ["t"]},
+                    "outputs": {
+                        "a": ["a"], "b": ["b"], "c": ["c"], "k": ["k"],
+                        "z": ["z"], "w": ["w"], "u": ["u"], "energy": ["energy"],
+                    },
+                },
+
+                "emitter": emitter_from_wires(
+                    {"t": ["t"], "a": ["a"], "b": ["b"], "c": ["c"], "k": ["k"],
+                     "z": ["z"], "w": ["w"], "u": ["u"], "energy": ["energy"]}
+                ),
+            }
+        },
+        core=core,
+    )
+
+    sim.run(total_time)
+    records = sim.state["emitter"]["instance"].query()
+
+    print("n records:", len(records))
+    print("first record:", records[0])
+    print("last record :", records[-1])
+
+    plot_timeseries(records, ["a", "b", "k"], title="Time-driven signals: a(t), b(t), k(t)")
+    plot_timeseries(records, ["z"], title="z(t) = a(t)*b(t) + sin(c(t))", legend=False)
+    plot_timeseries(records, ["w"], title="w(t) = z(t)/(k(t)+1)", legend=False)
+    plot_timeseries(records, ["u"], title="u(t) damped oscillator", legend=False)
+    plot_timeseries(records, ["energy"], title="energy(t)", legend=False)
 
 
 def run_math_step_with_dependencies(core, total_time=8.0, dt=0.2):
     MATH_ADDR = f"local:!{MathExpressionStep.__module__}.MathExpressionStep"
     TICK_ADDR = f"local:!{Tick.__module__}.Tick"
+    print("Using addresses:", {"tick": TICK_ADDR, "math": MATH_ADDR})
 
     sim = Composite(
         {"state": {
             "t": 0.0,
-
-            # outputs / intermediates (initialized but overwritten)
-            "a": 0.0,
-            "b": 0.0,
-            "k": 0.0,
-            "pre": 0.0,
-            "z": 0.0,
-            "w": 0.0,
-            "rect": 0.0,
-            "score": 0.0,
+            "a": 0.0, "b": 0.0, "k": 0.0,
+            "pre": 0.0, "z": 0.0, "w": 0.0, "rect": 0.0, "score": 0.0,
 
             "tick": {
                 "_type": "process",
@@ -391,47 +433,31 @@ def run_math_step_with_dependencies(core, total_time=8.0, dt=0.2):
                 "_type": "step",
                 "address": MATH_ADDR,
                 "config": {
-                    # SCRAMBLED ON PURPOSE (dependency sorter should fix it)
                     "expressions": [
-                        # downstream first:
                         {"out": "score", "expr": "0.7*w + 0.3*rect - 0.15*k"},
-                        {"out": "rect", "expr": "log(1 + pre**2)"},  # nonlinear rectification of pre
-                        {"out": "w", "expr": "tanh(z) / (1 + 0.3*k)"},  # saturating + gain knob
-                        {"out": "z", "expr": "0.8*pre + 0.6*sin(2*pi*0.07*t)"},  # mixes pre + slow modulation
-                        {"out": "pre", "expr": "a*b"},  # interaction
-
-                        # "inputs" generated from t:
-                        {"out": "k", "expr": "1.5 + 1.0*sin(2*pi*0.03*t + 0.2)"},
-                        {"out": "b", "expr": "2.0*cos(2*pi*0.11*t) + 0.4*sin(2*pi*0.02*t)"},
-                        {"out": "a", "expr": "1.8*sin(2*pi*0.17*t) + 0.6*cos(2*pi*0.05*t + 0.3)"},
+                        {"out": "rect",  "expr": "log(1 + pre**2)"},
+                        {"out": "w",     "expr": "tanh(z) / (1 + 0.3*k)"},
+                        {"out": "z",     "expr": "0.8*pre + 0.6*sin(2*pi*0.07*t)"},
+                        {"out": "pre",   "expr": "a*b"},
+                        {"out": "k",     "expr": "1.5 + 1.0*sin(2*pi*0.03*t + 0.2)"},
+                        {"out": "b",     "expr": "2.0*cos(2*pi*0.11*t) + 0.4*sin(2*pi*0.02*t)"},
+                        {"out": "a",     "expr": "1.8*sin(2*pi*0.17*t) + 0.6*cos(2*pi*0.05*t + 0.3)"},
                     ],
                     "params": {"pi": float(np.pi)},
                     "functions": "numpy",
-                    "debug": True,  # prints inferred order + deps
+                    "debug": False,
                 },
                 "inputs": {"t": ["t"]},
                 "outputs": {
-                    "a": ["a"],
-                    "b": ["b"],
-                    "k": ["k"],
-                    "pre": ["pre"],
-                    "z": ["z"],
-                    "w": ["w"],
-                    "rect": ["rect"],
-                    "score": ["score"],
+                    "a": ["a"], "b": ["b"], "k": ["k"],
+                    "pre": ["pre"], "z": ["z"], "w": ["w"],
+                    "rect": ["rect"], "score": ["score"],
                 },
             },
 
             "emitter": emitter_from_wires({
-                "t": ["t"],
-                "a": ["a"],
-                "b": ["b"],
-                "k": ["k"],
-                "pre": ["pre"],
-                "z": ["z"],
-                "w": ["w"],
-                "rect": ["rect"],
-                "score": ["score"],
+                "t": ["t"], "a": ["a"], "b": ["b"], "k": ["k"],
+                "pre": ["pre"], "z": ["z"], "w": ["w"], "rect": ["rect"], "score": ["score"],
             }),
         }},
         core=core
@@ -444,53 +470,14 @@ def run_math_step_with_dependencies(core, total_time=8.0, dt=0.2):
     print("first:", records[0])
     print("last :", records[-1])
 
-    ts = np.array([r["t"] for r in records], float)
-    a = np.array([r["a"] for r in records], float)
-    b = np.array([r["b"] for r in records], float)
-    k = np.array([r["k"] for r in records], float)
-    pre = np.array([r["pre"] for r in records], float)
-    z = np.array([r["z"] for r in records], float)
-    w = np.array([r["w"] for r in records], float)
-    rect = np.array([r["rect"] for r in records], float)
-    score = np.array([r["score"] for r in records], float)
+    plot_timeseries(records, ["a", "b", "k"], title="Generated signals (scrambled list; dependency-ordered execution)")
+    plot_timeseries(records, ["pre"], title="Intermediate: pre(t) = a*b", legend=False)
+    plot_timeseries(records, ["z", "w"], title="z(t) and w(t)", legend=True)
+    plot_timeseries(records, ["rect", "score"], title="rectification + score", legend=True)
 
-    plt.figure()
-    plt.plot(ts, a, marker=".", label="a(t)")
-    plt.plot(ts, b, marker=".", label="b(t)")
-    plt.plot(ts, k, marker=".", label="k(t)")
-    plt.xlabel("t");
-    plt.ylabel("signals")
-    plt.title("Generated signals (oscillatory, non-monotone)")
-    plt.legend()
-    plt.show()
-
-    plt.figure()
-    plt.plot(ts, pre, marker=".")
-    plt.xlabel("t");
-    plt.ylabel("pre = a*b")
-    plt.title("Intermediate interaction term pre(t)")
-    plt.show()
-
-    plt.figure()
-    plt.plot(ts, z, marker=".", label="z")
-    plt.plot(ts, w, marker=".", label="w")
-    plt.xlabel("t");
-    plt.ylabel("value")
-    plt.title("z(t) and w(t): modulation + saturation + gain knob")
-    plt.legend()
-    plt.show()
-
-    plt.figure()
-    plt.plot(ts, rect, marker=".", label="rect = log(1+pre^2)")
-    plt.plot(ts, score, marker=".", label="score")
-    plt.xlabel("t");
-    plt.ylabel("value")
-    plt.title("Nonlinear rectification + combined score")
-    plt.legend()
-    plt.show()
 
 
 if __name__ == "__main__":
     core = make_test_core()
-    # run_math_step_tick_only(core)
+    run_math_step_tick_only(core)
     run_math_step_with_dependencies(core)
