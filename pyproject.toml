@@ -10,6 +10,10 @@ dependencies = [
     "matplotlib",
     "pint>=0.24.4",
     "scipy>=1.8",
+    "sympy",
+    "ipykernel",
+    "jupyter",
+    "notebook",
 ]
 
 [tool.setuptools]
