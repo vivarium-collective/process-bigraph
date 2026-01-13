@@ -92,13 +92,26 @@ More tutorials are added continuously and appear automatically in the index.
 
 ---
 
+## 🧪 Reference Implementation: spatio-flux
+
+Process-Bigraph is exercised end-to-end in **spatio-flux**, a multiscale reference
+model built entirely using the process-bigraph protocol.
+
+spatio-flux composes spatial fields, particle dynamics, and metabolic processes
+using typed shared state and declarative orchestration.
+
+GitHub: https://github.com/vivarium-collective/spatio-flux  
+Live test report: https://vivarium-collective.github.io/spatio-flux/report/index.html
+
+---
+
 ## 🔗 Related Resources
 
 - **Bigraph Schema Basics**  
   https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html  
   *Introduction to the schema language underlying Process-Bigraph*
 
-- **Formatting & Visualization** — diagramming and rendering with
+- **Visualization of Bigraph Document** — diagramming and rendering with
   [**bigraph-viz**](https://github.com/vivarium-collective/bigraph-viz)  
   https://vivarium-collective.github.io/bigraph-viz/notebooks/format.html
 
