@@ -72,8 +72,11 @@ def find_instances(
 
     for key, inner in state.items():
         if isinstance(inner, dict):
-            if isinstance(inner.get('instance'), process_class):
+            instance = inner.get('instance')
+
+            if isinstance(instance, process_class):
                 found[key] = inner
+
             elif not is_schema_key(key):
                 sub_instances = find_instances(inner, instance_type)
                 if sub_instances:
@@ -261,7 +264,7 @@ def build_step_network(steps):
 
         # Assign the priority
         if ancestors[step_key]['priority'] is None:
-            ancestors[step_key]['priority'] = step['priority']
+            ancestors[step_key]['priority'] = step.get('priority', 0.0)
 
         input_paths = ancestors[step_key]['input_paths'] or []
         output_paths = ancestors[step_key]['output_paths'] or []
