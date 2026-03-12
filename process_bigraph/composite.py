@@ -16,6 +16,8 @@ import os
 import copy
 import json
 import math
+import numpy as np
+
 from typing import (
     Any, Dict, List, Optional, Set, Tuple, Union,
     Mapping, MutableMapping, Sequence,
@@ -1173,8 +1175,17 @@ class Composite(Process):
 
         os.makedirs(outdir, exist_ok=True)
         filepath = os.path.join(outdir, filename)
-        with open(filepath, 'w') as f:
-            json.dump(document, f, indent=4)
+        # outjson = json.dumps(
+        #     document,
+        #     default=encode_key)
+
+        with open(filepath, 'w') as outfile:
+            json.dump(
+                document,
+                outfile,
+                indent=2,
+                default=encode_key)
+
             print(f"Saved composite to {filepath}")
 
 
@@ -1663,3 +1674,16 @@ class Composite(Process):
         self.run(interval)
 
         return self.bridge_updates
+
+
+def encode_key(o):
+        if isinstance(o, np.ndarray):
+            o.tolist()
+
+        elif isinstance(o, dict):
+            return {
+                str(k): encode_key(v)
+                for k, v in o.items()}
+
+        else:
+            return o
