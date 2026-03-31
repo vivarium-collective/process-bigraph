@@ -1599,6 +1599,24 @@ class Composite(Process):
         # Return a deferred object that will project the update when requested
         return Defer(update, defer_project, (self.schema, self.state, path))
 
+    @staticmethod
+    def _has_structural_keys(state: Any) -> bool:
+        """Check if a state dict contains keys that signal structural changes.
+
+        Structural changes (_add, _remove, _type) require re-running
+        realize() and find_instance_paths(). Plain value updates do not.
+        """
+        if not isinstance(state, dict):
+            return False
+        for key, value in state.items():
+            if key in ('_add', '_remove'):
+                return True
+            if key == '_type':
+                return True
+            if isinstance(value, dict) and Composite._has_structural_keys(value):
+                return True
+        return False
+
     def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
         """
         Apply a series of deferred updates and record the resulting bridge outputs.
@@ -1614,7 +1632,7 @@ class Composite(Process):
             A list of update paths (used to determine which processes to refresh).
         """
         update_paths = []
-        had_merges = False
+        had_structural_changes = False
 
         for defer in updates:
             # Resolve deferred computation to get update(s)
@@ -1629,6 +1647,10 @@ class Composite(Process):
                 paths = hierarchy_depth(update_state)
                 update_paths.extend(paths.keys())
 
+                # Detect structural changes before applying
+                if not had_structural_changes:
+                    had_structural_changes = self._has_structural_keys(update_state)
+
                 # Apply update directly to the internal state,
                 # using the schema from the link itself
                 self.state, merges = self.core.apply(
@@ -1637,7 +1659,7 @@ class Composite(Process):
                     update_state)
 
                 if merges:
-                    had_merges = True
+                    had_structural_changes = True
                     self.schema = self.core.resolve_merges(
                         self.schema,
                         merges)
@@ -1647,10 +1669,10 @@ class Composite(Process):
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
 
-        self.schema, self.state = self.core.realize(self.schema, self.state)
-        self.find_instance_paths(self.state)
-
-        if had_merges:
+        # Only run expensive realize and instance discovery when structural changes occurred
+        if had_structural_changes:
+            self.schema, self.state = self.core.realize(self.schema, self.state)
+            self.find_instance_paths(self.state)
             self._build_view_project_cache()
 
         return update_paths
