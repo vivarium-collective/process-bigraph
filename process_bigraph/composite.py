@@ -1016,9 +1016,8 @@ class Composite(Process):
         # A buffer for updates to be emitted at the composite's output interface.
         self.bridge_updates: List[Any] = []
 
-        # Build caches for view/project operations to avoid repeated schema traversals.
-        self._view_cache = {}  # path -> (ports_schema, wires, parent_path)
-        self._project_cache = {}  # path -> (ports_schema, wires, parent_path)
+        # Precompile view/project operations for fast runtime access.
+        self._compiled_links = {}
         self._build_view_project_cache()
 
         # Build the dependency network between steps and determine which steps should run first.
@@ -1074,179 +1073,39 @@ class Composite(Process):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
 
-    def _resolve_wire_paths(self, wires, parent_path):
-        """Recursively resolve wires to a mapping of port_name -> absolute_state_path.
-
-        Returns a dict with same structure as wires, but leaf wire lists are
-        resolved to absolute tuple paths. Returns None if wires contain
-        unsupported patterns.
-        """
-        if isinstance(wires, str):
-            wires = [wires]
-
-        if isinstance(wires, (list, tuple)):
-            return resolve_path(list(parent_path) + list(wires))
-
-        elif isinstance(wires, dict):
-            resolved = {}
-            for port_key, subwires in wires.items():
-                sub_resolved = self._resolve_wire_paths(subwires, parent_path)
-                if sub_resolved is None:
-                    return None
-                resolved[port_key] = sub_resolved
-            return resolved
-
-        return None
-
     def _build_view_project_cache(self) -> None:
-        """Precompute and cache resolved wire paths for each process.
+        """Precompile view/project operations for each process path.
 
-        For the common case of simple wiring (port -> state path), this
-        pre-resolves all paths so view/project can bypass schema traversal.
+        Delegates to core.precompile_link() which pre-resolves wire paths
+        and precomputes projection schemas so that runtime view/project
+        calls bypass schema traversal entirely.
         """
-        self._view_cache = {}
-        self._project_cache = {}
-        self._fast_view_paths = {}
-        self._fast_project_paths = {}
-        self._compiled_projects = {}
+        self._compiled_links = {}
 
         for path in self.process_paths:
-            try:
-                link_schema, link_state = self.core.traverse(
-                    self.schema, self.state, path)
-                parent_path = path[:-1]
-
-                # Cache inputs view info
-                ports_schema = getattr(link_schema, '_inputs', None)
-                wires = link_state.get('inputs') or {}
-                if ports_schema is not None:
-                    self._view_cache[path] = (ports_schema, wires, parent_path)
-                    # Try to pre-resolve wire paths for fast view
-                    resolved = self._resolve_wire_paths(wires, parent_path)
-                    if resolved is not None:
-                        self._fast_view_paths[path] = resolved
-
-                # Cache outputs project info
-                out_ports_schema = getattr(link_schema, '_outputs', None)
-                out_wires = link_state.get('outputs') or {}
-                if out_ports_schema is not None:
-                    self._project_cache[path] = (out_ports_schema, out_wires, parent_path)
-                    # Try to pre-resolve wire paths for fast project
-                    resolved = self._resolve_wire_paths(out_wires, parent_path)
-                    if resolved is not None:
-                        self._fast_project_paths[path] = resolved
-                    # Precompile project schema for fast projection
-                    if hasattr(self.core, 'precompile_project'):
-                        compiled = self.core.precompile_project(
-                            out_ports_schema, out_wires, parent_path)
-                        if compiled is not None:
-                            self._compiled_projects[path] = compiled
-            except Exception:
-                pass
+            compiled = self.core.precompile_link(
+                self.schema, self.state, path)
+            if compiled is not None:
+                self._compiled_links[path] = compiled
 
     def _invalidate_caches(self) -> None:
-        """Invalidate view/project caches, forcing rebuild on next use."""
-        self._view_cache = {}
-        self._project_cache = {}
-        self._fast_view_paths = {}
-        self._fast_project_paths = {}
-        self._compiled_projects = {}
-
-    def _fast_view(self, resolved_paths):
-        """Extract state values using pre-resolved absolute paths.
-
-        resolved_paths is either a tuple (absolute path) or a dict
-        mapping port names to resolved paths/sub-dicts.
-        """
-        if isinstance(resolved_paths, tuple):
-            return get_path(self.state, resolved_paths)
-        elif isinstance(resolved_paths, dict):
-            result = {}
-            for port_key, sub_paths in resolved_paths.items():
-                value = self._fast_view(sub_paths)
-                if value is not None:
-                    result[port_key] = value
-            return result
-
-    def _fast_project_update(self, resolved_paths, view):
-        """Project an update back to absolute state paths using pre-resolved paths.
-
-        Returns (schema, state) tuple for applying to global state.
-        """
-        if isinstance(resolved_paths, tuple):
-            # Set value at the resolved absolute path
-            project_state = {}
-            current = project_state
-            for key in resolved_paths[:-1]:
-                current[key] = {}
-                current = current[key]
-            if len(resolved_paths) > 0:
-                current[resolved_paths[-1]] = view
-            return project_state
-        elif isinstance(resolved_paths, dict):
-            merged_state = {}
-            for port_key, sub_paths in resolved_paths.items():
-                if port_key in view:
-                    sub_state = self._fast_project_update(sub_paths, view[port_key])
-                    # Deep merge into merged_state
-                    self._deep_merge_into(merged_state, sub_state)
-            return merged_state
-        return {}
-
-    @staticmethod
-    def _deep_merge_into(target, source):
-        """Merge source dict into target dict in place."""
-        for key, value in source.items():
-            if key in target and isinstance(target[key], dict) and isinstance(value, dict):
-                Composite._deep_merge_into(target[key], value)
-            else:
-                target[key] = value
+        """Invalidate precompiled link caches, forcing rebuild on next use."""
+        self._compiled_links = {}
 
     def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:
-        """Fast view using pre-resolved wire paths when available.
-
-        Falls back to cached view_ports, then to full core.view().
-        """
-        # Fastest path: use pre-resolved absolute paths
-        fast = self._fast_view_paths.get(path)
-        if fast is not None:
-            return self._fast_view(fast)
-
-        # Medium path: use cached port schemas
-        cached = self._view_cache.get(path)
-        if cached is not None:
-            ports_schema, wires, parent_path = cached
-            return self.core.view_ports(
-                self.schema,
-                self.state,
-                parent_path,
-                ports_schema,
-                wires)
-
+        """Fast view using precompiled link when available."""
+        compiled = self._compiled_links.get(path)
+        if compiled is not None and compiled.get('view') is not None:
+            return self.core.view_fast(compiled['view'], self.state)
         return self.core.view(self.schema, self.state, path)
 
     def _cached_project(self, path: Tuple[str, ...], view: Any,
                         ports_key: str = 'outputs') -> Any:
-        """Fast project using precompiled schemas when available.
-
-        Falls back to cached project_ports, then to full core.project().
-        """
+        """Fast project using precompiled link when available."""
         if ports_key == 'outputs':
-            # Fastest path: use precompiled project
-            compiled = self._compiled_projects.get(path)
-            if compiled is not None:
-                return self.core.project_ports_fast(compiled, view)
-
-            # Medium path: use cached port schemas
-            cached = self._project_cache.get(path)
-            if cached is not None:
-                ports_schema, wires, parent_path = cached
-                return self.core.project_ports(
-                    ports_schema,
-                    wires,
-                    parent_path,
-                    view)
-
+            compiled = self._compiled_links.get(path)
+            if compiled is not None and compiled.get('project') is not None:
+                return self.core.project_ports_fast(compiled['project'], view)
         return self.core.project(
             self.schema, self.state, path, view, ports_key)
 
