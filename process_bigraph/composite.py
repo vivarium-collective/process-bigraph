@@ -1483,6 +1483,7 @@ class Composite(Process):
                     path)
                 state_interval = process['interval']
                 process_interval = process['instance'].calculate_timestep(state_interval, state)
+                process['interval'] = process_interval
 
             # Determine the target time for the next update
             future = (
