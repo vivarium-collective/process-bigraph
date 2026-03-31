@@ -694,6 +694,9 @@ class Process(Open):
         update = self.update(state, interval)
         return SyncUpdate(update)
 
+    def calculate_timestep(self, interval, state):
+        return interval
+
     def update(self, state: Dict[str, Any], interval: float) -> Dict[str, Any]:
         """
         Override this method to implement the process logic.
@@ -1478,7 +1481,8 @@ class Composite(Process):
                     self.schema,
                     self.state,
                     path)
-                process_interval = process['interval']
+                state_interval = process['interval']
+                process_interval = process['instance'].calculate_timestep(state_interval, state)
 
             # Determine the target time for the next update
             future = (
