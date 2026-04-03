@@ -25,6 +25,7 @@ from process_bigraph.types import ProcessLink, StepLink
 
 from process_bigraph.processes.examples import IncreaseProcess
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
+from process_bigraph.processes.dynamic_structure import DynamicWorker
 
 import socket
 
@@ -1101,6 +1102,150 @@ def test_json_emitter(core):
 
 
 
+def _pool_agents(state):
+    """Return list of agent IDs in the pool (entries with a 'value' key)."""
+    pool = state.get('pool', {})
+    return [
+        k for k, v in pool.items()
+        if isinstance(v, dict) and 'value' in v]
+
+
+def _make_worker_state(process_id, **config_overrides):
+    """Build a full worker state dict with address, wires, and config."""
+    config = {
+        'process_id': process_id,
+        'growth_rate': 1.0,
+        'spawn_growth_rate': 0.8,
+        'propensity_spawn': 1.0,
+        'propensity_remove': 1.0,
+        'propensity_rewire': 0.0,
+        'threshold_spawn': 3.0,
+        'threshold_remove': -3.0,
+        'threshold_rewire': 4.0,
+        'max_pool_size': 15,
+        'spawn_value': 0.5,
+    }
+    config.update(config_overrides)
+    return {
+        'address': 'local:DynamicWorker',
+        'config': config,
+        'inputs': {
+            'sources': ['..'],
+            'self_value': ['value']},
+        'outputs': {
+            'targets': ['..'],
+            'self_value': ['value']},
+        'interval': 1.0}
+
+
+def test_dynamic_structure(core):
+    """Test dynamic structure changes: spawn, remove, rewire, nesting,
+    and verify compiled link cache invalidation throughout."""
+
+    DynamicWorker._counter = 0
+
+    schema = {
+        'pool': {
+            '_type': 'map',
+            '_value': {
+                'value': 'float',
+                'worker': {
+                    '_type': 'process',
+                    'address': make_default('string', 'local:DynamicWorker'),
+                    'inputs': make_default('wires', {
+                        'sources': ['..'],
+                        'self_value': ['value']}),
+                    'outputs': make_default('wires', {
+                        'targets': ['..'],
+                        'self_value': ['value']}),
+                    'interval': make_default('float', 1.0)}}}}
+
+    # Start with 3 agents, each reading the entire pool as sources.
+    # Address and wires provided explicitly since map _value defaults
+    # don't propagate to initial state during realization.
+    state = {
+        'pool': {
+            'a0': {
+                'value': 1.0,
+                'worker': _make_worker_state('a0', propensity_rewire=1.0)},
+            'a1': {
+                'value': 1.0,
+                'worker': _make_worker_state('a1', propensity_rewire=1.0)},
+            'a2': {
+                'value': 1.0,
+                'worker': _make_worker_state('a2', propensity_rewire=1.0)}}}
+
+    composite = Composite({
+        'schema': schema,
+        'state': state}, core=core)
+
+    # -- Verify initial state --
+    agents = _pool_agents(composite.state)
+    assert len(agents) == 3, f"Expected 3 initial agents, got {len(agents)}"
+
+    # Verify initial cache was built
+    assert len(composite._compiled_links) > 0, "Initial cache should be populated"
+    initial_cache_size = len(composite._compiled_links)
+
+    # -- Phase 1: Growth + rewiring (t=0 to t=10) --
+    # Initial agents accumulate value, rewire when source_sum > 4.0,
+    # then spawn after rewire disables further rewiring.
+    composite.run(10.0)
+
+    agents_after_growth = _pool_agents(composite.state)
+    assert len(agents_after_growth) > 3, \
+        f"Pool should have grown beyond 3, got {len(agents_after_growth)}"
+
+    # Cache should have been rebuilt to include new process paths
+    assert len(composite._compiled_links) > initial_cache_size, \
+        "Cache should have grown with new processes"
+
+    # Verify all current process paths have valid compiled links
+    for path in composite.process_paths:
+        compiled = composite._compiled_links.get(path)
+        if compiled is not None:
+            core_cached = core.get_compiled_link(path)
+            assert core_cached is not None, \
+                f"Core cache missing for active process at {path}"
+
+    peak_count = len(agents_after_growth)
+
+    # Cache entry count should match process count
+    assert len(composite._compiled_links) == len(composite.process_paths), \
+        "Compiled links count should match process paths count"
+
+    # -- Phase 2: Continued growth then shrinkage (t=10 to t=25) --
+    # Gen-1 agents spawn gen-2 agents with negative growth.
+    # Gen-2 agents accumulate negative value and self-remove.
+    composite.run(15.0)
+
+    agents_final = _pool_agents(composite.state)
+
+    # Pool should still have agents but count should have changed
+    assert len(agents_final) > 0, "Pool should not be empty"
+    assert len(agents_final) != peak_count, \
+        f"Pool size should have changed from peak of {peak_count}"
+
+    # Verify remaining agents have valid values (above remove threshold)
+    for aid in agents_final:
+        agent = composite.state['pool'][aid]
+        if isinstance(agent, dict) and 'value' in agent:
+            val = agent['value']
+            assert val > -3.0, \
+                f"Surviving agent {aid} has value {val} below remove threshold"
+
+    # Verify cache consistency: all process paths have compiled links,
+    # and Core cache agrees with Composite cache
+    assert len(composite._compiled_links) == len(composite.process_paths), \
+        "Final compiled links count should match process paths count"
+    for path in composite.process_paths:
+        compiled = composite._compiled_links.get(path)
+        if compiled is not None:
+            core_cached = core.get_compiled_link(path)
+            assert core_cached is not None, \
+                f"Core cache inconsistent for {path} after structural changes"
+
+
 def make_test_core():
     members = dict(inspect.getmembers(sys.modules[__name__]))
     return allocate_core(
@@ -1143,6 +1288,7 @@ if __name__ == '__main__':
     test_registered_functions_in_composite(core)
     test_update_removal(core)
 
+    test_dynamic_structure(core)
     test_rest_process(core)
     # test_dfba_process(core)
 
