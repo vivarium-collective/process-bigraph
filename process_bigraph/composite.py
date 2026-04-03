@@ -1016,6 +1016,10 @@ class Composite(Process):
         # A buffer for updates to be emitted at the composite's output interface.
         self.bridge_updates: List[Any] = []
 
+        # Precompile view/project operations for fast runtime access.
+        self._compiled_links = {}
+        self._build_view_project_cache()
+
         # Build the dependency network between steps and determine which steps should run first.
         self.build_step_network()
 
@@ -1069,6 +1073,42 @@ class Composite(Process):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
 
+    def _build_view_project_cache(self) -> None:
+        """Precompile view/project operations for each process path.
+
+        Delegates to core.precompile_link() which pre-resolves wire paths
+        and precomputes projection schemas so that runtime view/project
+        calls bypass schema traversal entirely.
+        """
+        self._compiled_links = {}
+
+        for path in self.process_paths:
+            compiled = self.core.precompile_link(
+                self.schema, self.state, path)
+            if compiled is not None:
+                self._compiled_links[path] = compiled
+
+    def _invalidate_caches(self) -> None:
+        """Invalidate precompiled link caches, forcing rebuild on next use."""
+        self._compiled_links = {}
+
+    def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:
+        """Fast view using precompiled link when available."""
+        compiled = self._compiled_links.get(path)
+        if compiled is not None and compiled.get('view') is not None:
+            return self.core.view_fast(compiled['view'], self.state)
+        return self.core.view(self.schema, self.state, path)
+
+    def _cached_project(self, path: Tuple[str, ...], view: Any,
+                        ports_key: str = 'outputs') -> Any:
+        """Fast project using precompiled link when available."""
+        if ports_key == 'outputs':
+            compiled = self._compiled_links.get(path)
+            if compiled is not None and compiled.get('project') is not None:
+                return self.core.project_ports_fast(compiled['project'], view)
+        return self.core.project(
+            self.schema, self.state, path, view, ports_key)
+
     def merge(self, schema: Dict[str, Any], state: Dict[str, Any], path: Optional[List[str]] = None) -> None:
         """
         Merge a new schema/state subtree into the Composite.
@@ -1087,6 +1127,7 @@ class Composite(Process):
             state)
 
         self.find_instance_paths(self.state)
+        self._build_view_project_cache()
 
     def merge_schema(
             self,
@@ -1477,10 +1518,7 @@ class Composite(Process):
                 state = future_front['state']
             else:
                 # Otherwise, slice the current state for the process
-                state = self.core.view(
-                    self.schema,
-                    self.state,
-                    path)
+                state = self._cached_view(path)
                 state_interval = process['interval']
                 process_interval = process['instance'].calculate_timestep(state_interval, state)
                 process['interval'] = process_interval
@@ -1553,15 +1591,31 @@ class Composite(Process):
             if not isinstance(update_results, list):
                 update_results = [update_results]
 
-            return [self.core.project(
-                schema,
-                state,
+            return [self._cached_project(
                 process_path,
                 update_result,
                 ports_key) for update_result in update_results]
 
         # Return a deferred object that will project the update when requested
         return Defer(update, defer_project, (self.schema, self.state, path))
+
+    @staticmethod
+    def _has_structural_keys(state: Any) -> bool:
+        """Check if a state dict contains keys that signal structural changes.
+
+        Structural changes (_add, _remove, _type) require re-running
+        realize() and find_instance_paths(). Plain value updates do not.
+        """
+        if not isinstance(state, dict):
+            return False
+        for key, value in state.items():
+            if key in ('_add', '_remove'):
+                return True
+            if key == '_type':
+                return True
+            if isinstance(value, dict) and Composite._has_structural_keys(value):
+                return True
+        return False
 
     def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
         """
@@ -1578,6 +1632,7 @@ class Composite(Process):
             A list of update paths (used to determine which processes to refresh).
         """
         update_paths = []
+        had_structural_changes = False
 
         for defer in updates:
             # Resolve deferred computation to get update(s)
@@ -1588,12 +1643,13 @@ class Composite(Process):
                 series = [series]
 
             for update_schema, update_state in series:
-                # if update and isinstance(update, dict) and 'environment' in update and update['environment'] and isinstance(update['environment'], dict) and '_react' in update['environment']:
-                #     import ipdb; ipdb.set_trace()
-
                 # Extract all hierarchical paths touched by this update
                 paths = hierarchy_depth(update_state)
                 update_paths.extend(paths.keys())
+
+                # Detect structural changes before applying
+                if not had_structural_changes:
+                    had_structural_changes = self._has_structural_keys(update_state)
 
                 # Apply update directly to the internal state,
                 # using the schema from the link itself
@@ -1602,20 +1658,22 @@ class Composite(Process):
                     self.state,
                     update_state)
 
-                self.schema = self.core.resolve_merges(
-                    self.schema,
-                    merges)
+                if merges:
+                    had_structural_changes = True
+                    self.schema = self.core.resolve_merges(
+                        self.schema,
+                        merges)
 
                 # Read updated bridge outputs, if available
                 bridge_update = self.read_bridge(update_state)
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
 
-        self.schema, self.state = self.core.realize(self.schema, self.state)
-
-        # TODO: are we doing this twice?
-        # Refresh process and step instance paths
-        self.find_instance_paths(self.state)
+        # Only run expensive realize and instance discovery when structural changes occurred
+        if had_structural_changes:
+            self.schema, self.state = self.core.realize(self.schema, self.state)
+            self.find_instance_paths(self.state)
+            self._build_view_project_cache()
 
         return update_paths
 
@@ -1629,12 +1687,33 @@ class Composite(Process):
         Args:
             update_paths: A list of hierarchical paths that were modified.
         """
+        # Quick check: if no update path shares a first element with any process path,
+        # then no overlap is possible and we can skip the expensive scan.
+        if not hasattr(self, '_process_path_roots'):
+            self._process_path_roots = set()
+        process_roots = self._process_path_roots
+        if not process_roots:
+            process_roots = {p[0] for p in self.process_paths if p}
+            self._process_path_roots = process_roots
+
+        # Fast rejection: check if any update touches a process-adjacent path
+        needs_check = False
+        for update_path in update_paths:
+            if update_path and update_path[0] in process_roots:
+                needs_check = True
+                break
+
+        if not needs_check:
+            return
+
         for update_path in update_paths:
             for process_path in self.process_paths.copy():
                 # Match if update path completely overlaps the process path prefix
                 updated = all(update == process for update, process in zip(update_path, process_path))
                 if updated:
                     self.find_instance_paths(self.state)
+                    self._build_view_project_cache()
+                    self._process_path_roots = set()  # Reset for rebuild
                     return  # Exit early after one match, as paths are re-evaluated
 
 
