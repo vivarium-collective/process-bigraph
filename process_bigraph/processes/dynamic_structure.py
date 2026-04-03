@@ -24,39 +24,17 @@ class DynamicWorker(Process):
     """
 
     config_schema = {
-        'process_id': {
-            '_type': 'string',
-            '_default': ''},
-        'growth_rate': {
-            '_type': 'float',
-            '_default': 1.0},
-        'spawn_growth_rate': {
-            '_type': 'float',
-            '_default': 0.8},
-        'propensity_spawn': {
-            '_type': 'float',
-            '_default': 1.0},
-        'propensity_remove': {
-            '_type': 'float',
-            '_default': 1.0},
-        'propensity_rewire': {
-            '_type': 'float',
-            '_default': 0.0},
-        'threshold_spawn': {
-            '_type': 'float',
-            '_default': 3.0},
-        'threshold_remove': {
-            '_type': 'float',
-            '_default': -3.0},
-        'threshold_rewire': {
-            '_type': 'float',
-            '_default': 4.0},
-        'max_pool_size': {
-            '_type': 'integer',
-            '_default': 15},
-        'spawn_value': {
-            '_type': 'float',
-            '_default': 0.5},
+        'process_id': 'string{}',
+        'growth_rate': 'float{1.0}',
+        'spawn_growth_rate': 'float{0.8}',
+        'propensity_spawn': 'float{1.0}',
+        'propensity_remove': 'float{1.0}',
+        'propensity_rewire': 'float{0.0}',
+        'threshold_spawn': 'float{3.0}',
+        'threshold_remove': 'float{-3.0}',
+        'threshold_rewire': 'float{4.0}',
+        'max_pool_size': 'integer{15}',
+        'spawn_value': 'float{0.5}',
     }
 
     _counter = 0
