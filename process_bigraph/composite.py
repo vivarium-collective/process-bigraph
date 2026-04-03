@@ -365,37 +365,15 @@ def determine_steps(steps, remaining, fulfilled):
             to_run.append(step_path)
 
     if not to_run:
-        # cycles
-        visited = set([])
-        cycle = set([])
-        look = list(remaining)
-
-        while look:
-            step_path = look[0]
-            look = look[1:]
-
-            if step_path in visited:
-                if step_path in remaining:
-                    cycle.add(step_path)
-
-            else:
-                visited.add(step_path)
-
-                inputs = steps[step_path]['input_paths']
-                for input_path in inputs:
-                    if input_path in fulfilled:
-                        unfulfilled = fulfilled[input_path]
-                        look += unfulfilled
-
-        if not cycle:
+        # All remaining steps are in cycles — pick the highest priority one.
+        # This avoids expensive cycle detection for densely connected graphs.
+        if remaining:
+            priority = max(
+                remaining,
+                key=lambda path: steps[path]['priority'])
+            to_run = [priority]
+        else:
             return to_run, remaining, fulfilled
-
-        order = sorted(
-            cycle,
-            key=lambda path: steps[path]['priority'])
-
-        priority = order[-1]
-        to_run = [priority]
 
     for step_path in to_run:
         if step_path in remaining:
