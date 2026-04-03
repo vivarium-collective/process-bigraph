@@ -1439,6 +1439,7 @@ class Composite(Process):
         # Run any steps that are ready (from init or previous triggers)
         if self.to_run:
             self.run_steps(self.to_run)
+            self.to_run = []
 
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
