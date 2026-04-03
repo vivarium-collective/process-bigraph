@@ -128,7 +128,7 @@ def find_step_triggers(
         trigger_path = resolve_path(tuple(wire))
         # trigger_path = resolve_path(prefix + tuple(wire))
         if isinstance(trigger_path, list):
-            import ipdb; ipdb.set_trace()
+            raise ValueError(f'resolve_path returned a list instead of a tuple: {trigger_path}')
         triggers.setdefault(trigger_path, []).append(path)
 
     return triggers
