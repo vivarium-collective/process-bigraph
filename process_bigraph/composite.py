@@ -16,6 +16,7 @@ import os
 import copy
 import json
 import math
+import time as _time
 import numpy as np
 
 from typing import (
@@ -280,10 +281,9 @@ def build_step_network(steps):
         for output_path in output_paths:
             exploded_path = explode_path(output_path)[1:]
             for explode in exploded_path:
-                if explode not in input_paths:
-                    path = tuple(explode)
-                    nodes.setdefault(path, {'before': set(), 'after': set()})
-                    nodes[path]['before'].add(step_key)
+                path = tuple(explode)
+                nodes.setdefault(path, {'before': set(), 'after': set()})
+                nodes[path]['before'].add(step_key)
 
     return ancestors, nodes
 
@@ -1016,6 +1016,10 @@ class Composite(Process):
         # A buffer for updates to be emitted at the composite's output interface.
         self.bridge_updates: List[Any] = []
 
+        # Timing accumulators for profiling (reset on each run() call)
+        self.process_update_time: float = 0.0
+        self.framework_time: float = 0.0
+
         # Precompile view/project operations for fast runtime access.
         self._compiled_links = {}
         self._build_view_project_cache()
@@ -1433,10 +1437,18 @@ class Composite(Process):
         incrementally based on their configured interval. Updates are applied and
         steps are triggered accordingly.
 
+        After completion, ``self.process_update_time`` holds the cumulative time
+        spent inside process ``invoke()`` calls, and ``self.framework_time`` holds
+        the time spent in framework operations (view, project, apply, realize).
+
         Args:
             interval: Time interval to simulate.
             force_complete: If True, forces all processes to reach the end time.
         """
+        self.process_update_time = 0.0
+        self.framework_time = 0.0
+        run_start = _time.monotonic()
+
         end_time = self.state['global_time'] + interval
 
         while self.state['global_time'] < end_time or force_complete:
@@ -1468,10 +1480,12 @@ class Composite(Process):
                         advance['update'] = {}
                         paths.append(path)
 
+                fw_start = _time.monotonic()
                 update_paths = self.apply_updates(updates)
                 update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
                 self.trigger_steps(update_paths)
+                self.framework_time += _time.monotonic() - fw_start
 
             else:
                 # All remaining process events are beyond end_time
@@ -1479,6 +1493,11 @@ class Composite(Process):
 
             if force_complete and self.state['global_time'] == end_time:
                 force_complete = False
+
+        total = _time.monotonic() - run_start
+        # Framework time = total minus process update time
+        # (the process_update_time was accumulated in process_update)
+        self.framework_time = total - self.process_update_time
 
     def run_process(
             self,
@@ -1583,7 +1602,9 @@ class Composite(Process):
         clean_state = strip_schema_keys(states)
 
         # Invoke the process and retrieve a wrapped SyncUpdate object
+        t0 = _time.monotonic()
         update = process['instance'].invoke(clean_state, interval)
+        self.process_update_time += _time.monotonic() - t0
         # This nested function projects the update into the global state at the given path
         def defer_project(update_results: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
             schema, state, process_path = args

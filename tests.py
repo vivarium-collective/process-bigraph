@@ -237,8 +237,68 @@ def test_dependencies(core):
 
 
 def test_dependency_cycle():
-    # test a step network with cycles in a few ways
-    pass
+    """Test that steps sharing the same read/write path execute in priority order.
+
+    When multiple steps both read and write to the same state path, they
+    create a cycle in the dependency graph. The cycle is resolved by
+    running steps in descending priority order.
+
+    This test creates three steps that all read from and write to 'x'.
+    Each step records itself in an execution log so we can verify ordering.
+    """
+
+    execution_log = []
+
+    class TrackingStep(Step):
+        config_schema = {'name': 'string'}
+        def inputs(self):
+            return {'x': 'float'}
+        def outputs(self):
+            return {'x': 'float'}
+        def update(self, state):
+            execution_log.append(self.config['name'])
+            return {'x': 1.0}
+
+    core = allocate_core()
+    core.register_link('TrackingStep', TrackingStep)
+
+    composite = Composite({
+        'state': {
+            'x': 0.0,
+            'step_a': {
+                '_type': 'step',
+                'address': 'local:TrackingStep',
+                'config': {'name': 'a'},
+                'inputs': {'x': ['x']},
+                'outputs': {'x': ['x']},
+                'priority': 3.0,
+            },
+            'step_b': {
+                '_type': 'step',
+                'address': 'local:TrackingStep',
+                'config': {'name': 'b'},
+                'inputs': {'x': ['x']},
+                'outputs': {'x': ['x']},
+                'priority': 2.0,
+            },
+            'step_c': {
+                '_type': 'step',
+                'address': 'local:TrackingStep',
+                'config': {'name': 'c'},
+                'inputs': {'x': ['x']},
+                'outputs': {'x': ['x']},
+                'priority': 1.0,
+            },
+        }
+    }, core=core)
+
+    composite.run(0.0)
+
+    assert execution_log == ['a', 'b', 'c'], (
+        f"Expected steps to execute in priority order ['a', 'b', 'c'] "
+        f"but got {execution_log}. Steps that share read/write paths "
+        f"should form a cycle resolved by priority ordering."
+    )
 
 
 def engulf_reaction(config):
