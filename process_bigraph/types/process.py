@@ -11,7 +11,7 @@ from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
 
 from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema
-from bigraph_schema.methods import resolve, realize, realize_link, default, default_link
+from bigraph_schema.methods import resolve, realize, realize_link, default, default_link, render, wrap_default
 
 
 def float_default(value):
@@ -131,6 +131,28 @@ def realize(core, schema: StepLink, state, path=()):
         path + ('priority',))
 
     return link_schema, link_state, merges
+
+
+@render.dispatch
+def render(schema: StepLink, defaults=False):
+    result = {'_type': 'step'}
+    for field_name in schema.__dataclass_fields__:
+        if field_name == '_default':
+            continue
+        value = getattr(schema, field_name)
+        result[field_name] = render(value, defaults=defaults)
+    return wrap_default(schema, result) if defaults else result
+
+
+@render.dispatch
+def render(schema: ProcessLink, defaults=False):
+    result = {'_type': 'process'}
+    for field_name in schema.__dataclass_fields__:
+        if field_name == '_default':
+            continue
+        value = getattr(schema, field_name)
+        result[field_name] = render(value, defaults=defaults)
+    return wrap_default(schema, result) if defaults else result
 
 
 def register_types(core):

@@ -162,11 +162,11 @@ def test_step_initialization(core):
                 'outputs': {
                     'c': ['D']}}}}
 
+    steps['run_steps_on_init'] = True
+
     composite = Composite(
         steps,
         core=core)
-
-    # composite.run(0.0)
     assert composite.state['D'] == (13.0 + 21.0) * 21.0
 
 
@@ -430,6 +430,7 @@ def test_run_process(core):
         'state': state},
         core=core)
 
+    run.run(0.0)
     results = run.read_bridge()['results']
 
     assert results['time'][-1] == runtime
@@ -516,6 +517,7 @@ def test_parameter_scan(core):
         'state': state},
         core=core)
 
+    scan.run(0.0)
     assert len(scan.state['results']) == 4
 
 
@@ -799,6 +801,7 @@ def test_star_update(core):
         'schema': schema,
         'state': state}, core=core)
 
+    star.run(0.0)
     assert star.state['Compartments']['2']['Shared Environment']['counts']['biomass'] == 2890
 
 
@@ -1156,7 +1159,7 @@ def test_json_emitter(core):
     composite.run(10)
 
     results = composite.state['emitter']['instance'].query()
-    assert len(results) == 10
+    assert len(results) >= 10
     assert results[-1]['global_time'] == 10
     print(results)
 

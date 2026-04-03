@@ -911,7 +911,8 @@ class Composite(Process):
             'inputs': 'wires',
             'outputs': 'wires'
         },
-        'global_time_precision': 'maybe[float]'
+        'global_time_precision': 'maybe[float]',
+        'run_steps_on_init': 'boolean{false}',
     }
 
 
@@ -1027,8 +1028,9 @@ class Composite(Process):
         # Build the dependency network between steps and determine which steps should run first.
         self.build_step_network()
 
-        # Run all steps that are ready on the first cycle.
-        self.run_steps(self.to_run)
+        # Optionally run all steps that are ready on the first cycle.
+        if self._config.get('run_steps_on_init', False):
+            self.run_steps(self.to_run)
 
     @classmethod
     def load(cls, path: str, core: Optional[Any] = None) -> "Composite":
@@ -1450,6 +1452,10 @@ class Composite(Process):
         run_start = _time.monotonic()
 
         end_time = self.state['global_time'] + interval
+
+        # Run any steps that are ready (from init or previous triggers)
+        if self.to_run:
+            self.run_steps(self.to_run)
 
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf

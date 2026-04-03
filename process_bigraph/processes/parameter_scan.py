@@ -175,6 +175,7 @@ class RunProcess(Step):
                 self.document['state'],
                 inputs)
 
+            self.document['run_steps_on_init'] = True
             self.composite = Composite(
                 self.document,
                 core=self.core)
@@ -292,7 +293,8 @@ class ParameterScan(Step):
         # TODO: perform parallelization on the independent steps
         self.scan = Composite({
             'bridge': bridge,
-            'state': state},
+            'state': state,
+            'run_steps_on_init': True},
             core=self.core)
 
         results_schema = {}
