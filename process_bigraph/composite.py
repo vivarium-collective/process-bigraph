@@ -281,9 +281,14 @@ def build_step_network(steps):
         for output_path in output_paths:
             exploded_path = explode_path(output_path)[1:]
             for explode in exploded_path:
-                path = tuple(explode)
-                nodes.setdefault(path, {'before': set(), 'after': set()})
-                nodes[path]['before'].add(step_key)
+                # Skip self-loops: don't register this step as a
+                # producer of paths it also consumes. Self-loops
+                # can't trigger (a step runs at most once per cycle)
+                # and they clutter the dependency graph.
+                if explode not in input_paths:
+                    path = tuple(explode)
+                    nodes.setdefault(path, {'before': set(), 'after': set()})
+                    nodes[path]['before'].add(step_key)
 
     return ancestors, nodes
 
@@ -1305,6 +1310,11 @@ class Composite(Process):
             steps_to_run,
         )
 
+        # Exclude steps already triggered in this timestep
+        steps_to_run = {s for s in steps_to_run if s not in self.steps_run}
+        # Mark all as triggered
+        self.steps_run.update(steps_to_run)
+
         # Initialize trigger fulfillment state and steps remaining
         self.reset_step_state(steps_to_run)
 
@@ -1362,11 +1372,10 @@ class Composite(Process):
                         if match_star_path(path, star_trigger):
                             step_paths.extend(star_steps)
 
-                # Add unrun steps to the execution queue
+                # Add steps to the execution queue
                 for step_path in step_paths:
-                    if step_path is not None and step_path not in self.steps_run:
+                    if step_path is not None:
                         steps_to_run.append(step_path)
-                        self.steps_run.add(step_path)
 
         self.initialize_steps(steps_to_run)
         self.run_steps(self.to_run)
@@ -1399,10 +1408,6 @@ class Composite(Process):
 
             if to_run:
                 self.run_steps(to_run)
-            else:
-                self.steps_run = set()
-        else:
-            self.steps_run = set()
 
 
     # ====================
@@ -1468,6 +1473,7 @@ class Composite(Process):
                 update_paths = self.apply_updates(updates)
                 update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
+                self.steps_run = set()  # Reset for new timestep
                 self.trigger_steps(update_paths)
                 self.framework_time += _time.monotonic() - fw_start
 

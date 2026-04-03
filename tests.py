@@ -237,57 +237,52 @@ def test_dependencies(core):
 
 
 def test_dependency_cycle():
-    """Test that steps sharing the same read/write path execute in priority order.
+    """Test that cross-step dependencies create proper ordering.
 
-    When multiple steps both read and write to the same state path, they
-    create a cycle in the dependency graph. The cycle is resolved by
-    running steps in descending priority order.
-
-    This test creates three steps that all read from and write to 'x'.
-    Each step records itself in an execution log so we can verify ordering.
+    step_a writes to 'y', step_b reads 'y' and writes 'z',
+    step_c reads 'z'. This creates a chain: a → b → c.
     """
 
     execution_log = []
 
-    class TrackingStep(Step):
+    class ProducerStep(Step):
         config_schema = {'name': 'string'}
         def inputs(self):
-            return {'x': 'float'}
+            return {'in_val': 'float'}
         def outputs(self):
-            return {'x': 'float'}
+            return {'out_val': 'float'}
         def update(self, state):
             execution_log.append(self.config['name'])
-            return {'x': 1.0}
+            return {'out_val': state.get('in_val', 0.0) + 1.0}
 
     core = allocate_core()
-    core.register_link('TrackingStep', TrackingStep)
+    core.register_link('ProducerStep', ProducerStep)
 
     composite = Composite({
         'state': {
-            'x': 0.0,
+            'x': 1.0,
+            'y': 0.0,
+            'z': 0.0,
             'step_a': {
                 '_type': 'step',
-                'address': 'local:TrackingStep',
+                'address': 'local:ProducerStep',
                 'config': {'name': 'a'},
-                'inputs': {'x': ['x']},
-                'outputs': {'x': ['x']},
-                'priority': 3.0,
+                'inputs': {'in_val': ['x']},
+                'outputs': {'out_val': ['y']},
             },
             'step_b': {
                 '_type': 'step',
-                'address': 'local:TrackingStep',
+                'address': 'local:ProducerStep',
                 'config': {'name': 'b'},
-                'inputs': {'x': ['x']},
-                'outputs': {'x': ['x']},
-                'priority': 2.0,
+                'inputs': {'in_val': ['y']},
+                'outputs': {'out_val': ['z']},
             },
             'step_c': {
                 '_type': 'step',
-                'address': 'local:TrackingStep',
+                'address': 'local:ProducerStep',
                 'config': {'name': 'c'},
-                'inputs': {'x': ['x']},
-                'outputs': {'x': ['x']},
-                'priority': 1.0,
+                'inputs': {'in_val': ['z']},
+                'outputs': {'out_val': ['w']},
             },
         }
     }, core=core)
@@ -295,10 +290,13 @@ def test_dependency_cycle():
     composite.run(0.0)
 
     assert execution_log == ['a', 'b', 'c'], (
-        f"Expected steps to execute in priority order ['a', 'b', 'c'] "
-        f"but got {execution_log}. Steps that share read/write paths "
-        f"should form a cycle resolved by priority ordering."
+        f"Expected chain ordering ['a', 'b', 'c'] "
+        f"but got {execution_log}."
     )
+    # a reads x=1 → writes y=2
+    # b reads y=2 → writes z=3
+    # c reads z=3 → writes w=4
+    assert composite.state['w'] == 4.0
 
 
 def engulf_reaction(config):
