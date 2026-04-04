@@ -236,6 +236,52 @@ def find_leaves(tree_structure, path=None):
     return leaves
 
 
+def _pre_extract_edge_schemas(core, state, initial_schema, path=()):
+    """Walk the state tree to find edges (processes/steps) and wire their
+    port schemas into the schema tree so that realize uses correct types."""
+    from bigraph_schema.schema import deep_merge
+
+    schema = dict(initial_schema)
+
+    def _walk(node, current_path):
+        if not isinstance(node, dict):
+            return
+        # Check if this node is an edge (has instance + wires)
+        instance = node.get('instance')
+        if instance is not None and hasattr(instance, 'ports_schema'):
+            wires = node.get('inputs', {})
+            try:
+                ports = instance.ports_schema()
+            except Exception:
+                return
+            parent_path = current_path[:-1]
+            for port_name, port_schema in ports.items():
+                wire = wires.get(port_name)
+                if wire is None:
+                    wire = [port_name]
+                if isinstance(wire, str):
+                    wire = [wire]
+                # Build absolute path from parent + wire
+                abs_path = list(parent_path) + list(wire)
+                # Set schema at this path
+                target = schema
+                for step in abs_path[:-1]:
+                    if step not in target or not isinstance(target.get(step), dict):
+                        target[step] = {}
+                    target = target[step]
+                last = abs_path[-1]
+                if last not in target:
+                    target[last] = port_schema
+                # Don't overwrite existing schema — first one wins
+        else:
+            for key, value in node.items():
+                if isinstance(key, str) and not key.startswith('_'):
+                    _walk(value, current_path + (key,))
+
+    _walk(state, ())
+    return schema
+
+
 def build_step_network(steps):
     """
     Build the data dependency graph among steps.
@@ -263,7 +309,9 @@ def build_step_network(steps):
 
         # Compute output paths once per step
         if ancestors[step_key]['output_paths'] is None:
-            ancestors[step_key]['output_paths'] = find_leaves(step.get('outputs', {}), path=step_key[:-1])
+            ancestors[step_key]['output_paths'] = find_leaves(
+                step.get('_dep_outputs', step.get('outputs', {})),
+                path=step_key[:-1])
 
         # Assign the priority
         if ancestors[step_key]['priority'] is None:
@@ -279,6 +327,7 @@ def build_step_network(steps):
             nodes[path]['after'].add(step_key)
 
         for output_path in output_paths:
+            output_tuple = tuple(output_path)
             exploded_path = explode_path(output_path)[1:]
             for explode in exploded_path:
                 # Skip self-loops: don't register this step as a
@@ -289,6 +338,42 @@ def build_step_network(steps):
                     path = tuple(explode)
                     nodes.setdefault(path, {'before': set(), 'after': set()})
                     nodes[path]['before'].add(step_key)
+
+
+    # Second pass: propagate parent outputs to child input paths.
+    # If step A produces path P and step B consumes P/X, then B depends on A.
+    all_output_paths = {}
+    for step_key in steps:
+        for output_path in (ancestors[step_key]['output_paths'] or []):
+            all_output_paths.setdefault(tuple(output_path), set()).add(step_key)
+
+    # Collect all input paths for the reverse check
+    all_input_paths = set()
+    for step_key in steps:
+        for input_path in (ancestors[step_key]['input_paths'] or []):
+            all_input_paths.add(tuple(input_path))
+
+    for node_path, deps in nodes.items():
+        if deps['before']:
+            continue  # already has producers
+        # Check if any output is an ancestor of this input path
+        for out_path, producers in all_output_paths.items():
+            if (len(node_path) > len(out_path)
+                    and node_path[:len(out_path)] == out_path):
+                deps['before'].update(producers)
+
+    # Also propagate child outputs to parent inputs.
+    # If step A produces path P/X and step B consumes P, then B depends on A.
+    for out_path, producers in all_output_paths.items():
+        for input_path in all_input_paths:
+            if (len(out_path) > len(input_path)
+                    and out_path[:len(input_path)] == input_path):
+                node = nodes.get(input_path)
+                if node is not None:
+                    # Add child producers, excluding self-loops
+                    for producer in producers:
+                        if producer not in node['after']:
+                            node['before'].add(producer)
 
     return ancestors, nodes
 
@@ -934,7 +1019,6 @@ class Composite(Process):
             initial_state['global_time'] = 0.0
 
         # Generate internal schema and state structures using the core engine.
-        # self.schema, self.state = self.core.generate(
         self.schema, self.state = self.core.realize(
             initial_schema,
             initial_state)
@@ -1082,19 +1166,12 @@ class Composite(Process):
         self._compiled_links = {}
 
     def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:
-        """Fast view using precompiled link when available."""
-        compiled = self._compiled_links.get(path)
-        if compiled is not None and compiled.get('view') is not None:
-            return self.core.view_fast(compiled['view'], self.state)
+        """View using core (cache temporarily disabled for debugging)."""
         return self.core.view(self.schema, self.state, path)
 
     def _cached_project(self, path: Tuple[str, ...], view: Any,
                         ports_key: str = 'outputs') -> Any:
-        """Fast project using precompiled link when available."""
-        if ports_key == 'outputs':
-            compiled = self._compiled_links.get(path)
-            if compiled is not None and compiled.get('project') is not None:
-                return self.core.project_ports_fast(compiled['project'], view)
+        """Project using core (cache temporarily disabled for debugging)."""
         return self.core.project(
             self.schema, self.state, path, view, ports_key)
 
