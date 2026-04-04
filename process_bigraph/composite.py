@@ -1068,7 +1068,7 @@ class Composite(Process):
             port: self.core.wire_schema(
                 self.schema,
                 self.state,
-                self.bridge[port])
+                self.bridge.get(port, {}))
             for port in ['inputs', 'outputs']
         }
 
@@ -1331,7 +1331,7 @@ class Composite(Process):
             state,
             (),
             self.interface()['outputs'],
-            self.bridge['outputs'])
+            self.bridge.get('outputs', {}))
 
         return bridge_view
 
@@ -1833,7 +1833,7 @@ class Composite(Process):
         """
         project_schema, project_state = self.core.project_ports(
             self.interface()['inputs'],
-            self.bridge['inputs'],
+            self.bridge.get('inputs', {}),
             [],
             state)
         self.merge({}, project_state)
