@@ -340,7 +340,7 @@ def find_downstream(steps, nodes, upstream):
     return downstream
 
 
-def determine_steps(steps, remaining, fulfilled):
+def determine_steps(steps, remaining, fulfilled, sequential=False):
     """
     Determine which steps are eligible to run, based on current fulfilled triggers.
 
@@ -348,6 +348,9 @@ def determine_steps(steps, remaining, fulfilled):
         steps: Step metadata.
         remaining: Set of step paths not yet run.
         fulfilled: Map of data paths to steps waiting for fulfillment.
+        sequential: If True, run at most one step at a time, always picking
+            the highest priority. This ignores data dependencies and processes
+            steps strictly in priority order.
 
     Returns:
         - to_run: List of ready step paths.
@@ -359,43 +362,48 @@ def determine_steps(steps, remaining, fulfilled):
     if not remaining:
         return to_run, remaining, fulfilled
 
-    for step_path in list(remaining):
-        step_inputs = steps[step_path].get('input_paths', []) or []
-        if all(len(fulfilled[input]) == 0 for input in step_inputs):
-            to_run.append(step_path)
+    if sequential:
+        # Sequential mode: pick the single highest-priority step from remaining
+        best = max(remaining, key=lambda p: steps[p].get('priority', 0.0))
+        to_run = [best]
+    else:
+        for step_path in list(remaining):
+            step_inputs = steps[step_path].get('input_paths', []) or []
+            if all(len(fulfilled[input]) == 0 for input in step_inputs):
+                to_run.append(step_path)
 
-    if not to_run:
-        # cycles
-        visited = set([])
-        cycle = set([])
-        look = list(remaining)
+        if not to_run:
+            # cycles
+            visited = set([])
+            cycle = set([])
+            look = list(remaining)
 
-        while look:
-            step_path = look[0]
-            look = look[1:]
+            while look:
+                step_path = look[0]
+                look = look[1:]
 
-            if step_path in visited:
-                if step_path in remaining:
-                    cycle.add(step_path)
+                if step_path in visited:
+                    if step_path in remaining:
+                        cycle.add(step_path)
 
-            else:
-                visited.add(step_path)
+                else:
+                    visited.add(step_path)
 
-                inputs = steps[step_path]['input_paths']
-                for input_path in inputs:
-                    if input_path in fulfilled:
-                        unfulfilled = fulfilled[input_path]
-                        look += unfulfilled
+                    inputs = steps[step_path]['input_paths']
+                    for input_path in inputs:
+                        if input_path in fulfilled:
+                            unfulfilled = fulfilled[input_path]
+                            look += unfulfilled
 
-        if not cycle:
-            return to_run, remaining, fulfilled
+            if not cycle:
+                return to_run, remaining, fulfilled
 
-        order = sorted(
-            cycle,
-            key=lambda path: steps[path]['priority'])
+            order = sorted(
+                cycle,
+                key=lambda path: steps[path]['priority'])
 
-        priority = order[-1]
-        to_run = [priority]
+            priority = order[-1]
+            to_run = [priority]
 
     for step_path in to_run:
         if step_path in remaining:
@@ -911,7 +919,9 @@ class Composite(Process):
             'inputs': 'wires',
             'outputs': 'wires'
         },
-        'global_time_precision': 'maybe[float]'
+        'global_time_precision': 'maybe[float]',
+        'skip_initial_steps': 'maybe[boolean]',
+        'sequential_steps': 'maybe[boolean]'
     }
 
 
@@ -1024,7 +1034,8 @@ class Composite(Process):
         self.build_step_network()
 
         # Run all steps that are ready on the first cycle.
-        self.run_steps(self.to_run)
+        if not self.config.get('skip_initial_steps', False):
+            self.run_steps(self.to_run)
 
     @classmethod
     def load(cls, path: str, core: Optional[Any] = None) -> "Composite":
@@ -1351,10 +1362,12 @@ class Composite(Process):
         Returns:
             A list of step paths that are ready to be invoked in this cycle.
         """
+        sequential = self.config.get('sequential_steps', False)
         to_run, self.steps_remaining, self.trigger_state = determine_steps(
             self.step_dependencies,
             self.steps_remaining,
-            self.trigger_state
+            self.trigger_state,
+            sequential=sequential
         )
         return to_run
 
