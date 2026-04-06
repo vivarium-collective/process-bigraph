@@ -1723,8 +1723,9 @@ class Composite(Process):
         update_paths = []
         had_structural_changes = False
 
+        # Phase 1: Resolve all deferred updates and collect them
+        resolved_updates = []
         for defer in updates:
-            # Resolve deferred computation to get update(s)
             series = defer.get()
             if series is None:
                 continue
@@ -1732,31 +1733,42 @@ class Composite(Process):
                 series = [series]
 
             for update_schema, update_state in series:
-                # Extract all hierarchical paths touched by this update
                 paths = hierarchy_depth(update_state)
                 update_paths.extend(paths.keys())
 
-                # Detect structural changes before applying
                 if not had_structural_changes:
                     had_structural_changes = self._has_structural_keys(update_state)
 
-                # Apply update directly to the internal state,
-                # using the schema from the link itself
+                bridge_update = self.read_bridge(update_state)
+                if bridge_update:
+                    self.bridge_updates.append(bridge_update)
+
+                resolved_updates.append((update_schema, update_state))
+
+        # Phase 2: Reconcile all updates into a single combined update,
+        # then apply once. This ensures atomic application of related
+        # changes (e.g. unique molecule adds across linked types).
+        if resolved_updates:
+            # Resolve all schemas together
+            combined_schema = resolved_updates[0][0]
+            for update_schema, _ in resolved_updates[1:]:
+                combined_schema = self.core.resolve(combined_schema, update_schema)
+
+            # Reconcile all update states using the combined schema
+            all_states = [state for _, state in resolved_updates]
+            combined_update = self.core.reconcile(combined_schema, all_states)
+
+            if combined_update:
                 self.state, merges = self.core.apply(
-                    update_schema,
+                    combined_schema,
                     self.state,
-                    update_state)
+                    combined_update)
 
                 if merges:
                     had_structural_changes = True
                     self.schema = self.core.resolve_merges(
                         self.schema,
                         merges)
-
-                # Read updated bridge outputs, if available
-                bridge_update = self.read_bridge(update_state)
-                if bridge_update:
-                    self.bridge_updates.append(bridge_update)
 
         # Only run expensive realize and instance discovery when structural changes occurred
         if had_structural_changes:
