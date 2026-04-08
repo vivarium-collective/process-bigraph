@@ -911,7 +911,8 @@ class Composite(Process):
             'inputs': 'wires',
             'outputs': 'wires'
         },
-        'global_time_precision': 'maybe[float]'
+        'global_time_precision': 'maybe[float]',
+        'skip_initial_steps': 'maybe[boolean]'
     }
 
 
@@ -1024,7 +1025,8 @@ class Composite(Process):
         self.build_step_network()
 
         # Run all steps that are ready on the first cycle.
-        self.run_steps(self.to_run)
+        if not self.config.get('skip_initial_steps', False):
+            self.run_steps(self.to_run)
 
     @classmethod
     def load(cls, path: str, core: Optional[Any] = None) -> "Composite":
