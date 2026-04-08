@@ -113,6 +113,10 @@ def find_step_triggers(
     """
     Identify which paths, when updated, should trigger the execution of a given step.
 
+    Uses the instance's ``triggers()`` method if available to determine
+    which input ports trigger the step. Ports not in ``triggers()`` are
+    still received as inputs but don't cause the step to re-run.
+
     Args:
         path: Path to the step in the composite model tree.
         step: Step object containing an 'inputs' field with wire mappings.
@@ -122,11 +126,34 @@ def find_step_triggers(
     """
     prefix = tuple(path[:-1])
     triggers: Dict[Tuple[str, ...], List[Union[List[str], Tuple[str, ...]]]] = {}
-    wire_paths = find_leaves(step['inputs'], path=prefix)
+
+    wires = step.get('inputs', {})
+    instance = step.get('instance')
+
+    # Check if the instance declares a triggers() subset
+    trigger_port_names = None
+    if instance is not None and hasattr(instance, 'triggers'):
+        try:
+            trigger_schema = instance.triggers()
+            input_schema = instance.inputs()
+            # Only filter if triggers() returns something different from inputs()
+            if trigger_schema is not input_schema and trigger_schema != input_schema:
+                trigger_port_names = set(trigger_schema.keys())
+        except Exception:
+            pass
+
+    # Also check for _triggers key in the step state
+    if trigger_port_names is None and '_triggers' in step:
+        trigger_port_names = set(step['_triggers'].keys()) if isinstance(step['_triggers'], dict) else None
+
+    if trigger_port_names is not None:
+        trigger_wires = {k: v for k, v in wires.items() if k in trigger_port_names}
+        wire_paths = find_leaves(trigger_wires, path=prefix)
+    else:
+        wire_paths = find_leaves(wires, path=prefix)
 
     for wire in wire_paths:
         trigger_path = resolve_path(tuple(wire))
-        # trigger_path = resolve_path(prefix + tuple(wire))
         if isinstance(trigger_path, list):
             raise ValueError(f'resolve_path returned a list instead of a tuple: {trigger_path}')
         triggers.setdefault(trigger_path, []).append(path)
@@ -303,9 +330,29 @@ def build_step_network(steps):
         schema = step['instance'].interface()
         assert_interface(schema)
 
-        # Compute input paths once per step
+        # Compute input paths for dependency graph.
+        # Use triggers() if available to narrow which inputs create
+        # dependency edges. Silent inputs are still received but don't
+        # affect step scheduling.
         if ancestors[step_key]['input_paths'] is None:
-            ancestors[step_key]['input_paths'] = find_leaves(step['inputs'], path=step_key[:-1])
+            instance = step.get('instance')
+            trigger_ports = None
+            if instance is not None and hasattr(instance, 'triggers'):
+                try:
+                    trigger_schema = instance.triggers()
+                    input_schema = instance.inputs()
+                    if trigger_schema is not input_schema and trigger_schema != input_schema:
+                        trigger_ports = set(trigger_schema.keys())
+                except Exception:
+                    pass
+            if trigger_ports is None and '_triggers' in step:
+                trigger_ports = set(step['_triggers'].keys()) if isinstance(step['_triggers'], dict) else None
+
+            if trigger_ports is not None:
+                trigger_wires = {k: v for k, v in step['inputs'].items() if k in trigger_ports}
+                ancestors[step_key]['input_paths'] = find_leaves(trigger_wires, path=step_key[:-1])
+            else:
+                ancestors[step_key]['input_paths'] = find_leaves(step['inputs'], path=step_key[:-1])
 
         # Compute output paths once per step
         if ancestors[step_key]['output_paths'] is None:
@@ -697,8 +744,25 @@ class Step(Open):
     or transformation rule.
 
     Override the `.update()` method to define custom behavior.
+
+    Override `.triggers()` to control which input ports trigger the step.
+    By default all inputs trigger — the step runs whenever any input changes.
+    To make some inputs "silent" (received but not triggering), return only
+    the triggering subset from `triggers()`.
     """
-    # TODO: support trigger every time as well as dependency trigger
+
+    def triggers(self):
+        """Return the subset of input ports that trigger this step.
+
+        By default, all inputs trigger — the step runs whenever any
+        input path is updated. Override to make some inputs "silent"
+        (the step still receives them but they don't cause re-triggering).
+
+        Returns:
+            A dict of port names to type expressions, like inputs().
+            Only these ports generate trigger edges in the step network.
+        """
+        return self.inputs()
 
     def invoke(self, state: Dict[str, Any], _: Optional[float] = None) -> SyncUpdate:
         """
