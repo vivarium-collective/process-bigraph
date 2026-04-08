@@ -1397,7 +1397,9 @@ class Composite(Process):
         """
         path = path or []
         scoped_update = set_path({}, path, update)
-        self.state = self.core.apply(self.schema, self.state, scoped_update)
+        self.state, merges = self.core.apply(self.schema, self.state, scoped_update)
+        if merges:
+            self.schema = self.core.resolve_merges(self.schema, merges)
         self.find_instance_paths(self.state)
 
 
