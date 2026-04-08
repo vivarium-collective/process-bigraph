@@ -1956,6 +1956,9 @@ class Composite(Process):
             self.find_instance_paths(self.state)
             self._build_view_project_cache()
 
+        # Expose structural-change flag so the run loop can skip the
+        # redundant expire_process_paths walk on value-only ticks.
+        self._last_apply_structural = had_structural_changes
         return update_paths
 
     def expire_process_paths(self, update_paths: List[Union[str, Tuple[str, ...]]]) -> None:
@@ -1965,9 +1968,21 @@ class Composite(Process):
         This is used to ensure that processes are rediscovered if a state update
         altered a region where a process instance may be added, removed, or replaced.
 
+        Fast path: skip entirely on value-only ticks. apply_updates already
+        runs find_instance_paths + _build_view_project_cache when it
+        detects structural changes (`_add` / `_remove` / `_type` keys),
+        and value-only updates can never add / remove / replace a process
+        slot. The walk is only needed if a structural change targeted a
+        process-adjacent path.
+
         Args:
             update_paths: A list of hierarchical paths that were modified.
         """
+        # Skip the walk on value-only ticks. apply_updates exposes
+        # `_last_apply_structural` so we know whether to bother.
+        if not getattr(self, '_last_apply_structural', True):
+            return
+
         # Quick check: if no update path shares a first element with any process path,
         # then no overlap is possible and we can skip the expensive scan.
         if not hasattr(self, '_process_path_roots'):
