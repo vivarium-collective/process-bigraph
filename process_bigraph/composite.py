@@ -161,6 +161,103 @@ def find_step_triggers(
     return triggers
 
 
+def wire_step_layers(
+        state: Dict[str, Any],
+        dep_graph: Dict[str, List[Any]],
+        flow_path: str = '_flow',
+        token_prefix: str = '_layer_',
+        root_trigger: str = 'global_time',
+) -> Dict[int, List[str]]:
+    """Wire steps in `state` for layer-batched execution.
+
+    Given a step dependency graph, compute each step's topological depth
+    and wire them so that all steps in the same layer share an incoming
+    and outgoing trigger token. The composite engine's run_steps() will
+    then batch every step in a layer into one apply_updates call, yielding
+    per-layer atomicity (each step in a layer sees the same starting
+    state — the same semantics as vivarium's per-layer execution).
+
+    The dependency graph is the source of truth for ordering. Steps in
+    the same layer are independent of each other, so the composite's
+    `cycle_step_state` returns the whole layer in one batch and
+    `run_steps` collects all their updates and reconciles them via
+    `apply_updates`.
+
+    Args:
+        state: The composite state dict containing step edges. Each step
+            referenced in `dep_graph` is mutated in place: its `inputs`,
+            `outputs`, `_dep_outputs`, and `_triggers` are populated to
+            point at this layer's tokens.
+        dep_graph: Mapping of step_name -> list of dependency identifiers.
+            Each dependency is either a bare step name (str) or a path
+            tuple/list whose last element is the step name.
+        flow_path: State key under which layer tokens live. Defaults to
+            '_flow'. The key is created in `state` if not already present.
+        token_prefix: Token name prefix. Defaults to '_layer_'.
+        root_trigger: Trigger path for layer-0 steps (those with no deps).
+            Defaults to 'global_time', so the first layer fires whenever
+            the global clock advances.
+
+    Returns:
+        A dict mapping layer index -> list of step names in that layer
+        (useful for inspection / debugging the dep DAG).
+
+    Notes:
+        - Each step's `_triggers` is set to ONLY the layer-token input,
+          so other inputs are received but don't re-trigger the step.
+        - Steps in the same layer all write to the same outgoing token.
+          `apply_updates` reconciles those writes (Integer apply is
+          additive, but the precise value doesn't matter — the change
+          fires the next layer exactly once per `run_steps` cycle).
+        - Layer-0 steps trigger from `root_trigger` (typically the global
+          clock). All subsequent layers trigger from `_layer_{N-1}`.
+    """
+    # 1. Topological depth: each step's level is max(deps' level) + 1.
+    levels: Dict[str, int] = {}
+    for step_name in dep_graph.keys():
+        deps = dep_graph.get(step_name) or []
+        if not deps:
+            levels[step_name] = 0
+            continue
+        max_dep_level = -1
+        for dep_path in deps:
+            dep_name = dep_path[-1] if isinstance(dep_path, (list, tuple)) else dep_path
+            if dep_name in levels:
+                max_dep_level = max(max_dep_level, levels[dep_name])
+        levels[step_name] = max_dep_level + 1
+
+    # 2. Group steps by layer.
+    layers: Dict[int, List[str]] = {}
+    for step_name, level in levels.items():
+        layers.setdefault(level, []).append(step_name)
+
+    # 3. Initialize the flow tokens in state.
+    state.setdefault(flow_path, {})
+    for level in sorted(layers.keys()):
+        state[flow_path][f'{token_prefix}{level}'] = 0
+
+    # 4. Wire each step's trigger and outgoing token wire.
+    for level in sorted(layers.keys()):
+        in_token = f'{token_prefix}{level - 1}' if level > 0 else None
+        out_token = f'{token_prefix}{level}'
+        for name in layers[level]:
+            step = state.get(name)
+            if not isinstance(step, dict) or 'instance' not in step:
+                continue
+            step.setdefault('inputs', {})
+            step.setdefault('outputs', {})
+
+            if in_token is not None:
+                step['inputs']['_flow_in'] = [flow_path, in_token]
+                step['_triggers'] = {'_flow_in': 'integer'}
+            else:
+                step['_triggers'] = {root_trigger: 'float'}
+
+            step['outputs']['_flow_out'] = [flow_path, out_token]
+
+    return layers
+
+
 def explode_path(path: Union[List[str], Tuple[str, ...]]) -> List[Tuple[str, ...]]:
     """
     Break a hierarchical path into all its prefix paths.
@@ -1115,10 +1212,15 @@ class Composite(Process):
                     initial_schema, initial_state)
 
             except Exception as e:
+                import sys as _sys
+                _sys.stderr.write(f'[INIT_COMBINE_FAIL] edge={path}\n')
+                _sys.stderr.write(f'[INIT_COMBINE_FAIL] new_schema={initial_schema}\n')
+                _sys.stderr.write(f'[INIT_COMBINE_FAIL] err={e}\n')
+                _sys.stderr.flush()
                 raise Exception(
                     f'initial state from edge does not match initial state from other edges:\n'
-                    f'{path}\n{edge}\n{edge_state}'
-                    f'{e.message}'
+                    f'{path}\n{edge}\n{edge_state}\n'
+                    f'{e}'
                 )
 
         # Apply the merged edge_state into the global state and update instance paths.
