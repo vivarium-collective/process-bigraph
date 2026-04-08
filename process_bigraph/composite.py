@@ -1504,6 +1504,13 @@ class Composite(Process):
         Returns:
             A dictionary of output values from the bridge view, or None if not found.
         """
+        # Fast path: composites without an output bridge (like vEcoli)
+        # call this on every apply_updates. Skip the view_ports call
+        # entirely when there's nothing to read.
+        bridge_outputs = self.bridge.get('outputs') if self.bridge else None
+        if not bridge_outputs:
+            return None
+
         state = state or self.state
 
         bridge_view = self.core.view_ports(
@@ -1511,7 +1518,7 @@ class Composite(Process):
             state,
             (),
             self.interface()['outputs'],
-            self.bridge.get('outputs', {}))
+            bridge_outputs)
 
         return bridge_view
 
@@ -1572,6 +1579,31 @@ class Composite(Process):
         # Mark all as triggered
         self.steps_run.update(steps_to_run)
 
+        # Layer-walk cache: the SEQUENCE of layers produced by the trigger
+        # graph walk is deterministic given the initial set of triggered
+        # steps (and the static step network). Cache the sequence keyed
+        # by frozenset(steps_to_run); replay it on subsequent ticks
+        # without re-running determine_steps. Invalidated by
+        # _last_apply_structural via expire_layer_walk_cache().
+        cache = getattr(self, '_layer_walk_cache', None)
+        if cache is None:
+            cache = {}
+            self._layer_walk_cache = cache
+        cache_key = frozenset(steps_to_run)
+        cached = cache.get(cache_key)
+        if cached is not None:
+            # Cache hit — replay the sequence. Set up an iterator and
+            # mark recording=False so cycle_step_state pulls from it.
+            self._layer_walk_replay = iter(cached)
+            self._layer_walk_recording = None
+            self.to_run = next(self._layer_walk_replay, [])
+            return
+
+        # Cache miss — record the walk as it runs.
+        self._layer_walk_replay = None
+        self._layer_walk_recording = []
+        self._layer_walk_cache_key = cache_key
+
         # Initialize trigger fulfillment state and steps remaining
         self.reset_step_state(steps_to_run)
 
@@ -1599,15 +1631,40 @@ class Composite(Process):
         """
         Evaluate the current trigger state and determine which steps can run.
 
+        Uses the layer-walk replay cache when available, falling back to
+        determine_steps when recording (cache miss) or when no cache is
+        active (e.g. invoked from build_step_network).
+
         Returns:
             A list of step paths that are ready to be invoked in this cycle.
         """
+        replay = getattr(self, '_layer_walk_replay', None)
+        if replay is not None:
+            return next(replay, [])
+
         to_run, self.steps_remaining, self.trigger_state = determine_steps(
             self.step_dependencies,
             self.steps_remaining,
             self.trigger_state
         )
+
+        recording = getattr(self, '_layer_walk_recording', None)
+        if recording is not None:
+            recording.append(list(to_run))
+            if not to_run:
+                # Walk complete — commit the recording to the cache.
+                cache = self._layer_walk_cache
+                cache[self._layer_walk_cache_key] = recording
+                self._layer_walk_recording = None
+
         return to_run
+
+    def expire_layer_walk_cache(self) -> None:
+        """Drop the layer-walk replay cache. Called when structural changes
+        invalidate the step network."""
+        self._layer_walk_cache = {}
+        self._layer_walk_replay = None
+        self._layer_walk_recording = None
 
     def trigger_steps(self, update_paths: List[Tuple[str, ...]]) -> None:
         """
@@ -1889,6 +1946,36 @@ class Composite(Process):
                 return True
         return False
 
+    @staticmethod
+    def _walk_update(state: Any, path: tuple = ()) -> tuple:
+        """Single-pass walk over an update tree.
+
+        Combines hierarchy_depth and _has_structural_keys into one
+        traversal — both are called on every apply_updates phase 1
+        invocation and were duplicating the same recursive walk.
+
+        Returns (paths_list, has_structural) where paths_list mirrors
+        what hierarchy_depth would have returned (list of leaf path
+        tuples) and has_structural is True if any _add/_remove/_type
+        sentinel was found anywhere in the tree.
+        """
+        if not isinstance(state, dict):
+            return [path], False
+        paths = []
+        has_structural = False
+        for key, value in state.items():
+            if isinstance(key, str) and key.startswith('_'):
+                # Schema key — note any structural sentinels
+                if key in ('_add', '_remove', '_type'):
+                    has_structural = True
+                paths.append(path)
+                continue
+            sub_paths, sub_struct = Composite._walk_update(value, path + (key,))
+            paths.extend(sub_paths)
+            if sub_struct:
+                has_structural = True
+        return paths, has_structural
+
     def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
         """
         Apply a series of deferred updates and record the resulting bridge outputs.
@@ -1916,12 +2003,15 @@ class Composite(Process):
                 series = [series]
 
             for update_schema, update_state in series:
-                paths = hierarchy_depth(update_state)
-                update_paths.extend(paths.keys())
+                # Single-pass walk: collects paths AND detects structural
+                # change sentinels in one traversal instead of two.
+                walk_paths, walk_struct = self._walk_update(update_state)
+                update_paths.extend(walk_paths)
+                if walk_struct and not had_structural_changes:
+                    had_structural_changes = True
 
-                if not had_structural_changes:
-                    had_structural_changes = self._has_structural_keys(update_state)
-
+                # read_bridge fast-paths to None when no bridge outputs
+                # are configured (vEcoli's case) — no walk happens.
                 bridge_update = self.read_bridge(update_state)
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
@@ -1932,10 +2022,31 @@ class Composite(Process):
         # then apply once. This ensures atomic application of related
         # changes (e.g. unique molecule adds across linked types).
         if resolved_updates:
-            # Resolve all schemas together
-            combined_schema = resolved_updates[0][0]
-            for update_schema, _ in resolved_updates[1:]:
-                combined_schema = self.core.resolve(combined_schema, update_schema)
+            # Combined-schema cache: most layers combine the same set of
+            # update schemas every tick. Key by the tuple of input schema
+            # ids; verify with a witness check (id may be reused after
+            # GC, so we keep references to the originals alive).
+            schema_ids = tuple(id(us) for us, _ in resolved_updates)
+            cache = getattr(self, '_combined_schema_cache', None)
+            if cache is None:
+                cache = {}
+                self._combined_schema_cache = cache
+            entry = cache.get(schema_ids)
+            combined_schema = None
+            if entry is not None:
+                witnesses, cached_schema = entry
+                if all(w is r[0] for w, r in zip(witnesses, resolved_updates)):
+                    combined_schema = cached_schema
+
+            if combined_schema is None:
+                # Cache miss — resolve once, then store with witnesses
+                combined_schema = resolved_updates[0][0]
+                for update_schema, _ in resolved_updates[1:]:
+                    combined_schema = self.core.resolve(combined_schema, update_schema)
+                cache[schema_ids] = (
+                    tuple(us for us, _ in resolved_updates),
+                    combined_schema,
+                )
 
             # Reconcile all update states using the combined schema
             all_states = [state for _, state in resolved_updates]
@@ -1958,6 +2069,9 @@ class Composite(Process):
             self.schema, self.state = self.core.realize(self.schema, self.state)
             self.find_instance_paths(self.state)
             self._build_view_project_cache()
+            # Step network may have changed — drop the layer walk cache.
+            if hasattr(self, 'expire_layer_walk_cache'):
+                self.expire_layer_walk_cache()
 
         # Expose structural-change flag so the run loop can skip the
         # redundant expire_process_paths walk on value-only ticks.
