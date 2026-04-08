@@ -1649,8 +1649,11 @@ class Composite(Process):
 
             for step_path in step_paths:
                 step = get_path(self.state, step_path)
-                state = self.core.view(
-                    self.schema, self.state, step_path, 'inputs')
+                # Use the precompiled view cache when possible. The
+                # direct core.view call falls back to view_ports which
+                # walks the wires every tick (~104 calls/sim_sec for
+                # vEcoli).
+                state = self._cached_view(step_path)
 
                 # Steps are always invoked with interval = -1.0
                 step_update = self.process_update(
