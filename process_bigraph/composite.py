@@ -1332,12 +1332,24 @@ class Composite(Process):
         self._compiled_links = {}
 
     def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:
-        """View using core (cache temporarily disabled for debugging)."""
+        """View using precompiled link cache when available, falling back
+        to the slow path otherwise.
+        """
+        compiled = self._compiled_links.get(path)
+        if compiled is not None and compiled.get('view') is not None:
+            return self.core.view_fast(compiled['view'], self.state)
         return self.core.view(self.schema, self.state, path)
 
     def _cached_project(self, path: Tuple[str, ...], view: Any,
                         ports_key: str = 'outputs') -> Any:
-        """Project using core (cache temporarily disabled for debugging)."""
+        """Project using precompiled link cache when available, falling
+        back to the slow path otherwise. The cache is only built for
+        outputs, so inputs (ports_key='inputs') always goes the slow path.
+        """
+        if ports_key == 'outputs':
+            compiled = self._compiled_links.get(path)
+            if compiled is not None and compiled.get('project') is not None:
+                return self.core.project_ports_fast(compiled['project'], view)
         return self.core.project(
             self.schema, self.state, path, view, ports_key)
 
