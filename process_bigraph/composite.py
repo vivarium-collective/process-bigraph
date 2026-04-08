@@ -1219,7 +1219,7 @@ class Composite(Process):
         """
         self._compiled_links = {}
 
-        for path in self.process_paths:
+        for path in list(self.process_paths) + list(self.step_paths):
             compiled = self.core.precompile_link(
                 self.schema, self.state, path)
             if compiled is not None:
