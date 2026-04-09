@@ -1142,6 +1142,16 @@ class Composite(Process):
         },
         'global_time_precision': 'maybe[float]',
         'run_steps_on_init': 'boolean{false}',
+        # Inner-layer parallelism: when True, run_steps fans out the
+        # steps in each layer across a ThreadPoolExecutor. Threads
+        # share memory and don't trigger the daemon-process restriction,
+        # so this composes cleanly with outer multiprocess distribution
+        # (Nextflow, joblib, ProcessPoolExecutor) — each sim still runs
+        # in one Python process. The speedup depends on whether the
+        # step hot path releases the GIL (numpy / scipy / numba / C
+        # extensions: yes; pure-Python loops: no).
+        'parallel_steps': 'boolean{false}',
+        'parallel_workers': 'maybe[integer]',
     }
 
 
@@ -1240,6 +1250,14 @@ class Composite(Process):
 
         # Set the global time precision used to round step time advances.
         self.global_time_precision = self.config.get('global_time_precision')
+
+        # Inner-layer parallelism: optional ThreadPoolExecutor that
+        # fans out the steps in each layer. See the parallel_steps
+        # field in interface_schema for the rationale (threading vs.
+        # multiprocessing for inner parallelism).
+        self._parallel_steps = bool(self.config.get('parallel_steps', False))
+        self._parallel_workers = self.config.get('parallel_workers')
+        self._step_executor = None  # lazy: created on first run_steps need
 
         # Initialize a "front" dictionary tracking the next update time and update data per process.
         self.front = {
@@ -1666,6 +1684,26 @@ class Composite(Process):
         self._layer_walk_replay = None
         self._layer_walk_recording = None
 
+    def _get_step_executor(self, n_needed: int):
+        """Lazily build (or grow) the inner thread pool for layer parallelism.
+
+        Sized to max(n_needed) we've seen so far, bounded by
+        `parallel_workers` if set. Workers are daemon threads so the
+        process can exit cleanly without explicit shutdown.
+        """
+        from concurrent.futures import ThreadPoolExecutor
+        bound = self._parallel_workers
+        target = n_needed if bound is None else min(n_needed, bound)
+        # Recreate if existing pool is smaller than what we need.
+        if self._step_executor is None or getattr(
+                self._step_executor, '_max_workers', 0) < target:
+            if self._step_executor is not None:
+                self._step_executor.shutdown(wait=False)
+            self._step_executor = ThreadPoolExecutor(
+                max_workers=target,
+                thread_name_prefix='pb-step')
+        return self._step_executor
+
     def trigger_steps(self, update_paths: List[Tuple[str, ...]]) -> None:
         """
         Determine and run step processes triggered by recent state updates.
@@ -1698,25 +1736,49 @@ class Composite(Process):
         """
         Execute a list of step processes, apply their updates, and handle cascading triggers.
 
+        When `parallel_steps` is enabled and the layer has multiple steps,
+        the per-step view + invoke phase runs concurrently across a
+        ThreadPoolExecutor. apply_updates remains single-threaded so
+        update reconciliation is atomic.
+
         Args:
             step_paths: A list of step path tuples to run.
         """
         if step_paths:
-            updates = []
+            n_steps = len(step_paths)
+            use_pool = self._parallel_steps and n_steps > 1
 
-            for step_path in step_paths:
-                step = get_path(self.state, step_path)
-                # Use the precompiled view cache when possible. The
-                # direct core.view call falls back to view_ports which
-                # walks the wires every tick (~104 calls/sim_sec for
-                # vEcoli).
-                state = self._cached_view(step_path)
+            if use_pool:
+                # Lazy-init the thread pool, sized to the largest layer
+                # we've seen (bounded by parallel_workers if set).
+                pool = self._get_step_executor(n_steps)
+                # Each task: build view, invoke, return Defer.
+                # _cached_view and process_update only read self.state /
+                # self.schema and write per-step Defer wrappers — no
+                # shared mutable state across threads. apply_updates
+                # (called below, single-threaded) reconciles the Defers.
+                def _run_one(step_path):
+                    step = get_path(self.state, step_path)
+                    state = self._cached_view(step_path)
+                    return self.process_update(
+                        step_path, step, state, -1.0, 'outputs')
+                # list() forces all futures to resolve before continuing
+                updates = list(pool.map(_run_one, step_paths))
+            else:
+                updates = []
+                for step_path in step_paths:
+                    step = get_path(self.state, step_path)
+                    # Use the precompiled view cache when possible. The
+                    # direct core.view call falls back to view_ports which
+                    # walks the wires every tick (~104 calls/sim_sec for
+                    # vEcoli).
+                    state = self._cached_view(step_path)
 
-                # Steps are always invoked with interval = -1.0
-                step_update = self.process_update(
-                    step_path, step, state, -1.0, 'outputs')
+                    # Steps are always invoked with interval = -1.0
+                    step_update = self.process_update(
+                        step_path, step, state, -1.0, 'outputs')
 
-                updates.append(step_update)
+                    updates.append(step_update)
 
             update_paths = self.apply_updates(updates)
             self.expire_process_paths(update_paths)
