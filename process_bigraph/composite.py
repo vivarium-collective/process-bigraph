@@ -874,13 +874,6 @@ class Step(Open):
     def invoke(self, state: Dict[str, Any], _: Optional[float] = None) -> SyncUpdate:
         """
         Run the step using the given state and return its update.
-
-        Args:
-            state: The input state to compute the update from.
-            _: Ignored time interval placeholder (not used by steps).
-
-        Returns:
-            A SyncUpdate object containing the update dictionary.
         """
         update = self.update(state)
         return SyncUpdate(update)
@@ -1346,14 +1339,12 @@ class Composite(Process):
         Delegates to core.precompile_link() which pre-resolves wire paths
         and precomputes projection schemas so that runtime view/project
         calls bypass schema traversal entirely.
+
+        Currently disabled for debugging — all views/projects go through
+        the slow but correct core.view / core.project path.
         """
         self._compiled_links = {}
-
-        for path in list(self.process_paths) + list(self.step_paths):
-            compiled = self.core.precompile_link(
-                self.schema, self.state, path)
-            if compiled is not None:
-                self._compiled_links[path] = compiled
+        return  # DISABLED — use slow path for correctness debugging
 
     def _invalidate_caches(self) -> None:
         """Invalidate precompiled link caches, forcing rebuild on next use."""
@@ -2073,6 +2064,7 @@ class Composite(Process):
 
         # Phase 1: Resolve all deferred updates and collect them
         resolved_updates = []
+        had_structural_sentinels = False  # _add/_remove/_divide detected
         for defer in updates:
             series = defer.get()
             if series is None:
@@ -2085,8 +2077,8 @@ class Composite(Process):
                 # change sentinels in one traversal instead of two.
                 walk_paths, walk_struct = self._walk_update(update_state)
                 update_paths.extend(walk_paths)
-                if walk_struct and not had_structural_changes:
-                    had_structural_changes = True
+                if walk_struct and not had_structural_sentinels:
+                    had_structural_sentinels = True
 
                 # read_bridge fast-paths to None when no bridge outputs
                 # are configured (vEcoli's case) — no walk happens.
@@ -2142,18 +2134,27 @@ class Composite(Process):
                         self.schema,
                         merges)
 
-        # Only run expensive realize and instance discovery when structural changes occurred
+        # Schema merges (from process outputs introducing new fields)
+        # require realize to fill defaults but do NOT add/remove
+        # processes — no need to rebuild the step network.
+        # Only actual structural sentinels (_add/_remove/_divide)
+        # require find_instance_paths + build_step_network.
         if had_structural_changes:
             self.schema, self.state = self.core.realize(self.schema, self.state)
+            self._build_view_project_cache()
+
+        if had_structural_sentinels:
+            # Real structural change: processes may have been
+            # added/removed/replaced. Rediscover instances and
+            # rebuild the step network + layer walk cache.
             self.find_instance_paths(self.state)
             self._build_view_project_cache()
-            # Step network may have changed — drop the layer walk cache.
             if hasattr(self, 'expire_layer_walk_cache'):
                 self.expire_layer_walk_cache()
 
         # Expose structural-change flag so the run loop can skip the
         # redundant expire_process_paths walk on value-only ticks.
-        self._last_apply_structural = had_structural_changes
+        self._last_apply_structural = had_structural_sentinels
         return update_paths
 
     def expire_process_paths(self, update_paths: List[Union[str, Tuple[str, ...]]]) -> None:
