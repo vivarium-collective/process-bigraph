@@ -164,8 +164,8 @@ def find_step_triggers(
 def wire_step_layers(
         state: Dict[str, Any],
         dep_graph: Dict[str, List[Any]],
-        flow_path: str = '_flow',
-        token_prefix: str = '_layer_',
+        flow_path: str = 'step_flow',
+        token_prefix: str = 'layer_',
         root_trigger: str = 'global_time',
 ) -> Dict[int, List[str]]:
     """Wire steps in `state` for layer-batched execution.
@@ -237,6 +237,8 @@ def wire_step_layers(
         state[flow_path][f'{token_prefix}{level}'] = 0
 
     # 4. Wire each step's trigger and outgoing token wire.
+    # Flow ports are added to both the port schemas (_inputs/_outputs)
+    # and the wire maps (inputs/outputs) so they survive realize().
     for level in sorted(layers.keys()):
         in_token = f'{token_prefix}{level - 1}' if level > 0 else None
         out_token = f'{token_prefix}{level}'
@@ -244,20 +246,24 @@ def wire_step_layers(
             step = state.get(name)
             if not isinstance(step, dict):
                 continue
-            # Accept both realized edges (have 'instance') and
-            # declaration-only edges (have '_type' but no instance yet).
             if 'instance' not in step and '_type' not in step:
                 continue
             step.setdefault('inputs', {})
             step.setdefault('outputs', {})
+            step.setdefault('_inputs', {})
+            step.setdefault('_outputs', {})
 
             if in_token is not None:
+                # Wire _flow_in as an input port
                 step['inputs']['_flow_in'] = [flow_path, in_token]
+                step['_inputs']['_flow_in'] = 'integer'
                 step['_triggers'] = {'_flow_in': 'integer'}
             else:
                 step['_triggers'] = {root_trigger: 'float'}
 
+            # Wire _flow_out as an output port
             step['outputs']['_flow_out'] = [flow_path, out_token]
+            step['_outputs']['_flow_out'] = 'integer'
 
     return layers
 

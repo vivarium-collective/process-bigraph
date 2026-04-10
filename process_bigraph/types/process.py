@@ -27,6 +27,7 @@ def float_default(value):
 class StepLink(Link):
     """A link type used for 'step'-level connectivity."""
     priority: Float = field(default_factory=float_default(0.0))
+    _triggers: dict = field(default_factory=dict)
 
 
 @dataclass(kw_only=True)
@@ -129,6 +130,11 @@ def realize(core, schema: StepLink, state, path=()):
         link_schema.priority,
         state.get('priority'),
         path + ('priority',))
+
+    # Preserve _triggers from the declaration — these specify which
+    # input ports trigger the step (vs silent inputs).
+    if '_triggers' in state and state['_triggers']:
+        link_state['_triggers'] = state['_triggers']
 
     return link_schema, link_state, merges
 
