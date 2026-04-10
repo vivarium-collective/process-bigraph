@@ -1994,13 +1994,16 @@ class Composite(Process):
     def _has_structural_keys(state: Any) -> bool:
         """Check if a state dict contains keys that signal structural changes.
 
-        Structural changes (_add, _remove, _type) require re-running
-        realize() and find_instance_paths(). Plain value updates do not.
+        Structural changes (_add, _remove, _type, _divide) require
+        re-running realize() and find_instance_paths(). Plain value
+        updates do not. _divide replaces a mother with two daughters
+        — the daughter agents have new process instances that the
+        framework needs to discover.
         """
         if not isinstance(state, dict):
             return False
         for key, value in state.items():
-            if key in ('_add', '_remove'):
+            if key in ('_add', '_remove', '_divide'):
                 return True
             if key == '_type':
                 return True
@@ -2027,8 +2030,11 @@ class Composite(Process):
         has_structural = False
         for key, value in state.items():
             if isinstance(key, str) and key.startswith('_'):
-                # Schema key — note any structural sentinels
-                if key in ('_add', '_remove', '_type'):
+                # Schema key — note any structural sentinels.
+                # _divide is structural because it replaces a mother
+                # with two daughters whose process instances need to
+                # be re-discovered by find_instance_paths.
+                if key in ('_add', '_remove', '_type', '_divide'):
                     has_structural = True
                 paths.append(path)
                 continue
