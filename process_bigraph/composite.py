@@ -2134,7 +2134,22 @@ class Composite(Process):
 
         # Only run expensive realize and instance discovery when structural changes occurred
         if had_structural_changes:
-            self.schema, self.state = self.core.realize(self.schema, self.state)
+            # _divide already handles schema mutation and link cloning
+            # in apply(dict) / _handle_divide_sentinel — the daughters
+            # have fully-realized states. Running realize() would
+            # re-resolve their schemas against the whole tree and can
+            # fail on complex wrapping types. Skip realize for
+            # divide-only structural changes; still rediscover instances.
+            has_divide_only = all(
+                '_divide' in us.get('agents', {}) if isinstance(us, dict)
+                else False
+                for _, us in resolved_updates
+                if us
+            ) if resolved_updates else False
+
+            if not has_divide_only:
+                self.schema, self.state = self.core.realize(self.schema, self.state)
+
             self.find_instance_paths(self.state)
             self._build_view_project_cache()
             # Step network may have changed — drop the layer walk cache.
