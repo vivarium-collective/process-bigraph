@@ -1344,7 +1344,12 @@ class Composite(Process):
         the slow but correct core.view / core.project path.
         """
         self._compiled_links = {}
-        return  # DISABLED — use slow path for correctness debugging
+
+        for path in list(self.process_paths) + list(self.step_paths):
+            compiled = self.core.precompile_link(
+                self.schema, self.state, path)
+            if compiled is not None:
+                self._compiled_links[path] = compiled
 
     def _invalidate_caches(self) -> None:
         """Invalidate precompiled link caches, forcing rebuild on next use."""
