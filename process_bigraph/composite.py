@@ -1494,12 +1494,7 @@ class Composite(Process):
         #     default=encode_key)
 
         with open(filepath, 'w') as outfile:
-            json.dump(
-                document,
-                outfile,
-                indent=2,
-                default=encode_key)
-
+            json.dump(document, outfile, indent=2)
             print(f"Saved composite to {filepath}")
 
 
