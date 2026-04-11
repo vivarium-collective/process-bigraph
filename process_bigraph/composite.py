@@ -1497,6 +1497,108 @@ class Composite(Process):
             json.dump(document, outfile, indent=2)
             print(f"Saved composite to {filepath}")
 
+    def save_bundle(
+            self,
+            outdir: str = 'out/bundle',
+            schema: bool = False,
+            state: bool = False,
+            min_bytes: int = 10_000,
+    ) -> Dict[str, Any]:
+        """Save the composite as a directory bundle with externalized arrays.
+
+        Uses the dispatched ``bundle`` method to serialize state, which
+        writes large arrays directly to Parquet files (skipping the
+        intermediate Python-list representation). The remaining document
+        (with ``$bundle_ref`` markers) is written to ``outdir/document.json``.
+
+        Args:
+            outdir: Bundle directory path (will be created).
+            schema: Whether to include the serialized schema.
+            state: Whether to include the serialized state.
+            min_bytes: Minimum raw byte size to externalize an array.
+
+        Returns:
+            Summary dict with file counts and sizes.
+        """
+        from bigraph_schema.methods.bundle import BundleContext
+        from process_bigraph.bundle import save_bundle
+
+        if not schema and not state:
+            schema = state = True
+
+        arrays_dir = os.path.join(outdir, 'arrays')
+        context = BundleContext(
+            arrays_dir=arrays_dir, min_bytes=min_bytes)
+
+        document = {}
+        if state:
+            # Use bundle dispatch — goes directly from numpy to Parquet,
+            # no intermediate Python lists for large arrays.
+            document['state'] = self.core.bundle(
+                self.schema, self.state, context)
+        if schema:
+            document['schema'] = self.serialize_schema()
+
+        # Write the document JSON (arrays already saved by bundle dispatch)
+        os.makedirs(outdir, exist_ok=True)
+        doc_path = os.path.join(outdir, 'document.json')
+
+        with open(doc_path, 'w') as f:
+            json.dump(document, f, indent=2)
+
+        # Summary
+        doc_size = os.path.getsize(doc_path)
+        array_sizes = {}
+        if os.path.isdir(arrays_dir):
+            for fname in os.listdir(arrays_dir):
+                fpath = os.path.join(arrays_dir, fname)
+                array_sizes[fname] = os.path.getsize(fpath)
+        total_array_bytes = sum(array_sizes.values())
+
+        summary = {
+            'document_size': doc_size,
+            'num_arrays': len(context.refs),
+            'total_array_bytes': total_array_bytes,
+            'total_bytes': doc_size + total_array_bytes,
+            'array_files': array_sizes,
+        }
+
+        print(f"Saved bundle to {outdir}/")
+        print(f"  document.json: {doc_size / 1e6:.1f} MB")
+        print(f"  arrays: {len(context.refs)} files, "
+              f"{total_array_bytes / 1e6:.1f} MB")
+        print(f"  total: {(doc_size + total_array_bytes) / 1e6:.1f} MB")
+
+        return summary
+
+    @classmethod
+    def load_bundle(
+            cls,
+            bundle_dir: str,
+            core: Optional[Any] = None,
+            **kwargs,
+    ) -> 'Composite':
+        """Load a composite from a bundle directory.
+
+        Reads ``document.json``, resolves ``$bundle_ref`` markers by
+        loading the corresponding Parquet files, and constructs a new
+        Composite.
+
+        Args:
+            bundle_dir: Path to the bundle directory.
+            core: The bigraph-schema core (with registered types).
+            **kwargs: Extra arguments passed to the Composite constructor
+                (e.g. ``parallel_steps=True``).
+
+        Returns:
+            A new Composite instance.
+        """
+        from process_bigraph.bundle import load_bundle
+
+        document = load_bundle(bundle_dir)
+        config = {**document, **kwargs}
+        return cls(config, core=core)
+
 
     # ==================
     # Interface & Wiring

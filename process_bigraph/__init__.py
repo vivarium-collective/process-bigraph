@@ -3,6 +3,7 @@ from bigraph_schema import allocate_core
 from process_bigraph.composite import (
     Process, Step, Composite, interval_time_precision, wire_step_layers,
 )
+from process_bigraph.bundle import save_bundle, load_bundle
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink
 
