@@ -1595,7 +1595,7 @@ class Composite(Process):
         """
         from process_bigraph.bundle import load_bundle
 
-        document = load_bundle(bundle_dir)
+        document = load_bundle(bundle_dir, as_numpy=True)
         config = {**document, **kwargs}
         return cls(config, core=core)
 
