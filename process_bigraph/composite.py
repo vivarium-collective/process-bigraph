@@ -2247,8 +2247,11 @@ class Composite(Process):
 
         if had_structural_sentinels:
             # Real structural change: processes may have been
-            # added/removed/replaced. Rediscover instances and
-            # rebuild the step network + layer walk cache.
+            # added/removed/replaced. Realize new state (to
+            # instantiate added process declarations) then
+            # rediscover instances and rebuild step network.
+            self.schema, self.state = self.core.realize(
+                self.schema, self.state)
             self.find_instance_paths(self.state)
             self._build_view_project_cache()
             if hasattr(self, 'expire_layer_walk_cache'):
