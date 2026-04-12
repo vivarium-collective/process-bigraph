@@ -1358,22 +1358,23 @@ class Composite(Process):
     def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:
         """View using precompiled link cache when available, falling back
         to the slow path otherwise.
+
+        View caching is intentionally disabled until view_fast can apply
+        schema projection. Don't re-enable without updating view_fast /
+        precompile_view to project subtrees down to the declared inputs()
+        shape.
         """
-        compiled = self._compiled_links.get(path)
-        if compiled is not None and compiled.get('view') is not None:
-            return self.core.view_fast(compiled['view'], self.state)
         return self.core.view(self.schema, self.state, path)
 
     def _cached_project(self, path: Tuple[str, ...], view: Any,
                         ports_key: str = 'outputs') -> Any:
         """Project using precompiled link cache when available, falling
-        back to the slow path otherwise. The cache is only built for
-        outputs, so inputs (ports_key='inputs') always goes the slow path.
+        back to the slow path otherwise.
+
+        NOTE: project caching is temporarily disabled alongside the view
+        cache while schema projection is proven out. Re-enable once both
+        caches can apply projection correctly.
         """
-        if ports_key == 'outputs':
-            compiled = self._compiled_links.get(path)
-            if compiled is not None and compiled.get('project') is not None:
-                return self.core.project_ports_fast(compiled['project'], view)
         return self.core.project(
             self.schema, self.state, path, view, ports_key)
 
@@ -1863,10 +1864,14 @@ class Composite(Process):
                 def _run_one(step_path):
                     step = get_path(self.state, step_path)
                     state = self._cached_view(step_path)
+                    instance = step.get('instance')
+                    if instance is not None and hasattr(instance, 'perform_update'):
+                        if not instance.perform_update(strip_schema_keys(state)):
+                            return None
                     return self.process_update(
                         step_path, step, state, -1.0, 'outputs')
                 # list() forces all futures to resolve before continuing
-                updates = list(pool.map(_run_one, step_paths))
+                updates = [u for u in pool.map(_run_one, step_paths) if u is not None]
             else:
                 updates = []
                 for step_path in step_paths:
@@ -1876,6 +1881,11 @@ class Composite(Process):
                     # walks the wires every tick (~104 calls/sim_sec for
                     # vEcoli).
                     state = self._cached_view(step_path)
+
+                    instance = step.get('instance')
+                    if instance is not None and hasattr(instance, 'perform_update'):
+                        if not instance.perform_update(strip_schema_keys(state)):
+                            continue
 
                     # Steps are always invoked with interval = -1.0
                     step_update = self.process_update(
