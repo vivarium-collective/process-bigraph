@@ -213,7 +213,8 @@ def _load_array_parquet(filepath: str) -> np.ndarray:
         shape = json.loads(table.column('shape')[0].as_py())
         dtype = np.dtype(table.column('dtype')[0].as_py())
         data = table.column('data')[0].as_py()
-        return np.frombuffer(data, dtype=dtype).reshape(shape)
+        # np.frombuffer returns a read-only view; copy to make writable
+        return np.frombuffer(data, dtype=dtype).reshape(shape).copy()
 
     # Check for structured array
     if b'bundle_structured' in meta:
