@@ -433,7 +433,7 @@ def save_bundle(
     # Write the document
     doc_path = os.path.join(outdir, DOCUMENT_FILE)
     with open(doc_path, 'w') as f:
-        json.dump(modified_doc, f, indent=2)
+        json.dump(modified_doc, f, separators=(',', ':'))
 
     # Summary
     doc_size = os.path.getsize(doc_path)

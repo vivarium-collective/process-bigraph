@@ -1495,7 +1495,7 @@ class Composite(Process):
         #     default=encode_key)
 
         with open(filepath, 'w') as outfile:
-            json.dump(document, outfile, indent=2)
+            json.dump(document, outfile, separators=(',', ':'))
             print(f"Saved composite to {filepath}")
 
     def save_bundle(
@@ -1544,8 +1544,23 @@ class Composite(Process):
         os.makedirs(outdir, exist_ok=True)
         doc_path = os.path.join(outdir, 'document.json')
 
+        # Sanity-check for ndarrays that bundle() should have externalized.
+        import numpy as _np
+        def _find_np(obj, path=''):
+            if isinstance(obj, dict):
+                for k, v in obj.items():
+                    _find_np(v, f'{path}.{k}')
+            elif isinstance(obj, list):
+                for i, v in enumerate(obj):
+                    _find_np(v, f'{path}[{i}]')
+            elif isinstance(obj, _np.ndarray):
+                raise TypeError(
+                    f'ndarray at {path} was not bundled (shape={obj.shape}, '
+                    f'dtype={obj.dtype}) — schema probably mismatches the '
+                    f'actual runtime type')
+        _find_np(document)
         with open(doc_path, 'w') as f:
-            json.dump(document, f, indent=2)
+            json.dump(document, f, separators=(',', ':'))
 
         # Summary
         doc_size = os.path.getsize(doc_path)
