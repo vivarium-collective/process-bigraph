@@ -6,12 +6,17 @@ Schema type definitions and method specializations for process-bigraph.
 This module extends bigraph_schema by defining new schema node classes used by process-bigraph.
 """
 
+import importlib
 import typing
+import numpy as np
 from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
 
+from bigraph_schema import capture_object_state, restore_object_value
 from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema
 from bigraph_schema.methods import resolve, realize, realize_link, default, default_link, render, wrap_default
+from bigraph_schema.methods import serialize, divide, bundle
+from bigraph_schema.methods.bundle import BundleContext
 
 
 def float_default(value):
@@ -170,6 +175,288 @@ def register_types(core):
         'process': ProcessLink,
         'interface': Interface,
         'bridge': Bridge,
-        'composite': CompositeLink})
+        'composite': CompositeLink,
+        'shared_process': SharedProcess,
+        'shared_process_ref': SharedProcessRef})
 
     return core
+
+
+# ============================================================================
+# SharedProcess / SharedProcessRef — process instances stored in a global
+# registry, referenceable by ID from elsewhere in the schema.
+#
+# Use case: the Requester/Evolver pattern wires the *same* process
+# instance through two distinct steps. Each step's config carries a
+# ``SharedProcessRef`` that resolves at realize time to the live
+# instance registered under its ID by the corresponding
+# ``SharedProcess`` entry in the document's ``process`` store.
+# ============================================================================
+
+_shared_processes: typing.Dict[str, object] = {}
+
+
+def clear_shared_processes():
+    """Clear the shared-process registry (e.g. between simulations)."""
+    _shared_processes.clear()
+
+
+def get_shared_process(process_id):
+    return _shared_processes.get(process_id)
+
+
+@dataclass(kw_only=True)
+class SharedProcess(Node):
+    """A shared process instance declared in the document's ``process`` store.
+
+    Document form::
+
+        {"_type": "shared_process",
+         "address": "local:!my.module.MyProcess",
+         "config": { ... }}
+
+    On ``realize()``, the class is imported from ``address``, instantiated
+    with ``config``, wrapped as ``(instance,)``, and registered in the
+    global ``_shared_processes`` dict keyed by the last path segment.
+    """
+    pass
+
+
+@dataclass(kw_only=True)
+class SharedProcessRef(Node):
+    """Reference to a shared process instance by ID.
+
+    Used in step config_schema so realize() resolves the reference to the
+    live instance before ``__init__`` is called.
+
+    Document forms::
+
+        {"process": {"_type": "shared_process_ref", "process_id": "my-proc"}}
+        {"process": "my-proc"}             # bare string when type is declared
+    """
+    pass
+
+
+def _class_address_from_instance(instance):
+    """Generate a local:! address from an instance's class."""
+    cls = type(instance)
+    return f'local:!{cls.__module__}.{cls.__name__}'
+
+
+@dispatch
+def render(schema: SharedProcess, defaults=False):
+    return 'shared_process'
+
+
+@dispatch
+def render(schema: SharedProcessRef, defaults=False):
+    return 'shared_process_ref'
+
+
+@realize.dispatch
+def realize(core, schema: SharedProcess, state, path=()):
+    # Already realized — (instance,) tuple
+    if isinstance(state, tuple) and len(state) > 0:
+        return schema, state, []
+    if not isinstance(state, dict):
+        return schema, state, []
+
+    address = state.get('address')
+    config = state.get('config', {})
+    process_id = path[-1] if path else state.get('process_id')
+
+    if address is None:
+        return schema, state, []
+
+    # Import the class from address (``local:!module.Class``)
+    if isinstance(address, str) and address.startswith('local:!'):
+        module_path, class_name = address[7:].rsplit('.', 1)
+        mod = importlib.import_module(module_path)
+        cls = getattr(mod, class_name)
+    else:
+        return schema, state, []
+
+    # Realize the config through the class's config_schema so typed
+    # fields (Quantity, Function, custom types) get reconstructed.
+    config_schema = getattr(cls, 'config_schema', None)
+    if config_schema:
+        _, config = core.realize(config_schema, config)
+
+    instance = cls(config)
+
+    # Set core so serialize can access config_schema
+    if not hasattr(instance, 'core') or instance.core is None:
+        instance.core = core
+
+    # Restore process-internal RandomState if a checkpoint captured one.
+    rng_state = state.get('rng_state')
+    if rng_state and hasattr(instance, 'random_state') and isinstance(
+            instance.random_state, np.random.RandomState):
+        try:
+            instance.random_state.set_state((
+                rng_state['alg'],
+                np.asarray(rng_state['key'], dtype=np.uint32),
+                int(rng_state['pos']),
+                int(rng_state['has_gauss']),
+                float(rng_state['cached_gauss']),
+            ))
+        except Exception as e:
+            print(f"[SharedProcess] failed to restore rng_state for "
+                  f"{process_id}: {e}", flush=True)
+
+    # Restore mid-tick bookkeeping attrs that __init__ resets but the
+    # running simulation mutates. Keeping them in sync with the saved
+    # snapshot is what lets load+run match continue-in-place.
+    internal = state.get('internal_state') or {}
+    for attr_name, saved_value in internal.items():
+        try:
+            setattr(instance, attr_name, restore_object_value(saved_value))
+        except Exception as e:
+            print(f"[SharedProcess] failed to restore {attr_name} for "
+                  f"{process_id}: {e}", flush=True)
+
+    if process_id is not None:
+        _shared_processes[process_id] = instance
+
+    instance._shared_address = address if isinstance(address, str) else (
+        f"local:!{cls.__module__}.{cls.__name__}")
+
+    return schema, (instance,), []
+
+
+@dispatch
+def serialize(schema: SharedProcess, state):
+    """Serialize a SharedProcess back to its declaration dict."""
+    if isinstance(state, tuple) and len(state) > 0:
+        instance = state[0]
+        address = getattr(instance, '_shared_address',
+                          _class_address_from_instance(instance))
+        config = instance.parameters if hasattr(instance, 'parameters') else {}
+        instance_core = getattr(instance, 'core', None)
+        raw_schema = getattr(instance, 'config_schema', None)
+        if instance_core and raw_schema:
+            config_schema = instance_core.access(raw_schema)
+            config = serialize(config_schema, config)
+        result = {
+            '_type': 'shared_process',
+            'address': address,
+            'config': config,
+        }
+        rng = getattr(instance, 'random_state', None)
+        if isinstance(rng, np.random.RandomState):
+            alg, key, pos, has_gauss, cached = rng.get_state()
+            result['rng_state'] = {
+                'alg': alg,
+                'key': key.tolist(),
+                'pos': int(pos),
+                'has_gauss': int(has_gauss),
+                'cached_gauss': float(cached),
+            }
+        import os
+        internal = capture_object_state(
+            instance, debug=bool(os.environ.get('INTERNAL_DEBUG')))
+        if internal:
+            result['internal_state'] = internal
+        return result
+    if isinstance(state, dict):
+        return state
+    return state
+
+
+@divide.dispatch
+def divide(schema: SharedProcess, state, context=None, path=(), rng=None):
+    """Each daughter gets a FRESH process instance.
+
+    Without this, ``divide(Node)`` would share the mother's instance
+    by reference between both daughters. We serialize the mother's
+    declaration (address + config), drop the mid-tick rng/internal
+    snapshots (they belong to mother), and return that dict for each
+    daughter. ``realize(SharedProcess)`` re-instantiates from
+    address+config on the next pass.
+    """
+    if state is None:
+        return None, None
+    declaration = serialize(schema, state)
+    if isinstance(declaration, dict):
+        declaration = {k: v for k, v in declaration.items()
+                       if k not in ('rng_state', 'internal_state')}
+        return dict(declaration), dict(declaration)
+    return state, state
+
+
+@dispatch
+def bundle(schema: SharedProcess, state, context: typing.Optional[BundleContext] = None):
+    """Bundle a SharedProcess: produce the declaration dict, bundling
+    arrays inside the config through the process's config_schema so
+    save_bundle externalizes large arrays to Parquet."""
+    if state is None:
+        return None
+    if isinstance(state, tuple) and len(state) > 0:
+        instance = state[0]
+        address = getattr(instance, '_shared_address',
+                          _class_address_from_instance(instance))
+        config = instance.parameters if hasattr(instance, 'parameters') else {}
+        instance_core = getattr(instance, 'core', None)
+        raw_schema = getattr(instance, 'config_schema', None)
+        if instance_core and raw_schema:
+            config_schema = instance_core.access(raw_schema)
+            config = bundle(config_schema, config, context)
+        result = {
+            '_type': 'shared_process',
+            'address': address,
+            'config': config,
+        }
+        rng = getattr(instance, 'random_state', None)
+        if isinstance(rng, np.random.RandomState):
+            alg, key, pos, has_gauss, cached = rng.get_state()
+            result['rng_state'] = {
+                'alg': alg,
+                'key': key.tolist(),
+                'pos': int(pos),
+                'has_gauss': int(has_gauss),
+                'cached_gauss': float(cached),
+            }
+        import os
+        internal = capture_object_state(
+            instance, debug=bool(os.environ.get('INTERNAL_DEBUG')))
+        if internal:
+            result['internal_state'] = internal
+        return result
+    if isinstance(state, dict):
+        return state
+    return serialize(schema, state)
+
+
+@dispatch
+def serialize(schema: SharedProcessRef, state):
+    """Serialize a SharedProcessRef: the process name (or bare id)."""
+    if isinstance(state, str):
+        return state
+    if isinstance(state, dict):
+        return state
+    if hasattr(state, 'name'):
+        return state.name
+    return str(state)
+
+
+@realize.dispatch
+def realize(core, schema: SharedProcessRef, state, path=()):
+    # Already resolved to an instance
+    if not isinstance(state, (str, dict)):
+        return schema, state, []
+
+    if isinstance(state, dict):
+        process_id = state.get('process_id')
+    else:
+        process_id = state
+
+    if process_id is None:
+        return schema, state, []
+
+    instance = _shared_processes.get(process_id)
+    if instance is None:
+        raise RuntimeError(
+            f"SharedProcessRef at {path}: process_id '{process_id}' "
+            f"not found. Available: {sorted(_shared_processes.keys())}. "
+            f"Ensure SharedProcess entries are realized before refs.")
+    return schema, instance, []
