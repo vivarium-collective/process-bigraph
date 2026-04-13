@@ -1307,6 +1307,57 @@ def test_dynamic_structure(core):
                 f"Core cache inconsistent for {path} after structural changes"
 
 
+class _ArrWriterProcess(Process):
+    """Writes an Array-typed output. Used by
+    ``test_port_outputs_propagate_to_store_schema``."""
+
+    def inputs(self):
+        return {'tick': 'float'}
+
+    def outputs(self):
+        return {'arr': 'array[float[64]]'}
+
+    def update(self, state, interval=None):
+        import numpy as np
+        return {'arr': np.array([1.0, 2.0, 3.0])}
+
+
+def test_port_outputs_propagate_to_store_schema(core):
+    """A process declaring ``_outputs: array[float[64]]`` should cause the
+    wired target store to have an Array schema after Composite init, so
+    list-typed seed values get coerced to ndarrays through realize.
+    """
+    import numpy as np
+
+    # Seed the wired store with a Python list default. After realize
+    # folds port_merges into the schema, the store's `arr` should be
+    # coerced from list → ndarray.
+    state = {
+        'global_time': 0.0,
+        'arr': [0.0, 0.0, 0.0],
+        'tick': 1.0,
+        'writer': {
+            '_type': 'process',
+            'address': (
+                f'local:!{_ArrWriterProcess.__module__}.'
+                f'{_ArrWriterProcess.__name__}'
+            ),
+            'config': {},
+            'inputs': {'tick': ['tick']},
+            'outputs': {'arr': ['arr']},
+            'interval': 1.0,
+        },
+    }
+
+    composite = Composite({'schema': {}, 'state': state}, core=core)
+
+    assert isinstance(composite.state['arr'], np.ndarray), (
+        f'store at `arr` should be ndarray after realize coerces through '
+        f'the _ArrWriterProcess._outputs schema — got '
+        f'{type(composite.state["arr"]).__name__}')
+    assert composite.state['arr'].dtype == np.dtype('float64')
+
+
 def make_test_core():
     members = dict(inspect.getmembers(sys.modules[__name__]))
     return allocate_core(
