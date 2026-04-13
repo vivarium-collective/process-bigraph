@@ -1359,22 +1359,28 @@ class Composite(Process):
         """View using precompiled link cache when available, falling back
         to the slow path otherwise.
 
-        View caching is intentionally disabled until view_fast can apply
-        schema projection. Don't re-enable without updating view_fast /
-        precompile_view to project subtrees down to the declared inputs()
-        shape.
-        """
+        precompile_link resolves wire paths and precomputes projection
+        schemas at build_step_network time so per-tick view calls
+        bypass schema traversal. The fallback to core.view covers
+        paths that weren't pre-compiled (e.g. freshly added processes
+        between cache rebuilds)."""
+        compiled = self._compiled_links.get(path)
+        if compiled is not None:
+            view_compiled = compiled.get('view')
+            if view_compiled is not None:
+                return self.core.view_fast(view_compiled, self.state)
         return self.core.view(self.schema, self.state, path)
 
     def _cached_project(self, path: Tuple[str, ...], view: Any,
                         ports_key: str = 'outputs') -> Any:
         """Project using precompiled link cache when available, falling
-        back to the slow path otherwise.
-
-        NOTE: project caching is temporarily disabled alongside the view
-        cache while schema projection is proven out. Re-enable once both
-        caches can apply projection correctly.
-        """
+        back to the slow path otherwise. Only outputs are precompiled
+        (inputs never get projected back into state); other ports fall
+        through to the slow path."""
+        if ports_key == 'outputs':
+            compiled = self._compiled_links.get(path)
+            if compiled is not None and compiled.get('project') is not None:
+                return self.core.project_ports_fast(compiled['project'], view)
         return self.core.project(
             self.schema, self.state, path, view, ports_key)
 
