@@ -1886,11 +1886,13 @@ class Composite(Process):
                     step = get_path(self.state, step_path)
                     state = self._cached_view(step_path)
                     instance = step.get('instance')
+                    clean_state = strip_schema_keys(state)
                     if instance is not None and hasattr(instance, 'perform_update'):
-                        if not instance.perform_update(strip_schema_keys(state)):
+                        if not instance.perform_update(clean_state):
                             return None
                     return self.process_update(
-                        step_path, step, state, -1.0, 'outputs')
+                        step_path, step, clean_state, -1.0, 'outputs',
+                        already_clean=True)
                 # list() forces all futures to resolve before continuing
                 updates = [u for u in pool.map(_run_one, step_paths) if u is not None]
             else:
@@ -1904,13 +1906,18 @@ class Composite(Process):
                     state = self._cached_view(step_path)
 
                     instance = step.get('instance')
+                    # Strip schema keys once; reused for both the
+                    # perform_update gate and process_update below
+                    # (invoke trusts the caller and skips its own gate).
+                    clean_state = strip_schema_keys(state)
                     if instance is not None and hasattr(instance, 'perform_update'):
-                        if not instance.perform_update(strip_schema_keys(state)):
+                        if not instance.perform_update(clean_state):
                             continue
 
                     # Steps are always invoked with interval = -1.0
                     step_update = self.process_update(
-                        step_path, step, state, -1.0, 'outputs')
+                        step_path, step, clean_state, -1.0, 'outputs',
+                        already_clean=True)
 
                     updates.append(step_update)
 
@@ -2084,7 +2091,8 @@ class Composite(Process):
             process: Dict[str, Any],
             states: Dict[str, Any],
             interval: float,
-            ports_key: str = 'outputs'
+            ports_key: str = 'outputs',
+            already_clean: bool = False,
     ) -> Defer:
         """
         Start generating a process's update and wrap it in a deferred transformation.
@@ -2098,12 +2106,15 @@ class Composite(Process):
             states: The current state values at the process’s ports.
             interval: The time interval to simulate.
             ports_key: Which port ('inputs' or 'outputs') to use when projecting the update.
+            already_clean: Set True when ``states`` was already passed through
+                ``strip_schema_keys`` by the caller (e.g. ``run_steps``)
+                so we skip the redundant strip.
 
         Returns:
             A `Defer` object that, when resolved, transforms the update to absolute paths.
         """
-        # Strip schema-specific metadata from the state
-        clean_state = strip_schema_keys(states)
+        # Strip schema-specific metadata from the state (once, unless caller did)
+        clean_state = states if already_clean else strip_schema_keys(states)
 
         # Invoke the process and retrieve a wrapped SyncUpdate object
         t0 = _time.monotonic()
