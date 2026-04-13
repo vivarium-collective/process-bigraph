@@ -2250,10 +2250,27 @@ class Composite(Process):
             combined_update = self.core.reconcile(combined_schema, all_states)
 
             if combined_update:
+                # Apply needs the live state schema for structural
+                # sentinels (_divide, _add, _remove) — they must see
+                # the mother's existing schema to split/remove it.
+                # For non-structural updates the combined_schema is
+                # fine; resolving would drag in the entire state
+                # schema and make apply walk everything.
+                if had_structural_sentinels:
+                    apply_schema = self.core.resolve(
+                        self.schema, combined_schema)
+                else:
+                    apply_schema = combined_schema
                 self.state, merges = self.core.apply(
-                    combined_schema,
+                    apply_schema,
                     self.state,
                     combined_update)
+                # For structural sentinels, apply may have mutated
+                # apply_schema in place (e.g. _divide pops/inserts
+                # keys in a dict schema). Propagate back to self.schema
+                # so downstream realize sees the split.
+                if had_structural_sentinels:
+                    self.schema = apply_schema
 
                 if merges:
                     had_structural_changes = True
