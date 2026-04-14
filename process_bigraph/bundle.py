@@ -204,7 +204,11 @@ def _load_array_parquet(filepath: str) -> np.ndarray:
     """Load a numpy array from a Parquet file created by _save_array_parquet."""
     import pyarrow.parquet as pq
 
-    table = pq.read_table(filepath)
+    # Use ParquetFile.read() rather than pq.read_table: the latter
+    # auto-infers hive partition columns from the path (e.g.
+    # ``variant=0/seed=1/...``) and appends them to every table read,
+    # which both clobbers metadata and adds spurious data columns.
+    table = pq.ParquetFile(filepath).read()
     meta = table.schema.metadata or {}
 
     # Check for binary blob format (3D+ arrays)

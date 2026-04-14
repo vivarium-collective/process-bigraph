@@ -427,6 +427,21 @@ def bundle(schema: SharedProcess, state, context: typing.Optional[BundleContext]
     return serialize(schema, state)
 
 
+def _lookup_shared_process_id(state):
+    """Reverse-lookup a process instance's id in ``_shared_processes``.
+
+    SharedProcess.realize registers each instance keyed by its path
+    segment, so we can resolve the stable string id even when the
+    instance itself doesn't carry one (or carries an ambiguous name).
+    """
+    if isinstance(state, tuple) and len(state) > 0:
+        state = state[0]
+    for pid, inst in _shared_processes.items():
+        if inst is state:
+            return pid
+    return None
+
+
 @dispatch
 def serialize(schema: SharedProcessRef, state):
     """Serialize a SharedProcessRef: the process name (or bare id)."""
@@ -434,9 +449,22 @@ def serialize(schema: SharedProcessRef, state):
         return state
     if isinstance(state, dict):
         return state
-    if hasattr(state, 'name'):
+    pid = _lookup_shared_process_id(state)
+    if pid is not None:
+        return pid
+    if hasattr(state, 'name') and isinstance(state.name, str):
         return state.name
     return str(state)
+
+
+@bundle.dispatch
+def bundle(schema: SharedProcessRef, state, context: typing.Optional[BundleContext] = None):
+    """Bundle a SharedProcessRef as its string process_id.
+
+    Without this dispatch the ``bundle(Node, ...)`` fallback writes
+    ``str(instance)`` (the Python repr), which can't round-trip.
+    """
+    return serialize(schema, state)
 
 
 @realize.dispatch
