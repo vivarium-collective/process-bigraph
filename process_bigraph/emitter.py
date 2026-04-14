@@ -8,13 +8,14 @@ Emitters are steps that observe a composite simulation's state and emit data to 
 - Define emitter steps programmatically
 - Insert emitters into a running composite
 - Collect data from emitter steps
-- Implement concrete emitters (RAM, console, JSON)
+- Implement concrete emitters (RAM, console, JSON, SQLite)
 '''
 
 import os
 import json
 import copy
 import uuid
+import sqlite3
 # import pytest
 import numpy as np
 from typing import Dict
@@ -240,6 +241,93 @@ class JSONEmitter(Emitter):
                 results.append(result)
             return results
         return data
+
+
+def _json_default(value):
+    if isinstance(value, np.ndarray):
+        return value.tolist()
+    if isinstance(value, (np.integer,)):
+        return int(value)
+    if isinstance(value, (np.floating,)):
+        return float(value)
+    raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
+
+
+class SQLiteEmitter(Emitter):
+    '''Append simulation state to a SQLite database each timestep.
+
+    One row per step, with the full state tree stored as JSON. The database
+    file is a single ``.db`` file that can be opened with any SQLite client,
+    queried with SQL, and kept for long-term storage. Multiple simulations
+    can share one file — rows are partitioned by ``simulation_id``.
+    '''
+    config_schema = {
+        **Emitter.config_schema,
+        'file_path': {'_type': 'string', '_default': './out'},
+        'db_file': {'_type': 'string', '_default': 'history.db'},
+        'simulation_id': {'_type': 'string', '_default': None},
+    }
+
+    def __init__(self, config, core):
+        super().__init__(config, core)
+        self.simulation_id = config.get('simulation_id') or str(uuid.uuid4())
+        self.file_path = config.get('file_path') or './out'
+        os.makedirs(self.file_path, exist_ok=True)
+        self.db_path = os.path.join(self.file_path, config.get('db_file') or 'history.db')
+
+        self._conn = sqlite3.connect(self.db_path, isolation_level=None)
+        self._conn.execute('PRAGMA journal_mode=WAL')
+        self._conn.execute('PRAGMA synchronous=NORMAL')
+        self._conn.execute('''
+            CREATE TABLE IF NOT EXISTS history (
+                simulation_id TEXT NOT NULL,
+                step INTEGER NOT NULL,
+                global_time REAL,
+                state TEXT NOT NULL,
+                PRIMARY KEY (simulation_id, step)
+            )
+        ''')
+        self._conn.execute(
+            'CREATE INDEX IF NOT EXISTS idx_history_sim_time '
+            'ON history(simulation_id, global_time)'
+        )
+        self._step = 0
+
+    def update(self, state) -> Dict:
+        global_time = state.get('global_time') if isinstance(state, dict) else None
+        payload = json.dumps(state, default=_json_default)
+        self._conn.execute(
+            'INSERT OR REPLACE INTO history '
+            '(simulation_id, step, global_time, state) VALUES (?, ?, ?, ?)',
+            (self.simulation_id, self._step, global_time, payload),
+        )
+        self._step += 1
+        return {}
+
+    def query(self, query=None):
+        cursor = self._conn.execute(
+            'SELECT state FROM history WHERE simulation_id = ? ORDER BY step',
+            (self.simulation_id,),
+        )
+        history = [json.loads(row[0]) for row in cursor.fetchall()]
+
+        if isinstance(query, list):
+            results = []
+            for t in history:
+                result = {}
+                for path in query:
+                    element = get_path(t, path)
+                    result = set_path(result, path, element)
+                results.append(result)
+            return results
+        return history
+
+    def __del__(self):
+        try:
+            if getattr(self, '_conn', None) is not None:
+                self._conn.close()
+        except Exception:
+            pass
 
 
 # ====================

@@ -1143,6 +1143,53 @@ def test_ram_emitter(core):
     assert 'valueA' in results2[0] and 'valueB' not in results2[0]
     print(results2)
 
+def test_sqlite_emitter(core, tmp_path=None):
+    import tempfile
+    tmp_dir = tmp_path or tempfile.mkdtemp(prefix='sqlite_emitter_')
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.3},
+            'interval': 1.0,
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}}}
+    composite = Composite({'state': composite_spec}, core)
+
+    emitter_spec = {
+        '_type': 'step',
+        'address': 'local:SQLiteEmitter',
+        'config': {
+            'emit': {'global_time': 'node', 'value': 'node'},
+            'file_path': str(tmp_dir),
+            'db_file': 'test_history.db',
+        },
+        'inputs': {'global_time': ['global_time'], 'value': ['value']},
+    }
+    from bigraph_schema import set_path
+    composite.merge({}, set_path({}, ('emitter',), emitter_spec))
+    _, instance = core.traverse(composite.schema, composite.state, ('emitter',))
+    composite.step_paths[('emitter',)] = instance
+    composite.build_step_network()
+
+    composite.run(10)
+
+    results = composite.state['emitter']['instance'].query()
+    assert len(results) >= 10
+    assert results[-1]['global_time'] == 10
+    assert 'value' in results[-1]
+
+    # verify the db file exists and survives re-opening
+    import sqlite3, os
+    db_path = os.path.join(str(tmp_dir), 'test_history.db')
+    assert os.path.exists(db_path)
+    conn = sqlite3.connect(db_path)
+    (count,) = conn.execute('SELECT COUNT(*) FROM history').fetchone()
+    assert count >= 10
+    conn.close()
+    print(results)
+
+
 def test_json_emitter(core):
     composite_spec = {
         'increase': {
