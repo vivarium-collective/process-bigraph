@@ -477,6 +477,14 @@ class SQLiteEmitter(Emitter):
     To record the composite config or other metadata alongside the history
     rows, call :func:`save_simulation_metadata` after constructing the
     Composite — the emitter itself only writes the per-step history rows.
+
+    ``subsample`` records only every Nth composite tick (default 1 = every
+    tick). The ``step`` column still stores the true composite tick number,
+    so time-series produced from the history reflect the real cadence even
+    though intermediate ticks were not persisted. Use this when a Composite
+    fires the emitter very often (small intervals, long runs) and you don't
+    need every tick in the archive — it's the cheapest way to shrink the
+    write volume without losing the simulation's time axis.
     '''
     config_schema = {
         **Emitter.config_schema,
@@ -484,6 +492,7 @@ class SQLiteEmitter(Emitter):
         'db_file': {'_type': 'string', '_default': 'history.db'},
         'simulation_id': {'_type': 'string', '_default': None},
         'name': {'_type': 'string', '_default': None},
+        'subsample': {'_type': 'integer', '_default': 1},
     }
 
     def __init__(self, config, core):
@@ -492,6 +501,13 @@ class SQLiteEmitter(Emitter):
         self.file_path = config.get('file_path') or './out'
         os.makedirs(self.file_path, exist_ok=True)
         self.db_path = os.path.join(self.file_path, config.get('db_file') or 'history.db')
+
+        subsample = config.get('subsample')
+        self.subsample = 1 if subsample is None else int(subsample)
+        if self.subsample < 1:
+            raise ValueError(
+                f'SQLiteEmitter subsample must be >= 1, got {self.subsample}'
+            )
 
         self._conn = sqlite3.connect(self.db_path, isolation_level=None)
         _init_history_db(self._conn)
@@ -505,6 +521,14 @@ class SQLiteEmitter(Emitter):
     def update(self, state) -> Dict:
         if self._conn is None:
             raise RuntimeError('SQLiteEmitter has been closed')
+        # Advance the true composite tick counter on every call; only persist
+        # the row when this tick falls on the subsample cadence. Ticks 0,
+        # subsample, 2*subsample, ... are written (first tick always kept).
+        step = self._step
+        self._step += 1
+        if step % self.subsample != 0:
+            return {}
+
         global_time = state.get('global_time') if isinstance(state, dict) else None
         # Strip live Edge/process instances the same way RAMEmitter does;
         # otherwise wires that pull in process objects break JSON serialization.
@@ -516,9 +540,8 @@ class SQLiteEmitter(Emitter):
         self._conn.execute(
             'INSERT INTO history '
             '(simulation_id, step, global_time, state) VALUES (?, ?, ?, ?)',
-            (self.simulation_id, self._step, global_time, payload),
+            (self.simulation_id, step, global_time, payload),
         )
-        self._step += 1
         return {}
 
     def query(self, paths=None, query=None):

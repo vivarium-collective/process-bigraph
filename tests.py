@@ -1277,6 +1277,50 @@ def test_sqlite_emitter_query_paths_kwarg(core):
     e.close()
 
 
+def test_sqlite_emitter_subsample(core):
+    '''subsample=N writes every Nth composite tick (first tick always
+    kept) and preserves the original step number in the stored row.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_subsample_')
+    e = SQLiteEmitter({
+        'emit': {'global_time': 'node', 'v': 'node'},
+        'file_path': tmp, 'simulation_id': 'sim',
+        'subsample': 5,
+    }, core=core)
+
+    # Feed 20 ticks — ticks at step 0, 5, 10, 15 should land in the db.
+    for i in range(20):
+        e.update({'global_time': float(i), 'v': i})
+    e.close()
+
+    history = load_history(os.path.join(tmp, 'history.db'), 'sim')
+    assert len(history) == 4
+    assert [row['v'] for row in history] == [0, 5, 10, 15]
+    assert [row['global_time'] for row in history] == [0.0, 5.0, 10.0, 15.0]
+
+    # The recorded `step` column is the real composite tick, not a
+    # collapsed index — verify via a direct SQL read.
+    conn = sqlite3.connect(os.path.join(tmp, 'history.db'))
+    try:
+        steps = [r[0] for r in conn.execute(
+            'SELECT step FROM history WHERE simulation_id = ? ORDER BY step',
+            ('sim',),
+        ).fetchall()]
+    finally:
+        conn.close()
+    assert steps == [0, 5, 10, 15]
+
+
+def test_sqlite_emitter_subsample_rejects_bad_value(core):
+    '''subsample < 1 is nonsensical — refuse at construction time.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_subsample_bad_')
+    with pytest.raises(ValueError):
+        SQLiteEmitter({
+            'emit': {},
+            'file_path': tmp, 'simulation_id': 'sim',
+            'subsample': 0,
+        }, core=core)
+
+
 def test_sqlite_emitter_close(core):
     '''close() should release the connection deterministically, make further
     updates fail loudly, and leave the db usable from a fresh connection.'''

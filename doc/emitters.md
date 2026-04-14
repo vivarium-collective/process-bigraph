@@ -226,6 +226,27 @@ composite.run(100.0)
 
 Multiple runs can share one `.db` file — rows are partitioned by `simulation_id`, so `history.db` becomes a persistent archive of every experiment you've run.
 
+### Thinning high-frequency runs with `subsample`
+
+If your composite fires the emitter on a very short interval (e.g. `interval=0.1` over hours of sim time), you can easily end up writing tens of thousands of rows per run. Most of those rows are redundant for analysis and plotting — and each one costs a JSON-encode plus a SQLite INSERT.
+
+Pass `subsample: N` in the emitter config to keep only every Nth tick:
+
+```python
+'emitter': {
+    '_type': 'step',
+    'address': 'local:SQLiteEmitter',
+    'config': {
+        'emit':          {'time': 'node', 'x': 'node'},
+        'simulation_id': sim_id,
+        'subsample':     10,     # record every 10th tick (first tick always kept)
+    },
+    'inputs': {'time': ['global_time'], 'x': ['Env', 'x']},
+}
+```
+
+The stored `step` column still reflects the true composite tick number, so time series you build from the history preserve the simulation's real cadence even though the intermediate ticks were not persisted. `subsample` defaults to `1` (record every tick).
+
 ### Reading history back, without any `Composite`
 
 The retrieval helpers take only a db path, so you can analyze runs long after the simulation process has exited — no need to reconstruct the `Composite` or import the original processes.
