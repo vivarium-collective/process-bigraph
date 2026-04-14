@@ -11,18 +11,19 @@ Emitters are steps that observe a composite simulation's state and emit data to 
 - Implement concrete emitters (RAM, console, JSON, SQLite)
 '''
 
-import os
-import json
 import copy
-import uuid
-import sqlite3
+import dataclasses
 import datetime
-# import pytest
-import numpy as np
+import json
+import os
+import sqlite3
+import uuid
 from typing import Dict, List, Optional
 
-from bigraph_schema import get_path, set_path, is_schema_key, Edge
-from process_bigraph.composite import Composite, Step, find_instance_paths
+import numpy as np
+
+from bigraph_schema import Edge, get_path, is_schema_key, set_path
+from process_bigraph.composite import Step, find_instance_paths
 
 
 # ==========================
@@ -137,16 +138,24 @@ class Emitter(Step):
     def inputs(self) -> Dict:
         return self.config['emit']
 
-    def query(self, query=None):
-        '''
-        Query the history of the emitter.
-        :param query: a list of paths to query from the history. If None, the entire history is returned.
-        :return: results of the query in a list
+    def query(self, paths=None, query=None):
+        '''Return recorded history.
+
+        :param paths: a list of paths to project from each recorded state.
+            If None, the entire history is returned.
+        :param query: deprecated alias for ``paths``.
         '''
         return {}
 
     def update(self, state) -> Dict:
         return {}
+
+
+def _resolve_query_paths(paths, query):
+    '''Accept either the new ``paths`` kwarg or the legacy ``query`` kwarg.'''
+    if paths is None and query is not None:
+        return query
+    return paths
 
 
 # ========================
@@ -180,13 +189,14 @@ class RAMEmitter(Emitter):
         self.history.append(tree_copy(state))
         return {}
 
-    def query(self, query=None, schema=None):
+    def query(self, paths=None, schema=None, query=None):
+        paths = _resolve_query_paths(paths, query)
         schema = schema or self.inputs()
-        if isinstance(query, list):
+        if isinstance(paths, list):
             results = []
             for t in self.history:
                 result = {}
-                for path in query:
+                for path in paths:
                     _, value = self.core.traverse(schema, t, path)
                     result = set_path(result, path, value)
                 results.append(result)
@@ -223,7 +233,8 @@ class JSONEmitter(Emitter):
             json.dump(data, f, indent=4)
         return {}
 
-    def query(self, query=None):
+    def query(self, paths=None, query=None):
+        paths = _resolve_query_paths(paths, query)
         if not os.path.exists(self.filepath):
             return []
         with open(self.filepath, 'r') as f:
@@ -232,11 +243,11 @@ class JSONEmitter(Emitter):
             except json.JSONDecodeError:
                 return []
 
-        if isinstance(query, list):
+        if isinstance(paths, list):
             results = []
             for t in data:
                 result = {}
-                for path in query:
+                for path in paths:
                     element = get_path(t, path)
                     result = set_path(result, path, element)
                 results.append(result)
@@ -254,12 +265,8 @@ def _json_default(value):
     # bigraph-schema Node dataclasses (String, Float, Integer, ...) can end
     # up wired into emitted state; fall back to their repr so history stays
     # serializable without dragging in the schema machinery.
-    try:
-        import dataclasses
-        if dataclasses.is_dataclass(value):
-            return dataclasses.asdict(value)
-    except Exception:
-        pass
+    if dataclasses.is_dataclass(value):
+        return dataclasses.asdict(value)
     return repr(value)
 
 
@@ -322,7 +329,7 @@ def save_simulation_metadata(db_path, simulation_id, composite_config=None,
             (
                 simulation_id,
                 name,
-                datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z',
+                datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ'),
                 json.dumps(composite_config, default=_json_default) if composite_config is not None else None,
                 json.dumps(metadata, default=_json_default) if metadata is not None else None,
             ),
@@ -449,7 +456,7 @@ def mark_simulation_finished(db_path, simulation_id, elapsed_seconds=None):
     conn = sqlite3.connect(db_path, isolation_level=None)
     try:
         _init_history_db(conn)
-        completed_at = datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z'
+        completed_at = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
         conn.execute(
             'UPDATE simulations SET completed_at = ?, elapsed_seconds = ? '
             'WHERE simulation_id = ?',
@@ -496,41 +503,44 @@ class SQLiteEmitter(Emitter):
         self._step = 0
 
     def update(self, state) -> Dict:
+        if self._conn is None:
+            raise RuntimeError('SQLiteEmitter has been closed')
         global_time = state.get('global_time') if isinstance(state, dict) else None
         # Strip live Edge/process instances the same way RAMEmitter does;
         # otherwise wires that pull in process objects break JSON serialization.
         clean = tree_copy(state)
         payload = json.dumps(clean, default=_json_default)
+        # Plain INSERT (not OR REPLACE): `step` is a per-run monotonic
+        # counter, so a PK conflict here would indicate a real bug — fail
+        # loudly rather than silently overwriting a row.
         self._conn.execute(
-            'INSERT OR REPLACE INTO history '
+            'INSERT INTO history '
             '(simulation_id, step, global_time, state) VALUES (?, ?, ?, ?)',
             (self.simulation_id, self._step, global_time, payload),
         )
         self._step += 1
         return {}
 
-    def query(self, query=None):
-        cursor = self._conn.execute(
-            'SELECT state FROM history WHERE simulation_id = ? ORDER BY step',
-            (self.simulation_id,),
-        )
-        history = [json.loads(row[0]) for row in cursor.fetchall()]
+    def query(self, paths=None, query=None):
+        paths = _resolve_query_paths(paths, query)
+        # Route through the standalone helper so the in-process and post-hoc
+        # retrieval paths go through the same code.
+        return load_history(self.db_path, self.simulation_id, paths=paths)
 
-        if isinstance(query, list):
-            results = []
-            for t in history:
-                result = {}
-                for path in query:
-                    element = get_path(t, path)
-                    result = set_path(result, path, element)
-                results.append(result)
-            return results
-        return history
+    def close(self):
+        '''Close the underlying SQLite connection explicitly.
+
+        Call this when you are done with the emitter — for example, at the
+        end of a script — so WAL data is flushed deterministically. After
+        calling ``close`` the emitter can no longer record new rows.
+        '''
+        if self._conn is not None:
+            self._conn.close()
+            self._conn = None
 
     def __del__(self):
         try:
-            if getattr(self, '_conn', None) is not None:
-                self._conn.close()
+            self.close()
         except Exception:
             pass
 
