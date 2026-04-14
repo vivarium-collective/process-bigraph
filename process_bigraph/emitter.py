@@ -285,10 +285,18 @@ def _init_history_db(conn):
             simulation_id TEXT PRIMARY KEY,
             name TEXT,
             started_at TEXT NOT NULL,
+            completed_at TEXT,
+            elapsed_seconds REAL,
             composite_config TEXT,
             metadata TEXT
         )
     ''')
+    # Migrate older dbs that predate completed_at / elapsed_seconds.
+    existing = {row[1] for row in conn.execute("PRAGMA table_info(simulations)")}
+    if 'completed_at' not in existing:
+        conn.execute('ALTER TABLE simulations ADD COLUMN completed_at TEXT')
+    if 'elapsed_seconds' not in existing:
+        conn.execute('ALTER TABLE simulations ADD COLUMN elapsed_seconds REAL')
 
 
 def save_simulation_metadata(db_path, simulation_id, composite_config=None,
@@ -326,10 +334,10 @@ def save_simulation_metadata(db_path, simulation_id, composite_config=None,
 def list_simulations(db_path) -> List[Dict]:
     '''Return all recorded simulations in a history db, newest first.
 
-    Each entry has ``simulation_id``, ``name``, ``started_at``, ``step_count``,
-    and ``has_config`` (True if a composite_config was saved). No core or
-    Composite is required — use this to browse a db long after the runs
-    that produced it.
+    Each entry has ``simulation_id``, ``name``, ``started_at``,
+    ``completed_at``, ``elapsed_seconds``, ``step_count``, and ``has_config``
+    (True if a composite_config was saved). No core or Composite is required
+    — use this to browse a db long after the runs that produced it.
     '''
     if not os.path.exists(db_path):
         return []
@@ -337,14 +345,15 @@ def list_simulations(db_path) -> List[Dict]:
     try:
         _init_history_db(conn)
         rows = conn.execute('''
-            SELECT s.simulation_id, s.name, s.started_at, s.composite_config,
+            SELECT s.simulation_id, s.name, s.started_at, s.completed_at,
+                   s.elapsed_seconds, s.composite_config,
                    (SELECT COUNT(*) FROM history h WHERE h.simulation_id = s.simulation_id)
             FROM simulations s
             ORDER BY s.started_at DESC
         ''').fetchall()
         # Also include sims that have history rows but no metadata row
         orphan_rows = conn.execute('''
-            SELECT h.simulation_id, NULL, NULL, NULL, COUNT(*)
+            SELECT h.simulation_id, NULL, NULL, NULL, NULL, NULL, COUNT(*)
             FROM history h
             WHERE h.simulation_id NOT IN (SELECT simulation_id FROM simulations)
             GROUP BY h.simulation_id
@@ -357,10 +366,13 @@ def list_simulations(db_path) -> List[Dict]:
             'simulation_id': sid,
             'name': name,
             'started_at': started_at,
+            'completed_at': completed_at,
+            'elapsed_seconds': elapsed,
             'step_count': step_count,
             'has_config': cfg is not None,
         }
-        for (sid, name, started_at, cfg, step_count) in list(rows) + list(orphan_rows)
+        for (sid, name, started_at, completed_at, elapsed, cfg, step_count)
+        in list(rows) + list(orphan_rows)
     ]
 
 
@@ -398,14 +410,17 @@ def load_simulation_metadata(db_path, simulation_id) -> Optional[Dict]:
     '''Return the ``simulations`` row for a sim, or ``None`` if missing.
 
     Result dict has ``simulation_id``, ``name``, ``started_at``,
-    ``composite_config`` (already parsed from JSON), and ``metadata``.
+    ``completed_at``, ``elapsed_seconds``, ``composite_config`` (parsed
+    from JSON), and ``metadata``.
     '''
     if not os.path.exists(db_path):
         return None
     conn = sqlite3.connect(db_path)
     try:
+        _init_history_db(conn)
         row = conn.execute(
-            'SELECT simulation_id, name, started_at, composite_config, metadata '
+            'SELECT simulation_id, name, started_at, completed_at, '
+            'elapsed_seconds, composite_config, metadata '
             'FROM simulations WHERE simulation_id = ?',
             (simulation_id,),
         ).fetchone()
@@ -413,14 +428,35 @@ def load_simulation_metadata(db_path, simulation_id) -> Optional[Dict]:
         conn.close()
     if row is None:
         return None
-    sid, name, started_at, cfg, meta = row
+    sid, name, started_at, completed_at, elapsed, cfg, meta = row
     return {
         'simulation_id': sid,
         'name': name,
         'started_at': started_at,
+        'completed_at': completed_at,
+        'elapsed_seconds': elapsed,
         'composite_config': json.loads(cfg) if cfg else None,
         'metadata': json.loads(meta) if meta else None,
     }
+
+
+def mark_simulation_finished(db_path, simulation_id, elapsed_seconds=None):
+    '''Stamp ``completed_at`` (UTC now) and ``elapsed_seconds`` on a run.
+
+    Call this right after ``sim.run()`` returns. Safe to call multiple
+    times — each call just overwrites the two fields.
+    '''
+    conn = sqlite3.connect(db_path, isolation_level=None)
+    try:
+        _init_history_db(conn)
+        completed_at = datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z'
+        conn.execute(
+            'UPDATE simulations SET completed_at = ?, elapsed_seconds = ? '
+            'WHERE simulation_id = ?',
+            (completed_at, elapsed_seconds, simulation_id),
+        )
+    finally:
+        conn.close()
 
 
 class SQLiteEmitter(Emitter):
