@@ -251,7 +251,16 @@ def _json_default(value):
         return int(value)
     if isinstance(value, (np.floating,)):
         return float(value)
-    raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
+    # bigraph-schema Node dataclasses (String, Float, Integer, ...) can end
+    # up wired into emitted state; fall back to their repr so history stays
+    # serializable without dragging in the schema machinery.
+    try:
+        import dataclasses
+        if dataclasses.is_dataclass(value):
+            return dataclasses.asdict(value)
+    except Exception:
+        pass
+    return repr(value)
 
 
 def _init_history_db(conn):
@@ -452,7 +461,10 @@ class SQLiteEmitter(Emitter):
 
     def update(self, state) -> Dict:
         global_time = state.get('global_time') if isinstance(state, dict) else None
-        payload = json.dumps(state, default=_json_default)
+        # Strip live Edge/process instances the same way RAMEmitter does;
+        # otherwise wires that pull in process objects break JSON serialization.
+        clean = tree_copy(state)
+        payload = json.dumps(clean, default=_json_default)
         self._conn.execute(
             'INSERT OR REPLACE INTO history '
             '(simulation_id, step, global_time, state) VALUES (?, ?, ?, ?)',
