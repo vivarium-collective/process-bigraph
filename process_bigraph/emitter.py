@@ -485,6 +485,13 @@ class SQLiteEmitter(Emitter):
     fires the emitter very often (small intervals, long runs) and you don't
     need every tick in the archive — it's the cheapest way to shrink the
     write volume without losing the simulation's time axis.
+
+    ``batch_size`` buffers up to N recorded rows in memory and flushes them
+    in a single SQL transaction (default 1 = write each row immediately).
+    With ``batch_size=100`` the per-row fsync overhead is amortized across
+    the batch, giving a large speedup on high-frequency runs. Unflushed
+    rows are guaranteed to be written on ``close()`` and on the next
+    ``query()``; a hard crash before flush loses the buffered rows.
     '''
     config_schema = {
         **Emitter.config_schema,
@@ -493,6 +500,7 @@ class SQLiteEmitter(Emitter):
         'simulation_id': {'_type': 'string', '_default': None},
         'name': {'_type': 'string', '_default': None},
         'subsample': {'_type': 'integer', '_default': 1},
+        'batch_size': {'_type': 'integer', '_default': 1},
     }
 
     def __init__(self, config, core):
@@ -509,6 +517,13 @@ class SQLiteEmitter(Emitter):
                 f'SQLiteEmitter subsample must be >= 1, got {self.subsample}'
             )
 
+        batch_size = config.get('batch_size')
+        self.batch_size = 1 if batch_size is None else int(batch_size)
+        if self.batch_size < 1:
+            raise ValueError(
+                f'SQLiteEmitter batch_size must be >= 1, got {self.batch_size}'
+            )
+
         self._conn = sqlite3.connect(self.db_path, isolation_level=None)
         _init_history_db(self._conn)
 
@@ -517,6 +532,7 @@ class SQLiteEmitter(Emitter):
             save_simulation_metadata(self.db_path, self.simulation_id, name=name)
 
         self._step = 0
+        self._batch = []
 
     def update(self, state) -> Dict:
         if self._conn is None:
@@ -534,18 +550,35 @@ class SQLiteEmitter(Emitter):
         # otherwise wires that pull in process objects break JSON serialization.
         clean = tree_copy(state)
         payload = json.dumps(clean, default=_json_default)
+        self._batch.append((self.simulation_id, step, global_time, payload))
+        if len(self._batch) >= self.batch_size:
+            self._flush_batch()
+        return {}
+
+    def _flush_batch(self):
+        '''Write any buffered rows in a single SQL transaction.'''
+        if not self._batch or self._conn is None:
+            return
         # Plain INSERT (not OR REPLACE): `step` is a per-run monotonic
         # counter, so a PK conflict here would indicate a real bug — fail
         # loudly rather than silently overwriting a row.
-        self._conn.execute(
-            'INSERT INTO history '
-            '(simulation_id, step, global_time, state) VALUES (?, ?, ?, ?)',
-            (self.simulation_id, step, global_time, payload),
-        )
-        return {}
+        self._conn.execute('BEGIN')
+        try:
+            self._conn.executemany(
+                'INSERT INTO history '
+                '(simulation_id, step, global_time, state) VALUES (?, ?, ?, ?)',
+                self._batch,
+            )
+            self._conn.execute('COMMIT')
+        except Exception:
+            self._conn.execute('ROLLBACK')
+            raise
+        self._batch.clear()
 
     def query(self, paths=None, query=None):
         paths = _resolve_query_paths(paths, query)
+        # Flush so buffered-but-unwritten rows are visible to the read.
+        self._flush_batch()
         # Route through the standalone helper so the in-process and post-hoc
         # retrieval paths go through the same code.
         return load_history(self.db_path, self.simulation_id, paths=paths)
@@ -553,13 +586,16 @@ class SQLiteEmitter(Emitter):
     def close(self):
         '''Close the underlying SQLite connection explicitly.
 
-        Call this when you are done with the emitter — for example, at the
-        end of a script — so WAL data is flushed deterministically. After
-        calling ``close`` the emitter can no longer record new rows.
+        Flushes any buffered rows (from ``batch_size > 1``) so nothing is
+        lost, then closes the connection. After calling ``close`` the
+        emitter can no longer record new rows.
         '''
         if self._conn is not None:
-            self._conn.close()
-            self._conn = None
+            try:
+                self._flush_batch()
+            finally:
+                self._conn.close()
+                self._conn = None
 
     def __del__(self):
         try:

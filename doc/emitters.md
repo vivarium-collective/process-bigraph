@@ -247,6 +247,21 @@ Pass `subsample: N` in the emitter config to keep only every Nth tick:
 
 The stored `step` column still reflects the true composite tick number, so time series you build from the history preserve the simulation's real cadence even though the intermediate ticks were not persisted. `subsample` defaults to `1` (record every tick).
 
+### Batching writes for throughput
+
+SQLite commits one transaction per INSERT by default, which means a per-row fsync; for high-frequency runs most of the wall-clock ends up in that fsync. `batch_size: N` buffers up to N recorded rows in memory and flushes them as one transaction:
+
+```python
+'config': {
+    'emit':          {'time': 'node', 'x': 'node'},
+    'simulation_id': sim_id,
+    'subsample':     10,
+    'batch_size':    100,    # flush in transactions of up to 100 rows
+}
+```
+
+The emitter guarantees a flush on `close()` and before every `query()`, so readers and clean shutdown always see a consistent picture. A hard crash before flush loses buffered rows only — the on-disk invariants are unaffected. `batch_size` composes with `subsample`: together they cut write volume (subsample) and amortize fsync (batch_size). Default is `1`.
+
 ### Reading history back, without any `Composite`
 
 The retrieval helpers take only a db path, so you can analyze runs long after the simulation process has exited — no need to reconstruct the `Composite` or import the original processes.

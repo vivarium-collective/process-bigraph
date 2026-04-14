@@ -1321,6 +1321,70 @@ def test_sqlite_emitter_subsample_rejects_bad_value(core):
         }, core=core)
 
 
+def test_sqlite_emitter_batch_size(core):
+    '''batch_size buffers up to N rows and flushes them in one transaction.
+    Close and query must flush pending rows so no data is lost.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_batch_')
+    e = SQLiteEmitter({
+        'emit': {'global_time': 'node', 'v': 'node'},
+        'file_path': tmp, 'simulation_id': 'sim',
+        'batch_size': 5,
+    }, core=core)
+
+    db_path = os.path.join(tmp, 'history.db')
+    conn = sqlite3.connect(db_path)
+    try:
+        # Feed 3 rows — below the batch threshold, nothing on disk yet.
+        for i in range(3):
+            e.update({'global_time': float(i), 'v': i})
+        (pending,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert pending == 0, f'expected 0 rows before flush, got {pending}'
+
+        # query() forces a flush so the reader sees a consistent view.
+        assert len(e.query()) == 3
+        (after_query,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert after_query == 3
+
+        # Cross a batch boundary: 3 already flushed by query(), feed 5 more
+        # — the 5th triggers auto-flush.
+        for i in range(3, 8):
+            e.update({'global_time': float(i), 'v': i})
+        (after_boundary,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert after_boundary == 8
+
+        # Remaining buffered rows flush on close().
+        for i in range(8, 10):
+            e.update({'global_time': float(i), 'v': i})
+        e.close()
+        (final,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert final == 10
+    finally:
+        conn.close()
+
+    # Final sanity check that the data is intact and in order.
+    history = load_history(db_path, 'sim')
+    assert [row['v'] for row in history] == list(range(10))
+
+
+def test_sqlite_emitter_batch_size_rejects_bad_value(core):
+    '''batch_size < 1 makes no sense — refuse at construction.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_batch_bad_')
+    with pytest.raises(ValueError):
+        SQLiteEmitter({
+            'emit': {},
+            'file_path': tmp, 'simulation_id': 'sim',
+            'batch_size': 0,
+        }, core=core)
+
+
 def test_sqlite_emitter_close(core):
     '''close() should release the connection deterministically, make further
     updates fail loudly, and leave the db usable from a fresh connection.'''
