@@ -16,9 +16,10 @@ import json
 import copy
 import uuid
 import sqlite3
+import datetime
 # import pytest
 import numpy as np
-from typing import Dict
+from typing import Dict, List, Optional
 
 from bigraph_schema import get_path, set_path, is_schema_key, Edge
 from process_bigraph.composite import Composite, Step, find_instance_paths
@@ -253,6 +254,166 @@ def _json_default(value):
     raise TypeError(f'Object of type {type(value).__name__} is not JSON serializable')
 
 
+def _init_history_db(conn):
+    '''Create both history and simulations tables. Safe to call repeatedly.'''
+    conn.execute('PRAGMA journal_mode=WAL')
+    conn.execute('PRAGMA synchronous=NORMAL')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS history (
+            simulation_id TEXT NOT NULL,
+            step INTEGER NOT NULL,
+            global_time REAL,
+            state TEXT NOT NULL,
+            PRIMARY KEY (simulation_id, step)
+        )
+    ''')
+    conn.execute(
+        'CREATE INDEX IF NOT EXISTS idx_history_sim_time '
+        'ON history(simulation_id, global_time)'
+    )
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS simulations (
+            simulation_id TEXT PRIMARY KEY,
+            name TEXT,
+            started_at TEXT NOT NULL,
+            composite_config TEXT,
+            metadata TEXT
+        )
+    ''')
+
+
+def save_simulation_metadata(db_path, simulation_id, composite_config=None,
+                             metadata=None, name=None):
+    '''Write or update the ``simulations`` row for a run.
+
+    Call once per simulation, typically right after building the Composite,
+    to record the config that produced the history rows. Idempotent: fields
+    passed as ``None`` leave any existing value untouched, so you can fill
+    in ``name`` first and ``composite_config`` later without clobbering.
+    '''
+    conn = sqlite3.connect(db_path, isolation_level=None)
+    try:
+        _init_history_db(conn)
+        conn.execute(
+            'INSERT INTO simulations '
+            '(simulation_id, name, started_at, composite_config, metadata) '
+            'VALUES (?, ?, ?, ?, ?) '
+            'ON CONFLICT(simulation_id) DO UPDATE SET '
+            '  name = COALESCE(excluded.name, simulations.name), '
+            '  composite_config = COALESCE(excluded.composite_config, simulations.composite_config), '
+            '  metadata = COALESCE(excluded.metadata, simulations.metadata)',
+            (
+                simulation_id,
+                name,
+                datetime.datetime.utcnow().isoformat(timespec='seconds') + 'Z',
+                json.dumps(composite_config, default=_json_default) if composite_config is not None else None,
+                json.dumps(metadata, default=_json_default) if metadata is not None else None,
+            ),
+        )
+    finally:
+        conn.close()
+
+
+def list_simulations(db_path) -> List[Dict]:
+    '''Return all recorded simulations in a history db, newest first.
+
+    Each entry has ``simulation_id``, ``name``, ``started_at``, ``step_count``,
+    and ``has_config`` (True if a composite_config was saved). No core or
+    Composite is required — use this to browse a db long after the runs
+    that produced it.
+    '''
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    try:
+        _init_history_db(conn)
+        rows = conn.execute('''
+            SELECT s.simulation_id, s.name, s.started_at, s.composite_config,
+                   (SELECT COUNT(*) FROM history h WHERE h.simulation_id = s.simulation_id)
+            FROM simulations s
+            ORDER BY s.started_at DESC
+        ''').fetchall()
+        # Also include sims that have history rows but no metadata row
+        orphan_rows = conn.execute('''
+            SELECT h.simulation_id, NULL, NULL, NULL, COUNT(*)
+            FROM history h
+            WHERE h.simulation_id NOT IN (SELECT simulation_id FROM simulations)
+            GROUP BY h.simulation_id
+        ''').fetchall()
+    finally:
+        conn.close()
+
+    return [
+        {
+            'simulation_id': sid,
+            'name': name,
+            'started_at': started_at,
+            'step_count': step_count,
+            'has_config': cfg is not None,
+        }
+        for (sid, name, started_at, cfg, step_count) in list(rows) + list(orphan_rows)
+    ]
+
+
+def load_history(db_path, simulation_id, paths: Optional[List] = None) -> List[Dict]:
+    '''Load a simulation's history from a db file. No core/Composite needed.
+
+    Returns the same shape that ``SQLiteEmitter.query()`` returns, so plot
+    and analysis code that consumed RAM/JSON emitter output works unchanged.
+    '''
+    if not os.path.exists(db_path):
+        return []
+    conn = sqlite3.connect(db_path)
+    try:
+        cursor = conn.execute(
+            'SELECT state FROM history WHERE simulation_id = ? ORDER BY step',
+            (simulation_id,),
+        )
+        history = [json.loads(row[0]) for row in cursor.fetchall()]
+    finally:
+        conn.close()
+
+    if isinstance(paths, list):
+        results = []
+        for t in history:
+            result = {}
+            for path in paths:
+                element = get_path(t, path)
+                result = set_path(result, path, element)
+            results.append(result)
+        return results
+    return history
+
+
+def load_simulation_metadata(db_path, simulation_id) -> Optional[Dict]:
+    '''Return the ``simulations`` row for a sim, or ``None`` if missing.
+
+    Result dict has ``simulation_id``, ``name``, ``started_at``,
+    ``composite_config`` (already parsed from JSON), and ``metadata``.
+    '''
+    if not os.path.exists(db_path):
+        return None
+    conn = sqlite3.connect(db_path)
+    try:
+        row = conn.execute(
+            'SELECT simulation_id, name, started_at, composite_config, metadata '
+            'FROM simulations WHERE simulation_id = ?',
+            (simulation_id,),
+        ).fetchone()
+    finally:
+        conn.close()
+    if row is None:
+        return None
+    sid, name, started_at, cfg, meta = row
+    return {
+        'simulation_id': sid,
+        'name': name,
+        'started_at': started_at,
+        'composite_config': json.loads(cfg) if cfg else None,
+        'metadata': json.loads(meta) if meta else None,
+    }
+
+
 class SQLiteEmitter(Emitter):
     '''Append simulation state to a SQLite database each timestep.
 
@@ -260,12 +421,17 @@ class SQLiteEmitter(Emitter):
     file is a single ``.db`` file that can be opened with any SQLite client,
     queried with SQL, and kept for long-term storage. Multiple simulations
     can share one file — rows are partitioned by ``simulation_id``.
+
+    To record the composite config or other metadata alongside the history
+    rows, call :func:`save_simulation_metadata` after constructing the
+    Composite — the emitter itself only writes the per-step history rows.
     '''
     config_schema = {
         **Emitter.config_schema,
         'file_path': {'_type': 'string', '_default': './out'},
         'db_file': {'_type': 'string', '_default': 'history.db'},
         'simulation_id': {'_type': 'string', '_default': None},
+        'name': {'_type': 'string', '_default': None},
     }
 
     def __init__(self, config, core):
@@ -276,21 +442,12 @@ class SQLiteEmitter(Emitter):
         self.db_path = os.path.join(self.file_path, config.get('db_file') or 'history.db')
 
         self._conn = sqlite3.connect(self.db_path, isolation_level=None)
-        self._conn.execute('PRAGMA journal_mode=WAL')
-        self._conn.execute('PRAGMA synchronous=NORMAL')
-        self._conn.execute('''
-            CREATE TABLE IF NOT EXISTS history (
-                simulation_id TEXT NOT NULL,
-                step INTEGER NOT NULL,
-                global_time REAL,
-                state TEXT NOT NULL,
-                PRIMARY KEY (simulation_id, step)
-            )
-        ''')
-        self._conn.execute(
-            'CREATE INDEX IF NOT EXISTS idx_history_sim_time '
-            'ON history(simulation_id, global_time)'
-        )
+        _init_history_db(self._conn)
+
+        name = config.get('name')
+        if name is not None:
+            save_simulation_metadata(self.db_path, self.simulation_id, name=name)
+
         self._step = 0
 
     def update(self, state) -> Dict:
