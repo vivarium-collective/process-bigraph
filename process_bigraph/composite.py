@@ -856,7 +856,22 @@ class Step(Open):
     By default all inputs trigger — the step runs whenever any input changes.
     To make some inputs "silent" (received but not triggering), return only
     the triggering subset from `triggers()`.
+
+    Class attributes for memoization:
+        ``_cache`` — ``'none'`` (default) or ``'by_hash'``. When
+            ``'by_hash'``, ``invoke()`` hashes the Step's config and the
+            incoming state, keys a class-level cache by
+            ``(schema_version, hash)``, and reuses prior outputs on a
+            hit. Requires ``_schema_version``.
+        ``_schema_version`` — opaque string identifying the Step's
+            output-relevant implementation version. Bumping invalidates
+            all prior cache entries under the old version. Required when
+            ``_cache == 'by_hash'``.
     """
+
+    _cache: str = 'none'
+    _schema_version: Optional[str] = None
+    _by_hash_cache: Dict[Any, Any] = {}
 
     def triggers(self):
         """Return the subset of input ports that trigger this step.
@@ -871,12 +886,123 @@ class Step(Open):
         """
         return self.inputs()
 
+    def scatter_port(self):
+        """Return the name of this step's scatter input port, or ``None``.
+
+        A port is a scatter port when its declared schema is a dict
+        carrying ``_cardinality: 'per_match'``. At most one scatter port
+        is permitted per Step; declaring more than one raises — multiple
+        scatter axes must be materialised upstream by a ``Combine`` Step
+        (see ``process_bigraph.plumbing``).
+
+        The scatter annotation drives Nextflow channel semantics
+        (queue-channel + per-item process invocation) and is available
+        to any downstream interpreter that wants instance-reuse
+        scattering at native runtime.
+        """
+        found = []
+        for port_name, port_schema in self.inputs().items():
+            if isinstance(port_schema, dict) and port_schema.get('_cardinality') == 'per_match':
+                found.append(port_name)
+        if len(found) > 1:
+            raise ValueError(
+                f"{type(self).__name__} declares _cardinality 'per_match' on "
+                f"multiple input ports ({found!r}); at most one scatter axis "
+                f"per Step is permitted. Upstream a Combine step to materialise "
+                f"the product into a single match set."
+            )
+        return found[0] if found else None
+
     def invoke(self, state: Dict[str, Any], _: Optional[float] = None) -> SyncUpdate:
         """
         Run the step using the given state and return its update.
+
+        When the Step declares a scatter port (``_cardinality: 'per_match'``
+        on one of its inputs), this method loops ``update()`` once per
+        match in the incoming match-set, reusing the single Step instance
+        (Steps are stateless by design). Each per-output value is
+        collected into a dict keyed by the match key, so the returned
+        update has shape ``{port: {match_key: value}}``. Downstream
+        consumers see the aggregated dict at the output wire's path.
+
+        Non-scatter Steps take the fast path: a single ``update()`` call.
+
+        When the Step declares ``_cache = 'by_hash'``, the (config, state)
+        pair is hashed and the result looked up in a class-level cache
+        keyed by ``(_schema_version, hash)``. Hits skip ``update()``
+        entirely and return the prior output.
         """
-        update = self.update(state)
-        return SyncUpdate(update)
+        cache_key = self._cache_key(state) if self._cache == 'by_hash' else None
+        if cache_key is not None:
+            cached = type(self)._by_hash_cache.get(cache_key)
+            if cached is not None:
+                return SyncUpdate(cached)
+
+        scatter_port = self.scatter_port()
+        if scatter_port is None:
+            result = self.update(state)
+            if cache_key is not None:
+                type(self)._by_hash_cache[cache_key] = result
+            return SyncUpdate(result)
+
+        match_set = state.get(scatter_port)
+        if isinstance(match_set, dict):
+            items = list(match_set.items())
+        elif isinstance(match_set, list):
+            items = list(enumerate(match_set))
+        elif match_set is None:
+            items = []
+        else:
+            raise TypeError(
+                f"{type(self).__name__}: scatter port {scatter_port!r} expects "
+                f"a dict or list match-set, got {type(match_set).__name__}"
+            )
+
+        per_port_entries: Dict[str, Dict[Any, Any]] = {}
+        for key, item in items:
+            per_state = dict(state)
+            per_state[scatter_port] = item
+            per_update = self.update(per_state) or {}
+            for port, value in per_update.items():
+                per_port_entries.setdefault(port, {})[key] = value
+
+        # Wrap each port's per-match dict as an ``_add`` sentinel so the
+        # update composes with a plain ``map[X]`` destination (no type
+        # retyping required by the caller). ``_add`` on an existing key
+        # overwrites, so re-runs with the same match set are idempotent.
+        aggregated: Dict[str, Dict[str, Any]] = {
+            port: {'_add': entries}
+            for port, entries in per_port_entries.items()
+        }
+
+        if cache_key is not None:
+            type(self)._by_hash_cache[cache_key] = aggregated
+        return SyncUpdate(aggregated)
+
+    def _cache_key(self, state: Dict[str, Any]) -> Tuple[str, str]:
+        """Hash the Step's config + incoming state into a cache key.
+
+        Raises if ``_schema_version`` is unset — the spec requires an
+        explicit version when caching is enabled so old entries don't
+        silently leak through implementation changes.
+        """
+        version = self._schema_version
+        if version is None:
+            raise ValueError(
+                f"{type(self).__name__}: _cache = 'by_hash' requires "
+                f"_schema_version to be set (a string identifying the "
+                f"output-relevant implementation version). See the "
+                f"Step docstring."
+            )
+
+        import hashlib
+        import json
+        payload = json.dumps(
+            {'config': getattr(self, 'config', {}), 'state': state},
+            sort_keys=True, default=repr,
+        )
+        digest = hashlib.sha256(payload.encode('utf-8')).hexdigest()
+        return (version, digest)
 
     def register_shared(self, instance):
         """
@@ -1468,6 +1594,25 @@ class Composite(Process):
         """
         return self.core.render(self.schema)
         # return self.core.serialize('schema', self.schema)
+
+    def nextflow(self, options: Optional[Dict[str, Any]] = None) -> str:
+        """Render this composite as a Nextflow DSL2 workflow document.
+
+        Delegates to ``process_bigraph.nextflow.render_composite``. See
+        that module for the full renderer description and the schema
+        annotations (``_cardinality``, ``_nextflow``,
+        ``_nextflow_directives``) it consumes.
+
+        Args:
+            options: optional renderer options; currently
+                ``workflow_name`` (default ``'main'``) and ``header``
+                (default ``nextflow.enable.dsl=2``) are recognized.
+
+        Returns:
+            The rendered Nextflow document as a string.
+        """
+        from process_bigraph.nextflow import render_composite
+        return render_composite(self, options)
 
     def save(
             self,
