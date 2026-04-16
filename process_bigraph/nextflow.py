@@ -60,6 +60,65 @@ def _port_annotation(port_decl: Any, key: str, default: Any = None) -> Any:
     return _port_schema(port_decl).get(key, default)
 
 
+def _port_type_name(port_decl: Any) -> str:
+    """Return the bare type name from a port declaration.
+
+    ``'list[float]'`` → ``'list'``; ``{'_type': 'string'}`` → ``'string'``.
+    Used to decide the Nextflow input/output keyword.
+    """
+    raw = _port_schema(port_decl).get('_type', '')
+    if not isinstance(raw, str):
+        return ''
+    bracket = raw.find('[')
+    return raw[:bracket] if bracket != -1 else raw
+
+
+def _port_to_nextflow_decl(port_name: str,
+                           port_decl: Any,
+                           class_overrides: Optional[Dict[str, str]] = None) -> str:
+    """Derive a Nextflow input/output declaration line from a port schema.
+
+    Conventions (in priority order):
+
+    1. A class-level ``nextflow_port_decls: {port: decl}`` override on
+       the Step wins — this is the escape hatch for Groovy constructs
+       that don't fit the structural model (``tuple val, env(...), ...,
+       emit: name``). Overrides live on the class, not the port schema,
+       so they bypass bigraph-schema's reify_schema parameter walk.
+    2. Ports whose type is ``'path'`` or carry ``_is_file: True`` emit
+       ``path <name>`` — Nextflow stages them as files.
+    3. ``'tuple[A, B, C]'`` emits ``tuple val(name_0), val(name_1), ...``;
+       individual tuple elements can be promoted to ``path()`` via
+       ``_tuple_paths: [index, ...]`` on the port schema.
+    4. Everything else (scalars, lists, maps, nested containers) emits
+       ``val <name>``. Collections travel as Groovy values; JSON
+       marshalling (if needed) is the runner's concern, not Nextflow's.
+    """
+    if class_overrides and port_name in class_overrides:
+        return class_overrides[port_name]
+
+    schema = _port_schema(port_decl)
+
+    type_name = _port_type_name(port_decl)
+    if type_name == 'path' or schema.get('_is_file') is True:
+        return f'path {port_name}'
+
+    if type_name == 'tuple':
+        raw = schema.get('_type', '')
+        inner = raw[raw.find('[') + 1:-1] if '[' in raw else ''
+        elements = [e.strip() for e in inner.split(',') if e.strip()]
+        if not elements:
+            return f'val {port_name}'
+        path_indices = set(schema.get('_tuple_paths', ()))
+        parts = []
+        for i, _elem_type in enumerate(elements):
+            kind = 'path' if i in path_indices else 'val'
+            parts.append(f'{kind}({port_name}_{i})')
+        return 'tuple ' + ', '.join(parts)
+
+    return f'val {port_name}'
+
+
 def _class_annotation(instance: Any, key: str, default: Any = None) -> Any:
     return getattr(type(instance), key, default)
 
@@ -119,35 +178,53 @@ def _script_body(instance: Any,
                  outputs_wires: Dict[str, List]) -> str:
     """Return the script block for a process.
 
-    Defaults to a Python stub invoking the Step class by fully-qualified
-    name; Steps override ``nextflow_script()`` to emit anything else.
+    Priority order:
+      1. ``nextflow_script()`` override on the Step — escape hatch for
+         legacy CLI wrappers.
+      2. Auto-generated body that invokes ``process_bigraph.run_step``,
+         dispatching to the Step class by fully-qualified name. The
+         same ``update()`` runs natively and under Nextflow.
     """
     if hasattr(instance, 'nextflow_script'):
         return instance.nextflow_script()
 
     cls = type(instance)
     fq = f"{cls.__module__}.{cls.__name__}"
-    in_names = ', '.join(inputs_wires.keys()) or '(none)'
-    out_names = ', '.join(outputs_wires.keys()) or '(none)'
-    return (
-        f'"""\n'
-        f'# Stub for {step_name} ({fq}).\n'
-        f'# Inputs: {in_names}\n'
-        f'# Outputs: {out_names}\n'
-        f'# Replace with the invocation appropriate to your runtime.\n'
-        f'echo "{step_name} invoked"\n'
-        f'"""'
+    in_flags = ' '.join(
+        f'--in {port}="${{{port}}}"' for port in inputs_wires
     )
+    out_flags = ' '.join(
+        f'--out {port}={port}.json' for port in outputs_wires
+    )
+    parts = [
+        'python -m process_bigraph.run_step',
+        f'--class {fq}',
+    ]
+    if in_flags:
+        parts.append(in_flags)
+    if out_flags:
+        parts.append(out_flags)
+    cmd = ' \\\n    '.join(parts)
+    return f'"""\n{cmd}\n"""'
 
 
 def _directive_lines(directives: Dict[str, Any]) -> List[str]:
-    """Render directive key/values as one-line Nextflow directives."""
+    """Render directive key/values as one-line Nextflow directives.
+
+    Strings that start with ``{`` are emitted raw — they are Groovy
+    closures (e.g. ``publishDir { "..." }, mode: "copy"``) and
+    wrapping them in quotes would turn the closure into a string
+    literal. Everything else is repr-quoted.
+    """
     lines = []
     for key, value in directives.items():
-        if isinstance(value, str):
-            lines.append(f'    {key} {value!r}')
-        elif isinstance(value, bool):
+        if isinstance(value, bool):
             lines.append(f'    {key} {str(value).lower()}')
+        elif isinstance(value, str):
+            if value.lstrip().startswith('{'):
+                lines.append(f'    {key} {value}')
+            else:
+                lines.append(f'    {key} {value!r}')
         else:
             lines.append(f'    {key} {value}')
     return lines
@@ -165,15 +242,23 @@ def _process_block(step_name: str,
         directives.setdefault('executor', 'local')
     lines.extend(_directive_lines(directives))
 
+    step_inputs_schema = instance.inputs() if hasattr(instance, 'inputs') else {}
+    step_outputs_schema = instance.outputs() if hasattr(instance, 'outputs') else {}
+    class_overrides = _class_annotation(instance, 'nextflow_port_decls', {}) or {}
+
     if inputs_wires:
         lines.append('    input:')
         for port in inputs_wires:
-            lines.append(f'    val {port}')
+            decl = _port_to_nextflow_decl(
+                port, step_inputs_schema.get(port, {}), class_overrides)
+            lines.append(f'    {decl}')
 
     if outputs_wires:
         lines.append('    output:')
         for port in outputs_wires:
-            lines.append(f'    val {port}')
+            decl = _port_to_nextflow_decl(
+                port, step_outputs_schema.get(port, {}), class_overrides)
+            lines.append(f'    {decl}')
 
     lines.append('    script:')
     lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires))
