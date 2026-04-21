@@ -1322,6 +1322,59 @@ class _ArrWriterProcess(Process):
         return {'arr': np.array([1.0, 2.0, 3.0])}
 
 
+def test_reaction_step(core):
+    """ReactionStep fires Milner-style reaction rules on a state subtree.
+
+    The step is standalone (not wired through a Composite) — it reads
+    a 'state' input port and returns the modified subtree.
+    """
+    from bigraph_schema.schema import Site
+    from bigraph_schema.assembly import ReactionRule
+    from process_bigraph.processes.reaction import ReactionStep
+
+    # B3: agent enters room
+    b3 = ReactionRule(
+        redex={
+            'a': {'_control': 'agent', 'props': Site()},
+            'r': {'_control': 'room', 'contents': Site()}},
+        reactum={
+            'r': {'_control': 'room',
+                  'contents': Site(),
+                  'a': {'_control': 'agent', 'props': Site()}}},
+        instantiation={'props': 'props', 'contents': 'contents'},
+        label='B3')
+
+    step = ReactionStep(
+        config={'rules': [b3], 'mode': 'deterministic'},
+        core=core)
+
+    state = {
+        'state': {
+            'bldg': {
+                '_control': 'building',
+                'alice': {'_control': 'agent', 'mass': 70.0},
+                'lab': {
+                    '_control': 'room',
+                    'pc': {'_control': 'computer', 'cpu': 3.0}}}}}
+
+    update = step.update(state)
+    assert update, 'ReactionStep should have produced an update'
+    assert 'state' in update
+
+    bldg = update['state']['bldg']
+    assert 'alice' not in bldg, 'alice should no longer be a sibling'
+    lab = bldg['lab']
+    assert 'alice' in lab, 'alice should be inside lab'
+    assert lab['alice']['props']['mass'] == 70.0
+
+    # Stochastic mode
+    step_stoch = ReactionStep(
+        config={'rules': [b3], 'mode': 'stochastic', 'seed': 42},
+        core=core)
+    update2 = step_stoch.update(state)
+    assert update2 and 'state' in update2
+
+
 def test_port_outputs_propagate_to_store_schema(core):
     """A process declaring ``_outputs: array[float[64]]`` should cause the
     wired target store to have an Array schema after Composite init, so
@@ -1403,6 +1456,8 @@ if __name__ == '__main__':
     test_dynamic_structure(core)
     test_rest_process(core)
     # test_dfba_process(core)
+
+    test_reaction_step(core)
 
 
 
