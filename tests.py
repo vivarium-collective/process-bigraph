@@ -1375,6 +1375,54 @@ def test_reaction_step(core):
     assert update2 and 'state' in update2
 
 
+def test_reaction_step_in_composite(core):
+    """ReactionStep wired through a Composite. The step fires on each
+    tick, moving one agent into a room per tick."""
+    from bigraph_schema.schema import Site
+    from bigraph_schema.assembly import ReactionRule
+
+    b3 = ReactionRule(
+        redex={
+            'a': {'_control': 'agent', 'props': Site()},
+            'r': {'_control': 'room', 'contents': Site()}},
+        reactum={
+            'r': {'_control': 'room',
+                  'contents': Site(),
+                  'a': {'_control': 'agent', 'props': Site()}}},
+        instantiation={'props': 'props', 'contents': 'contents'},
+        label='B3')
+
+    spec = {
+        'schema': {'building': 'tree[node]'},
+        'state': {
+            'building': {
+                '_control': 'building',
+                'alice': {'_control': 'agent', 'mass': 70.0},
+                'lab': {'_control': 'room',
+                        'pc': {'_control': 'computer'}}},
+            'reactions': {
+                '_type': 'step',
+                'address': (
+                    'local:!process_bigraph.processes.reaction'
+                    '.ReactionStep'),
+                'config': {'rules': [b3]},
+                'inputs': {'state': ['building']},
+                'outputs': {'state': ['building']}}}}
+
+    composite = Composite(spec, core=core)
+    building_before = composite.state['building']
+    assert 'alice' in building_before
+
+    composite.run(0)
+
+    building_after = composite.state['building']
+    # alice should have moved inside the room
+    assert 'alice' not in building_after
+    lab = building_after['lab']
+    assert 'alice' in lab
+    assert lab['alice']['props']['mass'] == 70.0
+
+
 def test_port_outputs_propagate_to_store_schema(core):
     """A process declaring ``_outputs: array[float[64]]`` should cause the
     wired target store to have an Array schema after Composite init, so
@@ -1458,6 +1506,7 @@ if __name__ == '__main__':
     # test_dfba_process(core)
 
     test_reaction_step(core)
+    test_reaction_step_in_composite(core)
 
 
 

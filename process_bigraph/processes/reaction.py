@@ -76,7 +76,7 @@ class ReactionStep(Step):
         return {'state': 'tree[node]'}
 
     def outputs(self):
-        return {'state': 'tree[node]'}
+        return {'state': 'overwrite[tree[node]]'}
 
     def update(self, state):
         subtree = state.get('state', {})
