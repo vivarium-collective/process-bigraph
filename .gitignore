@@ -1,4 +1,5 @@
 .python-version
+.claude/settings.local.json
 __pycache__/
 .idea/
 *.ipynb_checkpoints/
