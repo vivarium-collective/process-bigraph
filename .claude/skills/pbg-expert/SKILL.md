@@ -182,7 +182,77 @@ Rules:
 - `inputs()` and `outputs()` return `{port_name: schema_expression}`.
 - `config_schema` uses bigraph-schema format.
 - Register processes with `core.register_link("MyProcess", MyProcess)`.
-- Processes should return deltas unless the port type uses `overwrite[...]`.
+
+## Port Design
+
+Port schemas are not just type tags — they tell the bigraph engine **how to apply each update**. Choosing them carelessly silently breaks composition. Two principles drive every wrapper:
+
+### 1. Prefer concrete types over `overwrite[...]`
+
+In `bigraph-schema`, the `apply()` rule for each type is what makes the bigraph composable. Concrete types compose; `overwrite[T]` does not.
+
+| Schema | `apply(state, update)` | When to use |
+|---|---|---|
+| `float`, `integer` | **Additive delta** — `state + update` | Rates, fluxes, mass changes, counts, anything where two processes can both contribute |
+| `map[K,V]` | Per-key recursive apply on `V` | Concentration maps, named exchanges, agent-keyed state |
+| `list[T]` | Supports `_add` / `_remove` / structural ops | Trajectories, queues, event logs |
+| `tree[T]` | Recursive structural merge | Nested compartments, agent hierarchies |
+| `string`, `enum`, `boolean` | Replace — there is no meaningful delta | Phase labels, mode flags |
+| `overwrite[T]` | **Replace, always** — last writer wins | Reserved for genuine setpoints/sensors |
+
+The default for any numeric port should be the bare type. Two processes writing `0.3` and `-0.1` to a `'biomass': 'float'` port compose to a net `+0.2` — that's the whole point of process-bigraph. Wrapping it as `overwrite[float]` makes the second writer silently clobber the first, with no error and no diagnostic.
+
+`overwrite[T]` is the right choice in narrow cases:
+
+- A controller publishing the *current* setpoint, not an adjustment.
+- A sensor reporting an *absolute* reading from outside the simulation.
+- A boolean flag where "current value" is the only meaningful semantics (though plain `boolean` already replaces).
+
+If your tool internally tracks an absolute quantity (e.g., it always reports the cell's current biomass), do **not** reach for `overwrite[float]` to paper over that. Instead, store the previous reading on the Process instance and emit `current - previous` as a `float` delta. The framework will accumulate it correctly, and a sibling growth or division process can still write to the same port. This is the pattern v2ecoli uses for `mass`, `length`, `volume`.
+
+Avoid `overwrite[node]` (whole-subtree replace) entirely. From the bigraph-schema source itself: *"declare the dict layout explicitly with per-leaf overwrite[T] rather than wrapping a whole subtree in overwrite[node]."* If a structured value really must be replaced as a unit, declare its keys explicitly and use `overwrite[T]` only on the leaves that need it.
+
+### 2. Define input ports — don't ship an emitter-only Process
+
+A common failure mode is to wire only outputs and treat the wrapped tool as a one-way data source. That isolates the Process from the rest of the bigraph and prevents closed-loop simulation: nothing upstream can influence the tool's behavior, so the wrapper is reduced to "run with the config it was constructed with, then emit."
+
+Almost every interesting wrapper has *both* directions:
+
+- **Inputs** — state the surrounding bigraph passes *into* the tool on each step. Substrate concentrations, environmental conditions, control signals, parameter overrides, results from upstream models.
+- **Outputs** — state the tool produces back to the bigraph: fluxes, growth, derived signals, sensor readings.
+
+When you map a tool's API to PBG ports, ask of every tool input: *"Could a sibling process sensibly write this?"* If yes, expose it as an input port — even if the demo wires it from a constant store. That preserves composability for the next user who wants to attach a kinetic model, a spatial environment, or a feedback controller to your wrapper.
+
+A bridge with no inputs (`def inputs(self): return {}`) is almost always wrong. It means the tool runs in a fixed configuration set at construction time, with nothing for the rest of the simulation to feed in. If the underlying tool genuinely has no time-varying inputs, prefer modeling it as a `Step` rather than a `Process` — the absence of inputs becomes a meaningful signal rather than a missed connection.
+
+### Right vs. wrong
+
+```python
+# Wrong: emitter-only, every output replaces.
+class TissueSim(Process):
+    def inputs(self):
+        return {}
+    def outputs(self):
+        return {
+            'biomass': 'overwrite[float]',
+            'concentrations': 'overwrite[map[string,float]]',
+        }
+
+# Right: tool consumes upstream state and emits composable deltas.
+class TissueSim(Process):
+    def inputs(self):
+        return {
+            'environment': 'map[string,float]',  # external concentrations
+            'temperature': 'float',
+            'control_signal': 'float',
+        }
+    def outputs(self):
+        return {
+            'biomass': 'float',                  # delta — composes with growth/division
+            'exchange': 'map[string,float]',     # per-substrate flux deltas
+            'phase': 'enum[string,"G1","S","G2","M"]',  # replaced (no delta semantics)
+        }
+```
 
 ## Composite Assembly
 
@@ -279,11 +349,18 @@ class ToolBridge(Process):
     def __init__(self, config=None, core=None):
         super().__init__(config=config, core=core)
         self._model = None
+        self._prev_biomass = 0.0  # for delta computation
 
     def inputs(self):
-        return {"concentrations": "map[string,float]"}
+        # Anything a sibling process could plausibly write to the tool
+        # belongs here — not in config_schema.
+        return {
+            "concentrations": "map[string,float]",
+            "temperature": "float",
+        }
 
     def outputs(self):
+        # Bare types so updates compose additively with sibling processes.
         return {
             "fluxes": "map[string,float]",
             "biomass": "float",
@@ -292,26 +369,37 @@ class ToolBridge(Process):
     def _build_model(self):
         import external_tool
         self._model = external_tool.load(self.config["model_path"])
+        self._prev_biomass = float(self._model.get_biomass())
 
     def update(self, state, interval):
         if self._model is None:
             self._build_model()
 
+        # Push upstream state into the tool every step.
         self._model.set_concentrations(state["concentrations"])
+        self._model.set_temperature(state["temperature"])
         self._model.simulate(interval)
+
+        # Tool reports absolute biomass; emit the delta so the `float`
+        # port accumulates correctly and a sibling growth/division
+        # process can also contribute.
+        current_biomass = float(self._model.get_biomass())
+        d_biomass = current_biomass - self._prev_biomass
+        self._prev_biomass = current_biomass
 
         return {
             "fluxes": dict(self._model.get_fluxes()),
-            "biomass": float(self._model.get_biomass()),
+            "biomass": d_biomass,
         }
 ```
 
 Principles:
 
 - Lazily import heavy dependencies.
-- Push PBG state into the tool.
-- Run the tool.
+- Expose tool inputs as input ports (substrates, environment, control signals). The bridge is bidirectional — push state in, then run.
+- Run the tool for `interval`.
 - Read outputs back into PBG-compatible values.
+- Emit deltas against the previous reading where the tool reports absolute state, so downstream `float`/`map[float]` ports compose. Reserve `overwrite[T]` for genuine setpoints/sensors (see **Port Design**).
 - Convert arrays, DataFrames, sparse matrices, and custom objects into schema-compatible values.
 
 ## Emitters
@@ -369,14 +457,15 @@ Emitter results are keyed by emitter path tuple:
 Decide:
 
 - `Step` vs `Process`
-- Ports and schemas
-- Config schema
+- Ports and schemas — for every tool input/output, choose the most concrete bigraph-schema type that captures its update semantics. Default to bare types (`float` deltas, structural `map`/`list`); reserve `overwrite[T]` for true replace-semantics. See **Port Design** above.
+- Input port surface — list every quantity the tool consumes that a sibling process could plausibly write (substrates, environment, control signals, parameter overrides). Each becomes an input port, not a buried config field.
+- Config schema — only for values that don't change at runtime.
 - Custom types
 - Direct wrapper vs bridge pattern
 - Minimal offline fixtures for tests
 - Demo configurations that show different behavior
 
-Use `Process` if the tool has time-stepping. Use `Step` if it is a stateless or event-driven transformation.
+Use `Process` if the tool has time-stepping. Use `Step` if it is a stateless or event-driven transformation. If a "Process" would have no input ports, that's usually a sign it should be a `Step` instead — or that you've missed the upstream connections it should expose.
 
 ### Phase 3: Implement
 
