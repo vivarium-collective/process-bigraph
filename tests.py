@@ -1348,11 +1348,15 @@ def test_reaction_step(core):
         config={'rules': [b3], 'mode': 'deterministic'},
         core=core)
 
+    # Alice has two non-`_`-prefixed fields (mass, height) so the
+    # Site `props` captures via the surplus path, binding them as a dict.
+    # With only one field, _match_dict's 1-to-1 path captures the bare
+    # value — see test_fire_rule_b3 in bigraph-schema for that case.
     state = {
         'state': {
             'bldg': {
                 '_control': 'building',
-                'alice': {'_control': 'agent', 'mass': 70.0},
+                'alice': {'_control': 'agent', 'mass': 70.0, 'height': 1.7},
                 'lab': {
                     '_control': 'room',
                     'pc': {'_control': 'computer', 'cpu': 3.0}}}}}
@@ -1366,6 +1370,7 @@ def test_reaction_step(core):
     lab = bldg['lab']
     assert 'alice' in lab, 'alice should be inside lab'
     assert lab['alice']['props']['mass'] == 70.0
+    assert lab['alice']['props']['height'] == 1.7
 
     # Stochastic mode
     step_stoch = ReactionStep(
@@ -1397,7 +1402,7 @@ def test_reaction_step_in_composite(core):
         'state': {
             'building': {
                 '_control': 'building',
-                'alice': {'_control': 'agent', 'mass': 70.0},
+                'alice': {'_control': 'agent', 'mass': 70.0, 'height': 1.7},
                 'lab': {'_control': 'room',
                         'pc': {'_control': 'computer'}}},
             'reactions': {
@@ -1421,6 +1426,7 @@ def test_reaction_step_in_composite(core):
     lab = building_after['lab']
     assert 'alice' in lab
     assert lab['alice']['props']['mass'] == 70.0
+    assert lab['alice']['props']['height'] == 1.7
 
 
 def test_port_outputs_propagate_to_store_schema(core):
@@ -1457,6 +1463,108 @@ def test_port_outputs_propagate_to_store_schema(core):
         f'the _ArrWriterProcess._outputs schema — got '
         f'{type(composite.state["arr"]).__name__}')
     assert composite.state['arr'].dtype == np.dtype('float64')
+
+
+def test_dynamic_worker_rewire_preserves_instance(core):
+    """A rewire should update the worker's `outputs` wires in place —
+    the existing process instance is preserved. The `_rewire` sentinel
+    triggers re-realize so the compiled link cache is rebuilt with the
+    new wiring, but realize_link reuses the existing instance.
+    """
+    DynamicWorker._counter = 0
+
+    schema = {
+        'pool': {
+            '_type': 'map',
+            '_value': {
+                'value': 'float',
+                'worker': {
+                    '_type': 'process',
+                    'address': make_default('string', 'local:DynamicWorker'),
+                    'inputs': make_default('wires', {
+                        'sources': ['..'],
+                        'self_value': ['value']}),
+                    'outputs': make_default('wires', {
+                        'targets': ['..'],
+                        'self_value': ['value']}),
+                    'interval': make_default('float', 1.0)}}}}
+
+    # Two agents, only a0 will rewire (a1 has propensity_rewire=0).
+    # threshold_rewire=4.0 with source_sum-based trigger; growth_rate=1.0.
+    state = {
+        'pool': {
+            'a0': {
+                'value': 1.0,
+                'worker': _make_worker_state(
+                    'a0',
+                    propensity_rewire=1.0,
+                    propensity_spawn=0.0,
+                    propensity_remove=0.0,
+                    threshold_rewire=2.0)},
+            'a1': {
+                'value': 5.0,
+                'worker': _make_worker_state(
+                    'a1',
+                    propensity_rewire=0.0,
+                    propensity_spawn=0.0,
+                    propensity_remove=0.0)}}}
+
+    composite = Composite({
+        'schema': schema,
+        'state': state}, core=core)
+
+    a0_instance_before = composite.state['pool']['a0']['worker']['instance']
+    a0_outputs_before = composite.state['pool']['a0']['worker']['outputs']
+    assert a0_outputs_before['self_value'] == ['value']
+
+    # One tick is enough: a1.value=5.0 → a0 sees source_sum=5 > 2.0, rewires.
+    composite.run(1.0)
+
+    a0_instance_after = composite.state['pool']['a0']['worker']['instance']
+    a0_outputs_after = composite.state['pool']['a0']['worker']['outputs']
+
+    assert a0_instance_after is a0_instance_before, (
+        'rewire should preserve the existing worker instance')
+    assert a0_outputs_after['self_value'] == ['..', 'a1', 'value'], (
+        f"expected outputs.self_value to be rewired to a1, "
+        f"got {a0_outputs_after['self_value']}")
+
+
+def test_partial_process_link_update(core):
+    """Updating a single field on a ProcessLink (e.g. only ``interval``)
+    must preserve the other fields. The default ``apply(Node)`` walked
+    every dataclass field of the schema and recursed with
+    ``update.get(key)`` — passing ``None`` for missing keys, which either
+    crashed inside Wires/Tree or wiped out address/config/inputs/outputs.
+    """
+    state = {
+        'level': 4.4,
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.5},
+            'inputs': {'level': ['level']},
+            'outputs': {'level': ['level']},
+            'interval': 1.0,
+        },
+    }
+    composite = Composite({'state': state}, core=core)
+
+    before = composite.state['increase']
+    original_address = before['address']
+    original_config = dict(before['config'])
+    original_inputs = dict(before['inputs'])
+    original_outputs = dict(before['outputs'])
+    original_interval = before['interval']
+
+    composite.apply({'increase': {'interval': 0.5}})
+
+    after = composite.state['increase']
+    assert after['interval'] == original_interval + 0.5
+    assert after['address'] == original_address
+    assert after['config'] == original_config
+    assert after['inputs'] == original_inputs
+    assert after['outputs'] == original_outputs
 
 
 def make_test_core():

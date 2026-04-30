@@ -2301,6 +2301,29 @@ class Composite(Process):
                 return True
         return False
 
+    def _update_touches_process_path(
+            self, update_paths: List[Union[str, Tuple[str, ...]]]) -> bool:
+        """Return True if any update path goes into an existing process.
+
+        Mirrors the overlap check in `expire_process_paths` — process
+        paths and update paths are already on hand from `_walk_update`,
+        so detecting "this update changed a process's metadata" doesn't
+        need a second walk.
+        """
+        if not self.process_paths:
+            return False
+        process_path_tuples = [tuple(p) for p in self.process_paths]
+        process_roots = {p[0] for p in process_path_tuples if p}
+        for update_path in update_paths:
+            if not update_path or update_path[0] not in process_roots:
+                continue
+            update_tuple = tuple(update_path)
+            for proc_path in process_path_tuples:
+                plen = len(proc_path)
+                if len(update_tuple) >= plen and update_tuple[:plen] == proc_path:
+                    return True
+        return False
+
     @staticmethod
     def _walk_update(state: Any, path: tuple = ()) -> tuple:
         """Single-pass walk over an update tree.
@@ -2412,6 +2435,18 @@ class Composite(Process):
             combined_update = self.core.reconcile(combined_schema, all_states)
 
             if combined_update:
+                # An update that lands inside an existing process's
+                # path — wires, config, anything — is just as structural
+                # as _add/_remove: the link's compiled cache is stale
+                # and apply must see the full ProcessLink schema (else
+                # the stripped combined_schema falls through to
+                # apply(Node) and clobbers the link state). The same
+                # post-apply pipeline reuses the existing instance via
+                # realize_link's "instance already exists" branch.
+                if (not had_structural_sentinels
+                        and self._update_touches_process_path(update_paths)):
+                    had_structural_sentinels = True
+
                 # Apply needs the live state schema for structural
                 # sentinels (_divide, _add, _remove) — they must see
                 # the mother's existing schema to split/remove it.

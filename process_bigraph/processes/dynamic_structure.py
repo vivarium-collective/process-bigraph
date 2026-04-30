@@ -133,42 +133,28 @@ class DynamicWorker(Process):
                 'self_value': delta,
                 'targets': {'_remove': removals}}
 
-        # --- Priority 3: Rewire (replace self with genuinely different wires) ---
-        # After rewiring, self_value output writes to a peer's value instead
-        # of own value. This genuinely changes compiled wire paths and tests
-        # that the view/project cache is correctly invalidated.
+        # --- Priority 3: Rewire (update outputs.self_value in place) ---
+        # After rewiring, self_value output writes to a peer's value
+        # instead of own value. The same process instance is preserved —
+        # only the wires change. Composite.apply_updates auto-detects
+        # the wire field touch via schema and invalidates the compiled
+        # link cache.
         if (self.config['propensity_rewire'] > 0
                 and source_count > 0
                 and source_sum * self.config['propensity_rewire']
                 > self.config['threshold_rewire']):
             best_peer = max(source_vals, key=source_vals.get)
-            config = {
-                'process_id': my_id,
-                'growth_rate': self.config['growth_rate'],
-                'spawn_growth_rate': self.config['spawn_growth_rate'],
-                'propensity_spawn': self.config['propensity_spawn'],
-                'propensity_remove': self.config['propensity_remove'],
-                'propensity_rewire': 0.0,  # prevent immediate re-rewire
-                'threshold_spawn': self.config['threshold_spawn'],
-                'threshold_remove': self.config['threshold_remove'],
-                'threshold_rewire': self.config['threshold_rewire'],
-                'max_pool_size': self.config['max_pool_size'],
-                'spawn_value': self.config['spawn_value'],
-            }
-            rewired = {
-                'value': projected,
-                'worker': {
-                    'address': 'local:DynamicWorker',
-                    'config': config,
-                    'inputs': {
-                        'sources': ['..'],
-                        'self_value': ['value']},
-                    'outputs': {
-                        'targets': ['..'],
-                        'self_value': ['..', best_peer, 'value']}}}
+            # Disable further rewiring on this instance so the test
+            # exercises wire-update semantics once, not in a loop.
+            self.config['propensity_rewire'] = 0.0
             return {
-                'self_value': 0.0,
-                'targets': {'_add': [(my_id, rewired)]}}
+                'self_value': delta,
+                'targets': {
+                    my_id: {
+                        'worker': {
+                            'outputs': {
+                                'self_value': [
+                                    '..', best_peer, 'value']}}}}}
 
         # --- Priority 4: Spawn new agent ---
         if (self.config['propensity_spawn'] > 0

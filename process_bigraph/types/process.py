@@ -13,9 +13,9 @@ from plum import dispatch
 from dataclasses import dataclass, is_dataclass, field
 
 from bigraph_schema import capture_object_state, restore_object_value
-from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema
+from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema, is_schema_field
 from bigraph_schema.methods import resolve, realize, realize_link, default, default_link, render, wrap_default
-from bigraph_schema.methods import serialize, divide, bundle
+from bigraph_schema.methods import serialize, divide, bundle, apply
 from bigraph_schema.methods.bundle import BundleContext
 
 
@@ -164,6 +164,41 @@ def render(schema: ProcessLink, defaults=False):
         value = getattr(schema, field_name)
         result[field_name] = render(value, defaults=defaults)
     return wrap_default(schema, result) if defaults else result
+
+
+@apply.dispatch
+def apply(schema: Link, state, update, path):
+    """Update-driven apply for Link types (process, step, composite).
+
+    The default apply(Node) walks every dataclass field of the schema and
+    recurses with `update.get(key)` — passing None for fields the caller
+    didn't include. Subschemas like Wires error or clobber on None, so a
+    partial update like `{'interval': 0.5}` either crashes or wipes out
+    inputs/outputs/address/config. Iterating the update keys instead lets
+    callers update interval, inputs, outputs, etc. independently.
+    """
+    if update is None:
+        return state, []
+    if not isinstance(state, dict) or not isinstance(update, dict):
+        return update, []
+
+    result = dict(state)
+    merges = []
+    for key, update_value in update.items():
+        if not is_schema_field(schema, key):
+            result[key] = update_value
+            continue
+        subschema = getattr(schema, key, None)
+        if subschema is None:
+            sub_result, submerges = apply(
+                Node(), state.get(key), update_value, path + (key,))
+        else:
+            sub_result, submerges = apply(
+                subschema, state.get(key), update_value, path + (key,))
+        result[key] = sub_result
+        merges += submerges
+
+    return result, merges
 
 
 def register_types(core):
