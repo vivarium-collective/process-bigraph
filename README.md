@@ -90,6 +90,12 @@ rendered to HTML and published automatically on GitHub Pages.
 
 More tutorials are added continuously and appear automatically in the index.
 
+### Topic Guides
+
+- **Emitters — Recording Simulation Results**
+  *Built-in emitters (RAM, console, JSON, SQLite), how to wire them, retrieve results, store runs long-term, and write your own.*
+  [doc/emitters.md](doc/emitters.md)
+
 ---
 
 ## 🧪 Reference Implementation: spatio-flux

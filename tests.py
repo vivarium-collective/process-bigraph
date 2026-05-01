@@ -4,30 +4,37 @@ Tests for Process Bigraph
 =========================
 """
 
+import os
 import sys
 import random
 import inspect
-import numpy as np
+import socket
+import sqlite3
+import tempfile
 
+import numpy as np
 import pytest
 from urllib.parse import urlparse, urlunparse
 
 from bigraph_schema.schema import Path, make_default
-from process_bigraph import allocate_core
+from bigraph_schema import set_path as bs_set_path
 
+from process_bigraph import allocate_core
 from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
 )
-
-from process_bigraph.emitter import emitter_from_wires, gather_emitter_results, add_emitter_to_composite
+from process_bigraph.emitter import (
+    emitter_from_wires, gather_emitter_results, add_emitter_to_composite,
+    SQLiteEmitter,
+    save_simulation_metadata, mark_simulation_finished,
+    list_simulations, load_history, load_simulation_metadata,
+)
 from process_bigraph.protocols.rest import rest_get, rest_post
 from process_bigraph.types import ProcessLink, StepLink
 
 from process_bigraph.processes.examples import IncreaseProcess
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
 from process_bigraph.processes.dynamic_structure import DynamicWorker
-
-import socket
 
 
 def _port_open(host: str, port: int, timeout: float = 0.2) -> bool:
@@ -1142,6 +1149,269 @@ def test_ram_emitter(core):
     results2 = composite2.state['emitter']['instance'].query()
     assert 'valueA' in results2[0] and 'valueB' not in results2[0]
     print(results2)
+
+def test_sqlite_emitter(core, tmp_path=None):
+    tmp_dir = tmp_path or tempfile.mkdtemp(prefix='sqlite_emitter_')
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.3},
+            'interval': 1.0,
+            'inputs': {'level': ['value']},
+            'outputs': {'level': ['value']}}}
+    composite = Composite({'state': composite_spec}, core)
+
+    emitter_spec = {
+        '_type': 'step',
+        'address': 'local:SQLiteEmitter',
+        'config': {
+            'emit': {'global_time': 'node', 'value': 'node'},
+            'file_path': str(tmp_dir),
+            'db_file': 'test_history.db',
+        },
+        'inputs': {'global_time': ['global_time'], 'value': ['value']},
+    }
+    composite.merge({}, bs_set_path({}, ('emitter',), emitter_spec))
+    _, instance = core.traverse(composite.schema, composite.state, ('emitter',))
+    composite.step_paths[('emitter',)] = instance
+    composite.build_step_network()
+
+    composite.run(10)
+
+    results = composite.state['emitter']['instance'].query()
+    assert len(results) >= 10
+    assert results[-1]['global_time'] == 10
+    assert 'value' in results[-1]
+
+    # verify the db file exists and survives re-opening
+    db_path = os.path.join(str(tmp_dir), 'test_history.db')
+    assert os.path.exists(db_path)
+    conn = sqlite3.connect(db_path)
+    (count,) = conn.execute('SELECT COUNT(*) FROM history').fetchone()
+    assert count >= 10
+    conn.close()
+
+
+def test_sqlite_emitter_retrieval_helpers(core):
+    '''The standalone helpers must let callers inspect and load a run
+    without touching a Composite or a core — this is the main post-hoc
+    analysis use case.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_retrieval_')
+    db_path = os.path.join(tmp, 'history.db')
+
+    # Two runs sharing the same db file, plus metadata for one.
+    e1 = SQLiteEmitter({
+        'emit': {'global_time': 'node'},
+        'file_path': tmp, 'simulation_id': 'run-A', 'name': 'alpha',
+    }, core=core)
+    for i in range(4):
+        e1.update({'global_time': float(i)})
+    save_simulation_metadata(
+        db_path, 'run-A',
+        composite_config={'cells': {}},
+        metadata={'experiment': 'alpha', 'notes': 'first run'},
+    )
+    mark_simulation_finished(db_path, 'run-A', elapsed_seconds=12.5)
+    e1.close()
+
+    e2 = SQLiteEmitter({
+        'emit': {'global_time': 'node'},
+        'file_path': tmp, 'simulation_id': 'run-B',
+    }, core=core)
+    for i in range(2):
+        e2.update({'global_time': float(i)})
+    e2.close()
+
+    # list_simulations: ordered newest-first, exposes completion fields.
+    sims = {s['simulation_id']: s for s in list_simulations(db_path)}
+    assert set(sims) == {'run-A', 'run-B'}
+    assert sims['run-A']['step_count'] == 4
+    assert sims['run-A']['elapsed_seconds'] == 12.5
+    assert sims['run-A']['completed_at'] is not None
+    assert sims['run-A']['has_config'] is True
+    # run-B had no metadata row written, so it's reported without config info.
+    assert sims['run-B']['step_count'] == 2
+    assert sims['run-B']['has_config'] is False
+    assert sims['run-B']['elapsed_seconds'] is None
+
+    # load_history: same shape as emitter.query(), unfiltered and filtered.
+    history = load_history(db_path, 'run-A')
+    assert len(history) == 4
+    assert history[-1]['global_time'] == 3.0
+    filtered = load_history(db_path, 'run-A', paths=[['global_time']])
+    assert filtered == [{'global_time': t} for t in (0.0, 1.0, 2.0, 3.0)]
+
+    # load_simulation_metadata: round-trips the composite config + metadata.
+    meta = load_simulation_metadata(db_path, 'run-A')
+    assert meta['name'] == 'alpha'
+    assert meta['composite_config'] == {'cells': {}}
+    assert meta['metadata']['experiment'] == 'alpha'
+    assert meta['elapsed_seconds'] == 12.5
+    assert load_simulation_metadata(db_path, 'nope') is None
+
+
+def test_sqlite_emitter_query_paths_kwarg(core):
+    '''``query()`` should accept the new ``paths`` kwarg and still accept
+    the legacy ``query`` kwarg for back-compat.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_paths_kwarg_')
+    e = SQLiteEmitter({
+        'emit': {'global_time': 'node', 'a': 'node', 'b': 'node'},
+        'file_path': tmp, 'simulation_id': 'sim',
+    }, core=core)
+    for i in range(3):
+        e.update({'global_time': float(i), 'a': i, 'b': i * 2})
+
+    # Unfiltered.
+    assert len(e.query()) == 3
+
+    # New kwarg.
+    assert e.query(paths=[['a']]) == [{'a': 0}, {'a': 1}, {'a': 2}]
+
+    # Legacy kwarg still honored.
+    assert e.query(query=[['a']]) == [{'a': 0}, {'a': 1}, {'a': 2}]
+
+    # When both are given, ``paths`` wins.
+    assert e.query(paths=[['a']], query=[['b']]) == [{'a': 0}, {'a': 1}, {'a': 2}]
+
+    e.close()
+
+
+def test_sqlite_emitter_subsample(core):
+    '''subsample=N writes every Nth composite tick (first tick always
+    kept) and preserves the original step number in the stored row.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_subsample_')
+    e = SQLiteEmitter({
+        'emit': {'global_time': 'node', 'v': 'node'},
+        'file_path': tmp, 'simulation_id': 'sim',
+        'subsample': 5,
+    }, core=core)
+
+    # Feed 20 ticks — ticks at step 0, 5, 10, 15 should land in the db.
+    for i in range(20):
+        e.update({'global_time': float(i), 'v': i})
+    e.close()
+
+    history = load_history(os.path.join(tmp, 'history.db'), 'sim')
+    assert len(history) == 4
+    assert [row['v'] for row in history] == [0, 5, 10, 15]
+    assert [row['global_time'] for row in history] == [0.0, 5.0, 10.0, 15.0]
+
+    # The recorded `step` column is the real composite tick, not a
+    # collapsed index — verify via a direct SQL read.
+    conn = sqlite3.connect(os.path.join(tmp, 'history.db'))
+    try:
+        steps = [r[0] for r in conn.execute(
+            'SELECT step FROM history WHERE simulation_id = ? ORDER BY step',
+            ('sim',),
+        ).fetchall()]
+    finally:
+        conn.close()
+    assert steps == [0, 5, 10, 15]
+
+
+def test_sqlite_emitter_subsample_rejects_bad_value(core):
+    '''subsample < 1 is nonsensical — refuse at construction time.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_subsample_bad_')
+    with pytest.raises(ValueError):
+        SQLiteEmitter({
+            'emit': {},
+            'file_path': tmp, 'simulation_id': 'sim',
+            'subsample': 0,
+        }, core=core)
+
+
+def test_sqlite_emitter_batch_size(core):
+    '''batch_size buffers up to N rows and flushes them in one transaction.
+    Close and query must flush pending rows so no data is lost.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_batch_')
+    e = SQLiteEmitter({
+        'emit': {'global_time': 'node', 'v': 'node'},
+        'file_path': tmp, 'simulation_id': 'sim',
+        'batch_size': 5,
+    }, core=core)
+
+    db_path = os.path.join(tmp, 'history.db')
+    conn = sqlite3.connect(db_path)
+    try:
+        # Feed 3 rows — below the batch threshold, nothing on disk yet.
+        for i in range(3):
+            e.update({'global_time': float(i), 'v': i})
+        (pending,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert pending == 0, f'expected 0 rows before flush, got {pending}'
+
+        # query() forces a flush so the reader sees a consistent view.
+        assert len(e.query()) == 3
+        (after_query,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert after_query == 3
+
+        # Cross a batch boundary: 3 already flushed by query(), feed 5 more
+        # — the 5th triggers auto-flush.
+        for i in range(3, 8):
+            e.update({'global_time': float(i), 'v': i})
+        (after_boundary,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert after_boundary == 8
+
+        # Remaining buffered rows flush on close().
+        for i in range(8, 10):
+            e.update({'global_time': float(i), 'v': i})
+        e.close()
+        (final,) = conn.execute(
+            'SELECT COUNT(*) FROM history WHERE simulation_id=?', ('sim',)
+        ).fetchone()
+        assert final == 10
+    finally:
+        conn.close()
+
+    # Final sanity check that the data is intact and in order.
+    history = load_history(db_path, 'sim')
+    assert [row['v'] for row in history] == list(range(10))
+
+
+def test_sqlite_emitter_batch_size_rejects_bad_value(core):
+    '''batch_size < 1 makes no sense — refuse at construction.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_batch_bad_')
+    with pytest.raises(ValueError):
+        SQLiteEmitter({
+            'emit': {},
+            'file_path': tmp, 'simulation_id': 'sim',
+            'batch_size': 0,
+        }, core=core)
+
+
+def test_sqlite_emitter_close(core):
+    '''close() should release the connection deterministically, make further
+    updates fail loudly, and leave the db usable from a fresh connection.'''
+    tmp = tempfile.mkdtemp(prefix='sqlite_close_')
+    e = SQLiteEmitter({
+        'emit': {'global_time': 'node'},
+        'file_path': tmp, 'simulation_id': 'sim',
+    }, core=core)
+    e.update({'global_time': 0.0})
+    e.close()
+
+    # Idempotent: calling close again is a no-op.
+    e.close()
+
+    # New writes must fail loudly rather than silently dropping data.
+    with pytest.raises(RuntimeError):
+        e.update({'global_time': 1.0})
+
+    # The file is intact and readable via a fresh connection.
+    db_path = os.path.join(tmp, 'history.db')
+    conn = sqlite3.connect(db_path)
+    try:
+        (count,) = conn.execute('SELECT COUNT(*) FROM history').fetchone()
+        assert count == 1
+    finally:
+        conn.close()
+
 
 def test_json_emitter(core):
     composite_spec = {
