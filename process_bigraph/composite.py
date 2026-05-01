@@ -32,6 +32,7 @@ from bigraph_schema import (
     is_schema_key, strip_schema_keys)
 
 from bigraph_schema.protocols import local_lookup_module
+from bigraph_schema.methods.events import NodeAdded, NodeRemoved, Divided
 
 
 # =========================
@@ -1464,6 +1465,94 @@ class Composite(Process):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
 
+    def _apply_structural_events(self, events: List[Any]) -> None:
+        """Update process/step indexes from apply-emitted structural events.
+
+        Replaces the full-state ``find_instance_paths`` rescan when apply
+        tells us exactly which subtrees changed. For each:
+        - ``NodeAdded``: scan the new subtree only and merge any
+          discovered Process/Step instances into the existing index.
+        - ``NodeRemoved``: drop entries at-or-under the removed path.
+        - ``Divided``: drop the mother's entries, scan each daughter
+          subtree.
+
+        The compiled-apply cache is invalidated unconditionally because
+        ``apply(dict)``'s ``_divide`` branch mutates schemas in place.
+
+        Step network rebuild is conditional on step_paths actually
+        changing — value-only structural events that don't add/remove
+        any Step instances skip the rebuild.
+        """
+        self.core.invalidate_compiled_apply()
+
+        previous_step_paths = (set(self.step_paths.keys())
+                               if hasattr(self, 'step_paths') else set())
+        if not hasattr(self, 'step_paths'):
+            self.step_paths = {}
+
+        def _index_subtree(root_path: tuple, subtree_state: Any) -> None:
+            """Walk subtree, merge Process/Step instances into indexes."""
+            # find_instances takes a dict; if subtree is a dict, walk;
+            # if it's a leaf or wrapped instance, check at this level.
+            if not isinstance(subtree_state, dict):
+                return
+            instance = subtree_state.get('instance')
+            from process_bigraph.composite import Process as _Proc
+            from process_bigraph.composite import Step as _Step
+            if isinstance(instance, _Proc):
+                self.process_paths[root_path] = subtree_state
+                return  # Don't recurse into a process's internal state
+            if isinstance(instance, _Step):
+                self.step_paths[root_path] = subtree_state
+                return
+            # Recurse into non-instance dict
+            for key, child in subtree_state.items():
+                if is_schema_key(key):
+                    continue
+                _index_subtree(root_path + (key,), child)
+
+        def _drop_under(root_path: tuple) -> None:
+            """Remove process/step/front entries at-or-under root_path."""
+            for path in list(self.process_paths.keys()):
+                if path == root_path or path[:len(root_path)] == root_path:
+                    del self.process_paths[path]
+            for path in list(self.step_paths.keys()):
+                if path == root_path or path[:len(root_path)] == root_path:
+                    del self.step_paths[path]
+            for path in list(self.front.keys()):
+                if path == root_path or path[:len(root_path)] == root_path:
+                    del self.front[path]
+
+        for event in events:
+            if isinstance(event, NodeAdded):
+                added_path = event.path + (event.key,)
+                # Read fresh subtree from realized state — event.state is
+                # pre-realize (no instances yet).
+                subtree = get_path(self.state, list(added_path))
+                if subtree is not None:
+                    _index_subtree(added_path, subtree)
+            elif isinstance(event, NodeRemoved):
+                removed_path = event.path + (event.key,)
+                _drop_under(removed_path)
+            elif isinstance(event, Divided):
+                mother_path = event.path + (event.mother_key,)
+                _drop_under(mother_path)
+                for d_key in event.daughter_keys:
+                    d_path = event.path + (d_key,)
+                    subtree = get_path(self.state, list(d_path))
+                    if subtree is not None:
+                        _index_subtree(d_path, subtree)
+
+        # Step network only needs rebuild if step_paths changed
+        current_step_paths = set(self.step_paths.keys())
+        if current_step_paths != previous_step_paths:
+            self.build_step_network()
+
+        # Sync front buffer: drop entries for paths no longer present
+        all_paths = set(self.process_paths.keys()) | current_step_paths
+        for removed_key in set(self.front.keys()).difference(all_paths):
+            self.front.pop(removed_key)
+
     def _build_view_project_cache(self) -> None:
         """Precompile view/project operations for each process path.
 
@@ -2036,12 +2125,13 @@ class Composite(Process):
                     step = get_path(self.state, step_path)
                     state = self._cached_view(step_path)
                     instance = step.get('instance')
-                    clean_state = strip_schema_keys(state)
+                    # _view_resolved emits only port-key entries; no schema
+                    # keys to strip. perform_update sees the same dict.
                     if instance is not None and hasattr(instance, 'perform_update'):
-                        if not instance.perform_update(clean_state):
+                        if not instance.perform_update(state):
                             return None
                     return self.process_update(
-                        step_path, step, clean_state, -1.0, 'outputs',
+                        step_path, step, state, -1.0, 'outputs',
                         already_clean=True)
                 # list() forces all futures to resolve before continuing
                 updates = [u for u in pool.map(_run_one, step_paths) if u is not None]
@@ -2056,17 +2146,15 @@ class Composite(Process):
                     state = self._cached_view(step_path)
 
                     instance = step.get('instance')
-                    # Strip schema keys once; reused for both the
-                    # perform_update gate and process_update below
-                    # (invoke trusts the caller and skips its own gate).
-                    clean_state = strip_schema_keys(state)
+                    # _view_resolved emits only port-key entries; no schema
+                    # keys to strip. perform_update sees the same dict.
                     if instance is not None and hasattr(instance, 'perform_update'):
-                        if not instance.perform_update(clean_state):
+                        if not instance.perform_update(state):
                             continue
 
                     # Steps are always invoked with interval = -1.0
                     step_update = self.process_update(
-                        step_path, step, clean_state, -1.0, 'outputs',
+                        step_path, step, state, -1.0, 'outputs',
                         already_clean=True)
 
                     updates.append(step_update)
@@ -2244,7 +2332,12 @@ class Composite(Process):
 
             # Only proceed if the next step occurs within the target range
             if future <= end_time:
-                update = self.process_update(path, process, state, process_interval)
+                # state came from _cached_view (or future_front whose source
+                # is also _cached_view) — _view_resolved only emits port-key
+                # entries, so the dict has no schema keys to strip.
+                update = self.process_update(
+                    path, process, state, process_interval,
+                    already_clean=True)
 
                 # Store the update to apply when simulation reaches `future` time
                 self.front[path]['time'] = future
@@ -2352,39 +2445,6 @@ class Composite(Process):
                     return True
         return False
 
-    @staticmethod
-    def _walk_update(state: Any, path: tuple = ()) -> tuple:
-        """Single-pass walk over an update tree.
-
-        Combines hierarchy_depth and _has_structural_keys into one
-        traversal — both are called on every apply_updates phase 1
-        invocation and were duplicating the same recursive walk.
-
-        Returns (paths_list, has_structural) where paths_list mirrors
-        what hierarchy_depth would have returned (list of leaf path
-        tuples) and has_structural is True if any _add/_remove/_type
-        sentinel was found anywhere in the tree.
-        """
-        if not isinstance(state, dict):
-            return [path], False
-        paths = []
-        has_structural = False
-        for key, value in state.items():
-            if isinstance(key, str) and key.startswith('_'):
-                # Schema key — note any structural sentinels.
-                # _divide is structural because it replaces a mother
-                # with two daughters whose process instances need to
-                # be re-discovered by find_instance_paths.
-                if key in ('_add', '_remove', '_type', '_divide'):
-                    has_structural = True
-                paths.append(path)
-                continue
-            sub_paths, sub_struct = Composite._walk_update(value, path + (key,))
-            paths.extend(sub_paths)
-            if sub_struct:
-                has_structural = True
-        return paths, has_structural
-
     def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
         """
         Apply a series of deferred updates and record the resulting bridge outputs.
@@ -2401,10 +2461,12 @@ class Composite(Process):
         """
         update_paths = []
         had_structural_changes = False
-
-        # Phase 1: Resolve all deferred updates and collect them
-        resolved_updates = []
         had_structural_sentinels = False  # _add/_remove/_divide detected
+
+        # Phase 1: Resolve all deferred updates and collect them.
+        # Path discovery + structural detection happen during reconcile
+        # (Phase 2) via a ReconcileSummary sink — no separate walk pass.
+        resolved_updates = []
         for defer in updates:
             series = defer.get()
             if series is None:
@@ -2413,18 +2475,6 @@ class Composite(Process):
                 series = [series]
 
             for update_schema, update_state in series:
-                # Single-pass walk: collects paths AND detects structural
-                # change sentinels in one traversal. (Cache attempts here
-                # have foundered on the fact that the update *value* shape
-                # — not just the schema id — drives the leaf paths, and
-                # dynamic-structure processes emit varying shapes per
-                # tick. Walk-on-every-call costs ~1.3 ms/tick but is
-                # always correct.)
-                walk_paths, walk_struct = self._walk_update(update_state)
-                update_paths.extend(walk_paths)
-                if walk_struct and not had_structural_sentinels:
-                    had_structural_sentinels = True
-
                 # read_bridge fast-paths to None when no bridge outputs
                 # are configured (vEcoli's case) — no walk happens.
                 bridge_update = self.read_bridge(update_state)
@@ -2463,9 +2513,22 @@ class Composite(Process):
                     combined_schema,
                 )
 
-            # Reconcile all update states using the combined schema
-            all_states = [state for _, state in resolved_updates]
-            combined_update = self.core.reconcile(combined_schema, all_states)
+            # Reconcile all update states using the combined schema.
+            # Install a summary sink so reconcile populates leaf paths
+            # and the structural-sentinel flag during its existing walk
+            # — eliminates the redundant per-defer _walk_update pass.
+            from bigraph_schema.methods.events import (
+                ReconcileSummary, install_reconcile_sink, uninstall_reconcile_sink)
+            summary = ReconcileSummary(paths=[])
+            prev_sink = install_reconcile_sink(summary)
+            try:
+                all_states = [state for _, state in resolved_updates]
+                combined_update = self.core.reconcile(combined_schema, all_states)
+            finally:
+                uninstall_reconcile_sink(prev_sink)
+            update_paths = summary.paths
+            if summary.has_structural:
+                had_structural_sentinels = True
 
             if combined_update:
                 # An update that lands inside an existing process's
@@ -2491,10 +2554,18 @@ class Composite(Process):
                         self.schema, combined_schema)
                 else:
                     apply_schema = combined_schema
+                # Collect structural events (NodeAdded/NodeRemoved/
+                # Divided) emitted by sentinel handlers during apply.
+                # On structural ticks, used to update process_paths/
+                # step_paths indexes incrementally instead of re-scanning
+                # the full state via find_instance_paths.
+                structural_events = [] if had_structural_sentinels else None
                 self.state, merges = self.core.apply(
                     apply_schema,
                     self.state,
-                    combined_update)
+                    combined_update,
+                    update_has_structural=had_structural_sentinels,
+                    events=structural_events)
                 # For structural sentinels, apply may have mutated
                 # apply_schema in place (e.g. _divide pops/inserts
                 # keys in a dict schema). Propagate back to self.schema
@@ -2520,11 +2591,18 @@ class Composite(Process):
         if had_structural_sentinels:
             # Real structural change: processes may have been
             # added/removed/replaced. Realize new state (to
-            # instantiate added process declarations) then
-            # rediscover instances and rebuild step network.
+            # instantiate added process declarations) then update
+            # the process/step indexes from the events apply emitted.
             self.schema, self.state = self.core.realize(
                 self.schema, self.state)
-            self.find_instance_paths(self.state)
+            if structural_events:
+                self._apply_structural_events(structural_events)
+            else:
+                # Fallback: had_structural_sentinels was set but no
+                # events emitted (e.g. _update_touches_process_path
+                # detected an in-process update with no _add/_remove/
+                # _divide sentinel). Full rescan is correct here.
+                self.find_instance_paths(self.state)
             self._build_view_project_cache()
             if hasattr(self, 'expire_layer_walk_cache'):
                 self.expire_layer_walk_cache()
