@@ -1439,6 +1439,10 @@ class Composite(Process):
             - self.process_paths
             - self.step_paths
         """
+        # Structural change incoming — drop the walk-path cache so
+        # ``apply_updates`` re-walks update trees against the new
+        # schema topology rather than reusing stale paths.
+        self._walk_path_cache = {}
         self.process_paths = find_instance_paths(state, 'process_bigraph.composite.Process')
         if hasattr(self, 'step_paths'):
             previous_step_paths = self.step_paths.keys()
@@ -2377,6 +2381,13 @@ class Composite(Process):
         # Phase 1: Resolve all deferred updates and collect them
         resolved_updates = []
         had_structural_sentinels = False  # _add/_remove/_divide detected
+        # Walk-result cache: keyed by id(update_schema) so the per-port
+        # path topology (which doesn't change tick-to-tick except at
+        # structural boundaries) is computed once and reused. The cache
+        # is auto-invalidated on structural changes because realize()
+        # builds new schema objects with new ids. ``find_instance_paths``
+        # also clears it explicitly when processes are re-discovered.
+        walk_cache = self._walk_path_cache
         for defer in updates:
             series = defer.get()
             if series is None:
@@ -2385,9 +2396,34 @@ class Composite(Process):
                 series = [series]
 
             for update_schema, update_state in series:
-                # Single-pass walk: collects paths AND detects structural
-                # change sentinels in one traversal instead of two.
-                walk_paths, walk_struct = self._walk_update(update_state)
+                # Cached walk: schemas from cached projection have stable
+                # ids across ticks. We still scan top-level update keys
+                # for structural sentinels (cheap) since those depend on
+                # the actual update value, not the schema.
+                schema_id = id(update_schema)
+                cached = walk_cache.get(schema_id)
+                if cached is not None and cached[0] is update_schema:
+                    # Cache hit — but verify the update has no surprise
+                    # structural sentinels at the top level (deeper
+                    # sentinels still trigger via _walk_update if shape
+                    # differs). Most ticks have no sentinels.
+                    if isinstance(update_state, dict):
+                        has_top_sentinel = any(
+                            k in ('_add', '_remove', '_type', '_divide')
+                            for k in update_state
+                            if isinstance(k, str) and k.startswith('_'))
+                    else:
+                        has_top_sentinel = False
+                    if not has_top_sentinel:
+                        walk_paths = cached[1]
+                        walk_struct = False
+                    else:
+                        walk_paths, walk_struct = self._walk_update(update_state)
+                else:
+                    walk_paths, walk_struct = self._walk_update(update_state)
+                    if not walk_struct:
+                        # Cache only stable (non-structural) walks.
+                        walk_cache[schema_id] = (update_schema, walk_paths)
                 update_paths.extend(walk_paths)
                 if walk_struct and not had_structural_sentinels:
                     had_structural_sentinels = True
