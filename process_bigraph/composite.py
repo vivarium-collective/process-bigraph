@@ -2074,6 +2074,16 @@ class Composite(Process):
             update_paths = self.apply_updates(updates)
             self.expire_process_paths(update_paths)
 
+            # Opt-in halt: caller (e.g. EcoliSim) sets
+            # ``_halt_after_structural`` to stop the cascade after a
+            # divide/add/remove apply so newly-spawned processes don't
+            # run on the tick that birthed them. Default behavior is
+            # to continue cascading (test_dynamic_structure relies on
+            # this for spawn chains).
+            if (getattr(self, '_halt_after_structural', False)
+                    and getattr(self, '_last_apply_structural', False)):
+                return
+
             to_run = self.cycle_step_state()
 
             if to_run:
@@ -2145,6 +2155,19 @@ class Composite(Process):
                 update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
                 self.steps_run = set()  # Reset for new timestep
+                # Caller can request an early-return after a structural
+                # apply (e.g. division) by setting
+                # ``self._halt_after_structural = True`` *before* the
+                # cascade fires. EcoliSim uses this to stop after
+                # divide so daughters save with post-divide-pre-tick
+                # values, matching v1 handoff (mother's last tick
+                # didn't run on daughters). Dynamic-structure tests
+                # leave the flag False and get the cascading
+                # spawn/divide trigger_steps behavior as before.
+                if (getattr(self, '_halt_after_structural', False)
+                        and getattr(self, '_last_apply_structural', False)):
+                    self.framework_time += _time.monotonic() - fw_start
+                    return
                 self.trigger_steps(update_paths)
                 self.framework_time += _time.monotonic() - fw_start
 
