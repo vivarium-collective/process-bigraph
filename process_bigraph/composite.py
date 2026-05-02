@@ -1282,6 +1282,14 @@ class Composite(Process):
         # extensions: yes; pure-Python loops: no).
         'parallel_steps': 'boolean{false}',
         'parallel_workers': 'maybe[integer]',
+        # When True, ``initialize`` trusts ``state`` as-is and skips the
+        # per-process ``link_state`` + ``combine`` pass that normally
+        # seeds initial values. Set this when loading from a saved
+        # bundle (e.g. daughter_state from a workflow generation):
+        # the saved state already contains everything processes would
+        # have contributed, and re-combining their ``initial_state()``
+        # overwrites correctly-divided values with mother-shaped ones.
+        'skip_process_state': 'boolean{false}',
     }
 
 
@@ -1337,37 +1345,43 @@ class Composite(Process):
         self.edge_paths = {**self.process_paths, **self.step_paths}
 
         # Initialize each process/step's state and accumulate it into a unified state tree.
-        edge_schema = {}
-        edge_state = {}
-        for path, edge in self.edge_paths.items():
-            # Generate the initial state for this specific edge (process or step).
-            initial_schema, initial_state = self.core.link_state(
-                edge,
-                path)
+        # ``skip_process_state`` short-circuits this when the caller supplied
+        # state that already contains everything processes would have seeded
+        # (e.g. a daughter_state bundle from a previous workflow generation).
+        # Without the skip, ``combine`` overwrites correctly-divided values
+        # with full mother-shaped ones from each process's ``initial_state()``.
+        if not self.config.get('skip_process_state', False):
+            edge_schema = {}
+            edge_state = {}
+            for path, edge in self.edge_paths.items():
+                # Generate the initial state for this specific edge (process or step).
+                initial_schema, initial_state = self.core.link_state(
+                    edge,
+                    path)
 
-            # Merge the new edge state with the global state tree, checking for conflicts.
-            try:
-                edge_schema, edge_state = self.core.combine(
+                # Merge the new edge state with the global state tree, checking for conflicts.
+                try:
+                    edge_schema, edge_state = self.core.combine(
+                        edge_schema, edge_state,
+                        initial_schema, initial_state)
+
+                except Exception as e:
+                    import sys as _sys
+                    _sys.stderr.write(f'[INIT_COMBINE_FAIL] edge={path}\n')
+                    _sys.stderr.write(f'[INIT_COMBINE_FAIL] new_schema={initial_schema}\n')
+                    _sys.stderr.write(f'[INIT_COMBINE_FAIL] err={e}\n')
+                    _sys.stderr.flush()
+                    raise Exception(
+                        f'initial state from edge does not match initial state from other edges:\n'
+                        f'{path}\n{edge}\n{edge_state}\n'
+                        f'{e}'
+                    )
+
+            # Apply the merged edge_state into the global state and update instance paths.
+            if edge_state:
+                self.schema, self.state = self.core.combine(
                     edge_schema, edge_state,
-                    initial_schema, initial_state)
-
-            except Exception as e:
-                import sys as _sys
-                _sys.stderr.write(f'[INIT_COMBINE_FAIL] edge={path}\n')
-                _sys.stderr.write(f'[INIT_COMBINE_FAIL] new_schema={initial_schema}\n')
-                _sys.stderr.write(f'[INIT_COMBINE_FAIL] err={e}\n')
-                _sys.stderr.flush()
-                raise Exception(
-                    f'initial state from edge does not match initial state from other edges:\n'
-                    f'{path}\n{edge}\n{edge_state}\n'
-                    f'{e}'
-                )
-
-        # Apply the merged edge_state into the global state and update instance paths.
-        if edge_state:
-            self.schema, self.state = self.core.combine(
-                edge_schema, edge_state,
-                self.schema, self.state)
+                    self.schema, self.state)
 
         # Wire the input/output schema for the Composite from the bridge config.
         self.process_schema = {
@@ -1857,7 +1871,12 @@ class Composite(Process):
         from process_bigraph.bundle import load_bundle
 
         document = load_bundle(bundle_dir, as_numpy=True)
-        config = {**document, **kwargs}
+        # The bundle's state is authoritative — it was saved post-init
+        # so it already contains every contribution the per-process
+        # ``link_state`` pass would re-add. Combining ``initial_state()``
+        # on top here would clobber correctly-divided values (e.g. a
+        # daughter's halved bulk array) with mother-shaped originals.
+        config = {'skip_process_state': True, **document, **kwargs}
         return cls(config, core=core)
 
 
@@ -2162,16 +2181,6 @@ class Composite(Process):
             update_paths = self.apply_updates(updates)
             self.expire_process_paths(update_paths)
 
-            # Opt-in halt: caller (e.g. EcoliSim) sets
-            # ``_halt_after_structural`` to stop the cascade after a
-            # divide/add/remove apply so newly-spawned processes don't
-            # run on the tick that birthed them. Default behavior is
-            # to continue cascading (test_dynamic_structure relies on
-            # this for spawn chains).
-            if (getattr(self, '_halt_after_structural', False)
-                    and getattr(self, '_last_apply_structural', False)):
-                return
-
             to_run = self.cycle_step_state()
 
             if to_run:
@@ -2243,19 +2252,6 @@ class Composite(Process):
                 update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
                 self.steps_run = set()  # Reset for new timestep
-                # Caller can request an early-return after a structural
-                # apply (e.g. division) by setting
-                # ``self._halt_after_structural = True`` *before* the
-                # cascade fires. EcoliSim uses this to stop after
-                # divide so daughters save with post-divide-pre-tick
-                # values, matching v1 handoff (mother's last tick
-                # didn't run on daughters). Dynamic-structure tests
-                # leave the flag False and get the cascading
-                # spawn/divide trigger_steps behavior as before.
-                if (getattr(self, '_halt_after_structural', False)
-                        and getattr(self, '_last_apply_structural', False)):
-                    self.framework_time += _time.monotonic() - fw_start
-                    return
                 self.trigger_steps(update_paths)
                 self.framework_time += _time.monotonic() - fw_start
 
