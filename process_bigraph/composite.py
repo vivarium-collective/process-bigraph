@@ -2700,52 +2700,23 @@ class Composite(Process):
         """
         Invalidate and refresh process paths if affected by recent updates.
 
-        This is used to ensure that processes are rediscovered if a state update
-        altered a region where a process instance may be added, removed, or replaced.
-
-        Fast path: skip entirely on value-only ticks. apply_updates already
-        runs find_instance_paths + _build_view_project_cache when it
-        detects structural changes (`_add` / `_remove` / `_type` keys),
-        and value-only updates can never add / remove / replace a process
-        slot. The walk is only needed if a structural change targeted a
-        process-adjacent path.
+        Now a no-op: ``apply_updates`` already maintains ``process_paths``,
+        ``step_paths``, and the view-project cache via either
+        ``_apply_structural_events`` (incremental, when structural
+        sentinels emit events) or its fallback ``find_instance_paths``
+        + ``_build_view_project_cache`` (when the sentinel was detected
+        but no events surfaced). On value-only ticks no structural
+        change occurred, so there is nothing to re-discover. Repeating
+        the work here was the dominant framework cost on
+        particle/division-heavy tests — ``find_instance_paths`` is a
+        full-state walk that scaled with population, turning each
+        division into O(N) work and the simulation into O(N²) overall.
 
         Args:
-            update_paths: A list of hierarchical paths that were modified.
+            update_paths: A list of hierarchical paths that were
+                modified. Retained for caller compatibility; unused.
         """
-        # Skip the walk on value-only ticks. apply_updates exposes
-        # `_last_apply_structural` so we know whether to bother.
-        if not getattr(self, '_last_apply_structural', True):
-            return
-
-        # Quick check: if no update path shares a first element with any process path,
-        # then no overlap is possible and we can skip the expensive scan.
-        if not hasattr(self, '_process_path_roots'):
-            self._process_path_roots = set()
-        process_roots = self._process_path_roots
-        if not process_roots:
-            process_roots = {p[0] for p in self.process_paths if p}
-            self._process_path_roots = process_roots
-
-        # Fast rejection: check if any update touches a process-adjacent path
-        needs_check = False
-        for update_path in update_paths:
-            if update_path and update_path[0] in process_roots:
-                needs_check = True
-                break
-
-        if not needs_check:
-            return
-
-        for update_path in update_paths:
-            for process_path in self.process_paths.copy():
-                # Match if update path completely overlaps the process path prefix
-                updated = all(update == process for update, process in zip(update_path, process_path))
-                if updated:
-                    self.find_instance_paths(self.state)
-                    self._build_view_project_cache()
-                    self._process_path_roots = set()  # Reset for rebuild
-                    return  # Exit early after one match, as paths are re-evaluated
+        return
 
 
     # ====================
