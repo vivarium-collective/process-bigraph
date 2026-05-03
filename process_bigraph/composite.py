@@ -1479,6 +1479,34 @@ class Composite(Process):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
 
+    def _realize_merge_subtrees(self, paths: List[tuple]) -> None:
+        """Realize only the subtrees touched by ``port_merges``.
+
+        ``apply_updates`` collects every path that gained new schema
+        info from a process's port defaults. The full-state realize
+        that previously followed walked the whole tree on every tick
+        with merges; on the brownian-particles test that meant ~2000
+        full walks for 200s of sim. Incremental realize over just the
+        affected paths is bounded by the merge count (~ports per tick).
+        """
+        for path in paths:
+            try:
+                sub_schema, sub_state = self.core.traverse(
+                    self.schema, self.state, list(path))
+            except Exception:
+                continue
+            if sub_schema is None:
+                continue
+            new_sub_schema, new_sub_state = self.core.realize(
+                sub_schema, sub_state, path=tuple(path))
+            if not path:
+                self.state = new_sub_state
+                continue
+            parent_state = self.state
+            for key in path[:-1]:
+                parent_state = parent_state[key]
+            parent_state[path[-1]] = new_sub_state
+
     def _realize_structural_subtrees(self, events: List[Any]) -> None:
         """Realize only the subtrees that structural events touched.
 
@@ -2603,17 +2631,18 @@ class Composite(Process):
                 had_structural_sentinels = True
 
             if combined_update:
-                # An update that lands inside an existing process's
-                # path — wires, config, anything — is just as structural
-                # as _add/_remove: the link's compiled cache is stale
-                # and apply must see the full ProcessLink schema (else
-                # the stripped combined_schema falls through to
-                # apply(Node) and clobbers the link state). The same
-                # post-apply pipeline reuses the existing instance via
-                # realize_link's "instance already exists" branch.
-                if (not had_structural_sentinels
-                        and self._update_touches_process_path(update_paths)):
-                    had_structural_sentinels = True
+                # NOTE: previously this path also forced
+                # ``had_structural_sentinels = True`` whenever an
+                # update touched a process subtree, because the older
+                # code applied with the stripped ``combined_schema``
+                # and would clobber link state. With ``promote``
+                # supplying typed nodes (Array, Map, ProcessLink, ...)
+                # at each apply path, value-only updates into a
+                # process's path apply correctly without a full
+                # realize. Only true sentinels (_add/_remove/_divide,
+                # detected by the reconcile sink above) flip the
+                # structural flag.
+                pass
 
                 # Apply needs the live state schema so dispatch sees
                 # the underlying types (Array, Map, ProcessLink, etc.)
@@ -2659,6 +2688,19 @@ class Composite(Process):
                     self.schema = self.core.resolve_merges(
                         self.schema,
                         merges)
+                    # Track exactly which paths gained new schema info so
+                    # we can realize only those subtrees instead of the
+                    # whole tree (full realize was the dominant per-tick
+                    # framework cost on tests with port_merges every tick,
+                    # e.g. brownian_particles' 2000 ticks each triggering
+                    # a full-state walk).
+                    if not hasattr(self, '_merge_paths_pending'):
+                        self._merge_paths_pending = []
+                    for entry in merges:
+                        # merges are (path, subschema, link_path); we
+                        # only need the path prefix.
+                        if entry and entry[0] is not None:
+                            self._merge_paths_pending.append(tuple(entry[0]))
 
         # Schema merges (from process outputs introducing new fields)
         # require realize to fill defaults but do NOT add/remove
@@ -2666,7 +2708,23 @@ class Composite(Process):
         # Only actual structural sentinels (_add/_remove/_divide)
         # require find_instance_paths + build_step_network.
         if had_structural_changes:
-            self.schema, self.state = self.core.realize(self.schema, self.state)
+            merge_paths = getattr(self, '_merge_paths_pending', None)
+            if merge_paths:
+                # Realize only the affected subtrees. Each merge path is
+                # already covered by the incremental walk; deduplicate
+                # under shortest-prefix containment so we don't visit
+                # ancestor and descendant separately.
+                unique = []
+                for p in sorted(set(merge_paths), key=len):
+                    if any(p[:len(u)] == u for u in unique):
+                        continue
+                    unique.append(p)
+                self._realize_merge_subtrees(unique)
+                self._merge_paths_pending = []
+            else:
+                # Fallback: no path info available — full realize.
+                self.schema, self.state = self.core.realize(
+                    self.schema, self.state)
             self._build_view_project_cache()
 
         if had_structural_sentinels:
