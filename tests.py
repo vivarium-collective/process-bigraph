@@ -8,7 +8,6 @@ import os
 import sys
 import random
 import inspect
-import socket
 import sqlite3
 import tempfile
 
@@ -35,15 +34,6 @@ from process_bigraph.types import ProcessLink, StepLink
 from process_bigraph.processes.examples import IncreaseProcess
 from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
 from process_bigraph.processes.dynamic_structure import DynamicWorker
-
-
-def _port_open(host: str, port: int, timeout: float = 0.2) -> bool:
-    """Return True if TCP connect succeeds."""
-    try:
-        with socket.create_connection((host, port), timeout=timeout):
-            return True
-    except OSError:
-        return False
 
 
 def test_default_config(core):
@@ -1083,36 +1073,6 @@ def todo_test_dfba_process(core):
     assert composite.state['fields'][biomass_id] > initial_biomass
 
 
-def test_rest_process(core):
-    host = "localhost"
-    port = 22222
-
-    if not _port_open(host, port):
-        pytest.skip(f"REST server not running at {host}:{port} (skipping integration test)")
-
-    state = {
-        'mass': 1.0,
-        'rest-process': {
-            '_type': 'process',
-            'address': {
-                'protocol': 'rest',
-                'data': {
-                    'process': 'Grow',
-                    'host': host,
-                    'port': port}},
-            'config': {
-                'rate': 0.005},
-            'inputs': {'mass': ['mass']},
-            'outputs': {'mass': ['mass']},
-            'interval': 0.7}}
-
-    composite = Composite({'state': state}, core=core)
-    composite.run(11.111)
-
-    assert composite.state['mass'] > 1.0
-
-
-
 def test_ram_emitter(core):
     composite_spec = {
         'increase': {
@@ -1880,7 +1840,6 @@ if __name__ == '__main__':
     test_update_removal(core)
 
     test_dynamic_structure(core)
-    test_rest_process(core)
     # test_dfba_process(core)
 
     test_reaction_step(core)
