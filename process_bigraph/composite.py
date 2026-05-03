@@ -1876,7 +1876,21 @@ class Composite(Process):
         # ``link_state`` pass would re-add. Combining ``initial_state()``
         # on top here would clobber correctly-divided values (e.g. a
         # daughter's halved bulk array) with mother-shaped originals.
-        config = {'skip_process_state': True, **document, **kwargs}
+        #
+        # ``run_steps_on_init`` fires derivers (mass listeners,
+        # post-division-mass-listener) at startup, mirroring v1's
+        # ``Engine.run_steps()`` call in ``__init__``. The bundle was
+        # saved with mother's pre-divide derived state (the post-divide
+        # cascade halts at the structural change to match v1's
+        # DivisionDetected exception). Running derivers on load
+        # refreshes those values from the daughter's halved bulk before
+        # any process reads them.
+        config = {
+            'skip_process_state': True,
+            'run_steps_on_init': True,
+            **document,
+            **kwargs,
+        }
         return cls(config, core=core)
 
 
@@ -2181,6 +2195,16 @@ class Composite(Process):
             update_paths = self.apply_updates(updates)
             self.expire_process_paths(update_paths)
 
+            # Opt-in halt: caller (e.g. EcoliSim) sets
+            # ``_halt_after_structural`` to abort the post-divide step
+            # cascade so daughters save with mother's pre-divide derived
+            # state — mirroring v1 vivarium's ``DivisionDetected``
+            # behavior. Default behavior continues cascading for
+            # dynamic-structure tests that rely on spawn chains.
+            if (getattr(self, '_halt_after_structural', False)
+                    and getattr(self, '_last_apply_structural', False)):
+                return
+
             to_run = self.cycle_step_state()
 
             if to_run:
@@ -2252,6 +2276,14 @@ class Composite(Process):
                 update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
                 self.steps_run = set()  # Reset for new timestep
+                # Opt-in halt after structural change. EcoliSim sets
+                # ``_halt_after_structural=True`` to mirror v1's halt
+                # via DivisionDetected. Dynamic-structure tests leave
+                # the flag unset for natural cascading.
+                if (getattr(self, '_halt_after_structural', False)
+                        and getattr(self, '_last_apply_structural', False)):
+                    self.framework_time += _time.monotonic() - fw_start
+                    return
                 self.trigger_steps(update_paths)
                 self.framework_time += _time.monotonic() - fw_start
 
