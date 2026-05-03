@@ -1,3 +1,7 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "process-bigraph"
 version = "1.2.1"
@@ -5,16 +9,22 @@ description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "bigraph-schema",
-    "ipdb>=0.13.13",
+    "bigraph-schema>=1.2.3",
     "matplotlib",
     "pint>=0.24.4",
     "scipy>=1.8",
     "pandas",
     "sympy",
+]
+
+[dependency-groups]
+dev = [
+    "ipdb>=0.13.13",
     "ipykernel",
     "jupyter",
     "notebook",
+    "pytest",
+    "pytest-cov",
 ]
 
 [tool.setuptools]
@@ -25,6 +35,3 @@ packages = [
     "process_bigraph.experiments",
     "process_bigraph.types",
 ]
-
-[tool.uv.sources]
-bigraph-schema = { path = "../bigraph-schema", editable = true }

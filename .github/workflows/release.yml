@@ -1,0 +1,41 @@
+name: Publish to PyPI
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  test:
+    uses: ./.github/workflows/pytest.yml
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Verify tag matches pyproject version
+        run: |
+          tag_version="${GITHUB_REF_NAME#v}"
+          pyproject_version=$(uv version --short)
+          if [ "$tag_version" != "$pyproject_version" ]; then
+            echo "Tag version ($tag_version) does not match pyproject.toml version ($pyproject_version)"
+            exit 1
+          fi
+
+      - name: Build distributions
+        run: uv build
+
+      - name: Publish to PyPI via trusted publisher
+        uses: pypa/gh-action-pypi-publish@release/v1

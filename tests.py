@@ -1562,7 +1562,7 @@ def test_dynamic_structure(core):
         agent = composite.state['pool'][aid]
         if isinstance(agent, dict) and 'value' in agent:
             val = agent['value']
-            assert val > -3.0, \
+            assert val >= -3.0, \
                 f"Surviving agent {aid} has value {val} below remove threshold"
 
     # Verify cache consistency: all process paths have compiled links,
