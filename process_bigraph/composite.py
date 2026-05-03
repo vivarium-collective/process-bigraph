@@ -1503,8 +1503,14 @@ class Composite(Process):
                 self.state = new_sub_state
                 continue
             parent_state = self.state
+            missing = False
             for key in path[:-1]:
+                if not isinstance(parent_state, dict) or key not in parent_state:
+                    missing = True
+                    break
                 parent_state = parent_state[key]
+            if missing or not isinstance(parent_state, dict):
+                continue
             parent_state[path[-1]] = new_sub_state
 
     def _realize_structural_subtrees(self, events: List[Any]) -> None:
@@ -1546,9 +1552,22 @@ class Composite(Process):
             # container is a mutable dict (Map keys are dict-keyed at
             # state level), so we rewrite the leaf entry. Schema dicts
             # may have been mutated by apply's divide handler already.
+            #
+            # Skip if any intermediate key has vanished — events on the
+            # same tick can interact (e.g. an added daughter immediately
+            # divided again, or a divided daughter removed by a step
+            # cascade), leaving the path stale by the time we splice.
+            # The corresponding NodeRemoved/Divided event covers the
+            # cleanup; nothing to realize here.
             parent_state = self.state
+            missing = False
             for key in path[:-1]:
+                if not isinstance(parent_state, dict) or key not in parent_state:
+                    missing = True
+                    break
                 parent_state = parent_state[key]
+            if missing or not isinstance(parent_state, dict):
+                continue
             parent_state[path[-1]] = new_sub_state
 
     def _apply_structural_events(self, events: List[Any]) -> None:
