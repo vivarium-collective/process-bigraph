@@ -2571,17 +2571,26 @@ class Composite(Process):
                         and self._update_touches_process_path(update_paths)):
                     had_structural_sentinels = True
 
-                # Apply needs the live state schema for structural
-                # sentinels (_divide, _add, _remove) — they must see
-                # the mother's existing schema to split/remove it.
-                # For non-structural updates the combined_schema is
-                # fine; resolving would drag in the entire state
-                # schema and make apply walk everything.
+                # Apply needs the live state schema so dispatch sees
+                # the underlying types (Array, Map, ProcessLink, etc.)
+                # at each path. ``combined_schema`` alone reflects the
+                # update's wire shape (often dict-of-int-keys for
+                # array-cell projections) and loses the typed
+                # information present in ``self.schema``. Without
+                # promoting, an update of shape ``{i: {j: delta}}``
+                # would land at apply with a dict schema but an
+                # ndarray state — bypassing the Array-aware overload.
+                # ``promote`` walks only the paths combined_schema
+                # touches (vs ``resolve`` which walks all of
+                # self.schema each tick); structural sentinels still
+                # use the full resolve so divide/add/remove see the
+                # mother's existing schema.
                 if had_structural_sentinels:
                     apply_schema = self.core.resolve(
                         self.schema, combined_schema)
                 else:
-                    apply_schema = combined_schema
+                    apply_schema = self.core.promote(
+                        self.schema, combined_schema)
                 # Collect structural events (NodeAdded/NodeRemoved/
                 # Divided) emitted by sentinel handlers during apply.
                 # On structural ticks, used to update process_paths/
