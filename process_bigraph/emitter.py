@@ -37,13 +37,19 @@ def anyize_paths(tree):
     else:
         return 'node'
 
-def emitter_from_wires(wires, address='local:RAMEmitter'):
-    '''Create an emitter step spec from wire mappings.'''
+def emitter_from_wires(wires, address='local:RAMEmitter', subsample=1):
+    '''Create an emitter step spec from wire mappings.
+
+    ``subsample`` (RAMEmitter / SQLiteEmitter only): record every
+    Nth composite tick. Default 1 records every tick.
+    '''
+    config = {'emit': anyize_paths(wires)}
+    if subsample is not None and int(subsample) > 1:
+        config['subsample'] = int(subsample)
     return {
         '_type': 'step',
         'address': address,
-        'config': {
-            'emit': anyize_paths(wires)},
+        'config': config,
         'inputs': wires}
 
 def collect_input_ports(state, path=None):
@@ -180,12 +186,35 @@ def tree_copy(state):
 
 
 class RAMEmitter(Emitter):
-    '''Store historical states in memory.'''
+    '''Store historical states in memory.
+
+    ``subsample`` records only every Nth composite tick (default 1 =
+    every tick). Use this for long runs or composites with heavy
+    state (large fields, many agents) to keep RAM bounded — the
+    saved time-series still reflects the simulation's true cadence
+    via each row's ``global_time`` field.
+    '''
+    config_schema = {
+        **Emitter.config_schema,
+        'subsample': {'_type': 'integer', '_default': 1},
+    }
+
     def __init__(self, config, core):
         super().__init__(config, core)
+        subsample = config.get('subsample')
+        self.subsample = 1 if subsample is None else int(subsample)
+        if self.subsample < 1:
+            raise ValueError(
+                f'RAMEmitter subsample must be >= 1, got {self.subsample}'
+            )
         self.history = []
+        self._step = 0
 
     def update(self, state) -> Dict:
+        step = self._step
+        self._step += 1
+        if step % self.subsample != 0:
+            return {}
         self.history.append(tree_copy(state))
         return {}
 
