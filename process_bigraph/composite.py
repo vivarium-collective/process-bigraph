@@ -1479,6 +1479,50 @@ class Composite(Process):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
 
+    def _realize_structural_subtrees(self, events: List[Any]) -> None:
+        """Realize only the subtrees that structural events touched.
+
+        After ``apply`` emits ``NodeAdded`` / ``Divided`` events, the new
+        subtrees contain raw process declarations (config dicts) that
+        need realizing into Process instances. The rest of the tree is
+        already realized — re-walking it is wasted work that scales
+        O(N) per division and so O(N²) over the simulation.
+
+        This walks each affected subtree via ``core.traverse`` to fetch
+        its (sub_schema, sub_state), realizes that pair, and splices the
+        realized state back into ``self.state``. ``NodeRemoved`` is a
+        no-op here — there's nothing to realize at a removed path.
+        ``self.schema`` is left untouched: container schemas (Map,
+        Tree) don't change shape on add/divide; dict containers were
+        already mutated in place by ``apply``'s divide handler.
+        """
+        affected_paths: List[tuple] = []
+        for event in events:
+            if isinstance(event, NodeAdded):
+                affected_paths.append(event.path + (event.key,))
+            elif isinstance(event, Divided):
+                for d_key in event.daughter_keys:
+                    affected_paths.append(event.path + (d_key,))
+
+        for path in affected_paths:
+            try:
+                sub_schema, sub_state = self.core.traverse(
+                    self.schema, self.state, list(path))
+            except Exception:
+                continue
+            if sub_schema is None:
+                continue
+            new_sub_schema, new_sub_state = self.core.realize(
+                sub_schema, sub_state, path=tuple(path))
+            # Splice the realized state back at its path. The parent
+            # container is a mutable dict (Map keys are dict-keyed at
+            # state level), so we rewrite the leaf entry. Schema dicts
+            # may have been mutated by apply's divide handler already.
+            parent_state = self.state
+            for key in path[:-1]:
+                parent_state = parent_state[key]
+            parent_state[path[-1]] = new_sub_state
+
     def _apply_structural_events(self, events: List[Any]) -> None:
         """Update process/step indexes from apply-emitted structural events.
 
@@ -2627,18 +2671,21 @@ class Composite(Process):
 
         if had_structural_sentinels:
             # Real structural change: processes may have been
-            # added/removed/replaced. Realize new state (to
-            # instantiate added process declarations) then update
-            # the process/step indexes from the events apply emitted.
-            self.schema, self.state = self.core.realize(
-                self.schema, self.state)
+            # added/removed/replaced. Realize the affected subtrees
+            # only (instantiating new daughter processes) instead of
+            # re-walking the entire schema — full realize scales O(N)
+            # per division and so O(N²) over a sim with N divisions.
             if structural_events:
+                self._realize_structural_subtrees(structural_events)
                 self._apply_structural_events(structural_events)
             else:
                 # Fallback: had_structural_sentinels was set but no
                 # events emitted (e.g. _update_touches_process_path
                 # detected an in-process update with no _add/_remove/
-                # _divide sentinel). Full rescan is correct here.
+                # _divide sentinel). Full realize + rescan is correct
+                # here — we don't know which subtrees changed.
+                self.schema, self.state = self.core.realize(
+                    self.schema, self.state)
                 self.find_instance_paths(self.state)
             self._build_view_project_cache()
             if hasattr(self, 'expire_layer_walk_cache'):
