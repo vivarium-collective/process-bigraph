@@ -1454,11 +1454,11 @@ class Composite(Process):
             - self.process_paths
             - self.step_paths
         """
-        # Structural change incoming — drop the compiled-apply cache:
+        # Structural change incoming — drop schema-derived caches:
         # ``apply(dict)`` mutates schemas in place for ``_divide``
-        # sentinels, so cached compiled functions may now reference
-        # stale schema layouts.
-        self.core.invalidate_compiled_apply()
+        # sentinels, so the promote() memo may now key off stale
+        # schema layouts.
+        self.core.invalidate_caches()
         self.process_paths = find_instance_paths(state, 'process_bigraph.composite.Process')
         if hasattr(self, 'step_paths'):
             previous_step_paths = self.step_paths.keys()
@@ -1581,14 +1581,14 @@ class Composite(Process):
         - ``Divided``: drop the mother's entries, scan each daughter
           subtree.
 
-        The compiled-apply cache is invalidated unconditionally because
+        Schema-derived caches are invalidated unconditionally because
         ``apply(dict)``'s ``_divide`` branch mutates schemas in place.
 
         Step network rebuild is conditional on step_paths actually
         changing — value-only structural events that don't add/remove
         any Step instances skip the rebuild.
         """
-        self.core.invalidate_compiled_apply()
+        self.core.invalidate_caches()
 
         previous_step_paths = (set(self.step_paths.keys())
                                if hasattr(self, 'step_paths') else set())
@@ -2695,12 +2695,17 @@ class Composite(Process):
                     combined_update,
                     update_has_structural=had_structural_sentinels,
                     events=structural_events)
-                # For structural sentinels, apply may have mutated
-                # apply_schema in place (e.g. _divide pops/inserts
-                # keys in a dict schema). Propagate back to self.schema
-                # so downstream realize sees the split.
+                # For structural sentinels, apply mutates the
+                # access-normalized form of ``apply_schema`` in place
+                # (e.g. ``_divide`` pops the mother key and inserts
+                # daughter keys in a dict subschema). ``apply_schema``
+                # itself is the un-normalized input — it does NOT see
+                # those mutations. Pull the cached normalized form
+                # via ``access`` (cache hit since ``core.apply`` just
+                # populated it) so ``self.schema`` reflects the post-
+                # divide structure for downstream consumers.
                 if had_structural_sentinels:
-                    self.schema = apply_schema
+                    self.schema = self.core.access(apply_schema)
 
                 if merges:
                     had_structural_changes = True
