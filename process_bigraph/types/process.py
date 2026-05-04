@@ -315,7 +315,7 @@ def realize(core, schema: SharedProcess, state, path=()):
     # fields (Quantity, Function, custom types) get reconstructed.
     config_schema = getattr(cls, 'config_schema', None)
     if config_schema:
-        _, config = core.realize(config_schema, config)
+        _, config, _ = core.realize(config_schema, config)
 
     instance = cls(config)
 
