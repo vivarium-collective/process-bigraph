@@ -1328,7 +1328,7 @@ class Composite(Process):
             initial_state['global_time'] = 0.0
 
         # Generate internal schema and state structures using the core engine.
-        self.schema, self.state = self.core.realize(
+        self.schema, self.state, _ = self.core.realize(
             initial_schema,
             initial_state)
 
