@@ -1328,7 +1328,8 @@ class Composite(Process):
             initial_state['global_time'] = 0.0
 
         # Generate internal schema and state structures using the core engine.
-        self.schema, self.state = self.core.realize(
+        # Top-level realize: realize_root defaults to () so no merges escape.
+        self.schema, self.state, _ = self.core.realize(
             initial_schema,
             initial_state)
 
@@ -1497,8 +1498,18 @@ class Composite(Process):
                 continue
             if sub_schema is None:
                 continue
-            new_sub_schema, new_sub_state = self.core.realize(
+            # realize_root defaults to ``path`` so port_merges produced
+            # inside the subtree get applied locally with the prefix
+            # stripped. Merges that escape the subtree (via ``..``
+            # wires) come back as ``escape_merges`` and need to land
+            # in ``self.schema`` at their absolute paths.
+            new_sub_schema, new_sub_state, escape_merges = self.core.realize(
                 sub_schema, sub_state, path=tuple(path))
+            if escape_merges:
+                escape_merge_schema = self.core.resolve_merges(
+                    {}, escape_merges)
+                self.schema = self.core.resolve(
+                    self.schema, escape_merge_schema)
             if not path:
                 self.state = new_sub_state
                 continue
@@ -1546,8 +1557,19 @@ class Composite(Process):
                 continue
             if sub_schema is None:
                 continue
-            new_sub_schema, new_sub_state = self.core.realize(
+            # realize_root defaults to ``path`` so port_merges produced
+            # inside the new subtree are applied with the prefix
+            # stripped (correct for the local sub_schema). Merges that
+            # escape (e.g. ``..`` wires writing to global fields) come
+            # back as ``escape_merges`` and must land on ``self.schema``
+            # at their absolute paths.
+            new_sub_schema, new_sub_state, escape_merges = self.core.realize(
                 sub_schema, sub_state, path=tuple(path))
+            if escape_merges:
+                escape_merge_schema = self.core.resolve_merges(
+                    {}, escape_merges)
+                self.schema = self.core.resolve(
+                    self.schema, escape_merge_schema)
             # Splice the realized state back at its path. The parent
             # container is a mutable dict (Map keys are dict-keyed at
             # state level), so we rewrite the leaf entry. Schema dicts
@@ -2747,7 +2769,7 @@ class Composite(Process):
                 self._merge_paths_pending = []
             else:
                 # Fallback: no path info available — full realize.
-                self.schema, self.state = self.core.realize(
+                self.schema, self.state, _ = self.core.realize(
                     self.schema, self.state)
             self._build_view_project_cache()
 
@@ -2766,7 +2788,7 @@ class Composite(Process):
                 # detected an in-process update with no _add/_remove/
                 # _divide sentinel). Full realize + rescan is correct
                 # here — we don't know which subtrees changed.
-                self.schema, self.state = self.core.realize(
+                self.schema, self.state, _ = self.core.realize(
                     self.schema, self.state)
                 self.find_instance_paths(self.state)
             self._build_view_project_cache()
