@@ -323,10 +323,14 @@ def realize(core, schema: SharedProcess, state, path=()):
     if not hasattr(instance, 'core') or instance.core is None:
         instance.core = core
 
-    # Restore process-internal RandomState if a checkpoint captured one.
+    # Restore process-internal RandomState if a checkpoint captured
+    # one. Cross-gen daughter loads should strip ``rng_state`` from
+    # the saved bundle before construction (so the daughter starts
+    # fresh from a freshly-seeded process); mid-tick checkpoints
+    # leave it in for bit-for-bit continuation.
     rng_state = state.get('rng_state')
-    if rng_state and hasattr(instance, 'random_state') and isinstance(
-            instance.random_state, np.random.RandomState):
+    if (rng_state and hasattr(instance, 'random_state')
+            and isinstance(instance.random_state, np.random.RandomState)):
         try:
             instance.random_state.set_state((
                 rng_state['alg'],
