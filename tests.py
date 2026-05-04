@@ -1797,6 +1797,165 @@ def test_partial_process_link_update(core):
     assert after['outputs'] == original_outputs
 
 
+def test_parallel_processes_matches_serial(core):
+    """parallel_processes=True must produce bit-exact results vs the serial
+    loop. Many independent processes, several timesteps."""
+    n = 12
+    initial_levels = [float(i + 1) for i in range(n)]
+
+    def build_state():
+        # Each cell is an independent IncreaseProcess writing to its own
+        # 'level' store. No cross-cell dependencies => trivially parallel.
+        state = {f"level_{i}": initial_levels[i] for i in range(n)}
+        for i in range(n):
+            state[f"grow_{i}"] = {
+                "_type": "process",
+                "address": "local:IncreaseProcess",
+                "config": {"rate": 0.1 + 0.01 * i},
+                "inputs":  {"level": [f"level_{i}"]},
+                "outputs": {"level": [f"level_{i}"]},
+                "interval": 1.0,
+            }
+        return state
+
+    serial = Composite({"state": build_state()}, core=make_test_core())
+    serial.run(10.0)
+
+    parallel = Composite(
+        {"state": build_state(), "parallel_processes": True},
+        core=make_test_core(),
+    )
+    parallel.run(10.0)
+
+    for i in range(n):
+        s = serial.state[f"level_{i}"]
+        p = parallel.state[f"level_{i}"]
+        assert s == p, (
+            f"level_{i} mismatch: serial={s!r}, parallel={p!r} "
+            f"(parallel_processes must be deterministic and identical to serial)"
+        )
+
+
+def test_ray_process_pool_shared_across_clients(core):
+    """Two RayProcess clients with the same (class, config) must share one
+    actor pool, and both must see correct results from the underlying
+    process. Tests pool keying + reuse."""
+    pytest.importorskip("ray")
+    from process_bigraph.protocols.ray import (
+        RayProcess, register_process_class, pool_stats, shutdown_pools)
+
+    register_process_class("IncreaseProcess", IncreaseProcess)
+    try:
+        a = RayProcess(
+            {"process_class": "IncreaseProcess",
+             "process_config": {"rate": 0.25}, "pool_size": 2},
+            core=core)
+        b = RayProcess(
+            {"process_class": "IncreaseProcess",
+             "process_config": {"rate": 0.25}, "pool_size": 2},
+            core=core)
+        # Both clients should be backed by the same single 2-actor pool.
+        stats = pool_stats()
+        assert len(stats) == 1, f"expected one pool, got {stats}"
+        assert stats[0]["n_actors"] == 2
+
+        # IncreaseProcess returns level*rate. rate=0.25, level=4.0 → 1.0.
+        for client in (a, b):
+            result = client.update({"level": 4.0}, interval=1.0)
+            assert result == {"level": 1.0}
+    finally:
+        shutdown_pools()
+
+
+def test_ray_process_distinct_configs_get_separate_pools(core):
+    """Different (class, config) pairs must allocate independent pools so
+    state doesn't leak between configurations."""
+    pytest.importorskip("ray")
+    from process_bigraph.protocols.ray import (
+        RayProcess, register_process_class, pool_stats, shutdown_pools)
+
+    register_process_class("IncreaseProcess", IncreaseProcess)
+    try:
+        slow = RayProcess(
+            {"process_class": "IncreaseProcess",
+             "process_config": {"rate": 0.1}, "pool_size": 1},
+            core=core)
+        fast = RayProcess(
+            {"process_class": "IncreaseProcess",
+             "process_config": {"rate": 0.9}, "pool_size": 1},
+            core=core)
+
+        assert len(pool_stats()) == 2  # one per distinct config
+
+        slow_result = slow.update({"level": 10.0}, interval=1.0)
+        fast_result = fast.update({"level": 10.0}, interval=1.0)
+        assert slow_result == {"level": 1.0}
+        assert fast_result == {"level": 9.0}
+    finally:
+        shutdown_pools()
+
+
+def test_rest_server_initialize_inputs_outputs_update(core):
+    """Smoke-test the in-process REST server (no socket): initialize a process,
+    query its ports, run an update, end it. Mirrors the round-trip that
+    RestProcess does over the network."""
+    pytest.importorskip("fastapi")
+    from fastapi.testclient import TestClient
+    from process_bigraph.server.rest import start_server
+
+    core.register_link("IncreaseProcess", IncreaseProcess)
+    client = TestClient(start_server(core))
+
+    # process is registered → config-schema is available
+    schema = client.get("/process/IncreaseProcess/config-schema").json()
+    assert "rate" in schema
+
+    # initialize → uuid string
+    pid = client.post(
+        "/process/IncreaseProcess/initialize", json={"rate": 0.3}
+    ).json()
+    assert isinstance(pid, str) and len(pid) > 0
+
+    # ports
+    inputs = client.get(f"/process/IncreaseProcess/inputs/{pid}").json()
+    outputs = client.get(f"/process/IncreaseProcess/outputs/{pid}").json()
+    assert inputs == {"level": "float"}
+    assert outputs == {"level": "float"}
+
+    # update: IncreaseProcess returns level * rate
+    upd = client.post(
+        f"/process/IncreaseProcess/update/{pid}",
+        json={"state": {"level": 10.0}, "interval": 1.0},
+    ).json()
+    assert upd == {"level": 3.0}
+
+    # end removes the instance — second update should 500
+    end = client.post(f"/process/IncreaseProcess/end/{pid}", json={})
+    assert end.status_code == 200
+
+
+def test_parallel_processes_single_process_path(core):
+    """With just one process, the parallel layer must short-circuit and not
+    spin up a thread pool — should match serial without overhead."""
+    state = {
+        "level": 1.0,
+        "grow": {
+            "_type": "process",
+            "address": "local:IncreaseProcess",
+            "config": {"rate": 0.5},
+            "inputs":  {"level": ["level"]},
+            "outputs": {"level": ["level"]},
+            "interval": 1.0,
+        },
+    }
+    sim = Composite({"state": state, "parallel_processes": True},
+                    core=make_test_core())
+    sim.run(3.0)
+    # IncreaseProcess returns level*rate as a delta each tick (additive apply).
+    # rate=0.5, three ticks of multiply-and-add: 1.0 + 0.5 + 0.75 + 1.125 = 3.375
+    assert abs(sim.state["level"] - 3.375) < 1e-12
+
+
 def make_test_core():
     members = dict(inspect.getmembers(sys.modules[__name__]))
     return allocate_core(

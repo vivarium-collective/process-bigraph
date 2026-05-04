@@ -1285,6 +1285,14 @@ class Composite(Process):
         # step hot path releases the GIL (numpy / scipy / numba / C
         # extensions: yes; pure-Python loops: no).
         'parallel_steps': 'boolean{false}',
+        # Time-scheduled processes: when True, the per-tick `run` loop
+        # fans out invocations across a thread pool. Right tool when
+        # processes' update() releases the GIL (network I/O, numpy /
+        # scipy / C extensions, Ray actor calls). Wrong tool when
+        # update() is mostly pure Python — threads will just trade the
+        # GIL and you'll see no speedup. The thread pool is shared with
+        # parallel_steps and bounded by parallel_workers.
+        'parallel_processes': 'boolean{false}',
         'parallel_workers': 'maybe[integer]',
         # When True, ``initialize`` trusts ``state`` as-is and skips the
         # per-process ``link_state`` + ``combine`` pass that normally
@@ -1405,6 +1413,7 @@ class Composite(Process):
         # field in interface_schema for the rationale (threading vs.
         # multiprocessing for inner parallelism).
         self._parallel_steps = bool(self.config.get('parallel_steps', False))
+        self._parallel_processes = bool(self.config.get('parallel_processes', False))
         self._parallel_workers = self.config.get('parallel_workers')
         self._step_executor = None  # lazy: created on first run_steps need
 
@@ -2363,10 +2372,14 @@ class Composite(Process):
             full_step = math.inf
 
             # Run each process and compute the minimum time step that advances simulation
-            for path in self.process_paths:
-                process = get_path(self.state, path)
-                full_step = self.run_process(
-                    path, process, end_time, full_step, force_complete)
+            if self._parallel_processes and len(self.process_paths) > 1:
+                full_step = self._run_processes_layer_parallel(
+                    end_time, full_step, force_complete)
+            else:
+                for path in self.process_paths:
+                    process = get_path(self.state, path)
+                    full_step = self.run_process(
+                        path, process, end_time, full_step, force_complete)
 
             if full_step == math.inf:
                 # No process ran — jump to the next scheduled process time
@@ -2493,6 +2506,95 @@ class Composite(Process):
             process_delay = process_time - self.state['global_time']
             if process_delay < full_step:
                 full_step = process_delay
+
+        return full_step
+
+    def _run_processes_layer_parallel(
+            self,
+            end_time: float,
+            full_step: float,
+            force_complete: bool,
+    ) -> float:
+        """Parallel analog of the per-tick `for path in self.process_paths`
+        loop. Splits run_process into a schedule pass (sequential, cheap)
+        and an invoke pass (parallelized over the same ThreadPoolExecutor
+        used by parallel_steps).
+
+        Semantics are identical to the serial loop: same schedule decisions,
+        same Defers stored at the same self.front[path] slots. Only the
+        order in which `instance.invoke()` calls happen changes.
+
+        Safe when:
+          - `instance.update()` releases the GIL on its hot path (network
+            I/O, Ray actor calls, numpy/scipy/C extensions).
+          - Processes don't share mutable state across each other.
+
+        Not safe when processes share mutable state or hold global locks.
+        Like `parallel_steps`, this is opt-in for that reason.
+        """
+        # ---- schedule pass: decide which processes are due now ---------- #
+        due = []  # (path, process_dict, state, future_time, process_interval)
+        for path in self.process_paths:
+            process = get_path(self.state, path)
+            if path not in self.front:
+                self.front[path] = empty_front(self.state['global_time'])
+            process_time = self.front[path]['time']
+
+            if process_time <= self.state['global_time']:
+                if 'future' in self.front[path]:
+                    future_front = self.front[path].pop('future')
+                    process_interval = future_front['interval']
+                    state = future_front['state']
+                else:
+                    state = self._cached_view(path)
+                    state_interval = process['interval']
+                    process_interval = process['instance'].calculate_timestep(
+                        state_interval, state)
+                    process['interval'] = process_interval
+
+                future = (
+                    min(process_time + process_interval, end_time)
+                    if force_complete
+                    else process_time + process_interval
+                )
+                if self.global_time_precision:
+                    future = round(future, self.global_time_precision)
+
+                interval = future - self.state['global_time']
+                if interval < full_step:
+                    full_step = interval
+
+                if future <= end_time:
+                    due.append((path, process, state, future, process_interval))
+            else:
+                process_delay = process_time - self.state['global_time']
+                if process_delay < full_step:
+                    full_step = process_delay
+
+        if not due:
+            return full_step
+
+        # ---- invoke pass: parallel via the shared step executor --------- #
+        # process_update calls instance.invoke(state, interval); that's the
+        # only blocking part. Note: process_update accumulates into
+        # self.process_update_time — there's a benign race on that counter
+        # under contention, but it's only a metric (not correctness).
+        def _invoke(item):
+            path, process, state, _future, process_interval = item
+            return path, self.process_update(
+                path, process, state, process_interval, already_clean=True)
+
+        if len(due) > 1:
+            pool = self._get_step_executor(len(due))
+            results = list(pool.map(_invoke, due))
+        else:
+            results = [_invoke(due[0])]
+
+        # ---- bookkeep pass: store Defers + update self.front time slots - #
+        future_by_path = {p: fut for (p, _, _, fut, _) in due}
+        for path, defer in results:
+            self.front[path]['time'] = future_by_path[path]
+            self.front[path]['update'] = defer
 
         return full_step
 

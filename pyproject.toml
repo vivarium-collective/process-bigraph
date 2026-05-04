@@ -17,6 +17,24 @@ dependencies = [
     "sympy",
 ]
 
+[project.optional-dependencies]
+# Distributed Ray actor backend for processes (RayProcess + actor pool).
+# Install with: pip install process-bigraph[ray]
+ray = [
+    "ray>=2.10",
+]
+
+# REST server (FastAPI/uvicorn) that hosts processes over HTTP, paired with
+# the existing RestProcess client.
+# Install with: pip install process-bigraph[server-rest]
+server-rest = [
+    "fastapi>=0.116.1",
+    "fastapi-utils>=0.8.0",
+    "uvicorn>=0.35.0",
+    "fire",
+    "typing-inspect>=0.9.0",
+]
+
 [dependency-groups]
 dev = [
     "ipdb>=0.13.13",
@@ -25,6 +43,14 @@ dev = [
     "notebook",
     "pytest",
     "pytest-cov",
+    "httpx",
+    # Test the optional extras without forcing them on everyone.
+    "ray>=2.10",
+    "fastapi>=0.116.1",
+    "fastapi-utils>=0.8.0",
+    "uvicorn>=0.35.0",
+    "fire",
+    "typing-inspect>=0.9.0",
 ]
 
 [tool.setuptools]
@@ -32,6 +58,7 @@ packages = [
     "process_bigraph",
     "process_bigraph.processes",
     "process_bigraph.protocols",
+    "process_bigraph.server",
     "process_bigraph.experiments",
     "process_bigraph.types",
 ]
