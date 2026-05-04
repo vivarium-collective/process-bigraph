@@ -70,13 +70,25 @@ import json
 import hashlib
 from typing import Any, Dict, List, Type, Optional
 
+# Ray is optional. We let the module import even when ray isn't installed
+# (so package scanners like discover_packages don't trip), and only raise
+# a helpful error when something tries to actually use it.
 try:
     import ray
-except ImportError as e:  # pragma: no cover
-    raise ImportError(
-        "process_bigraph.protocols.ray requires the optional `ray` "
-        "dependency. Install with: pip install process-bigraph[ray]"
-    ) from e
+    _RAY_IMPORT_ERROR: Optional[ImportError] = None
+except ImportError as _e:  # pragma: no cover
+    ray = None  # type: ignore[assignment]
+    _RAY_IMPORT_ERROR = _e
+
+
+def _require_ray() -> None:
+    """Guard for code paths that need ray. Raises a clear install hint."""
+    if ray is None:
+        raise ImportError(
+            "process_bigraph.protocols.ray requires the optional `ray` "
+            "dependency. Install with: pip install process-bigraph[ray]"
+        ) from _RAY_IMPORT_ERROR
+
 
 from process_bigraph import Process
 
@@ -100,8 +112,11 @@ def get_registry() -> Dict[str, Type[Process]]:
 
 # ---------------------------------------------------------------------------
 # Ray actor — one per pool slot. Holds a single Process instance.
+#
+# Declared as a plain class at module load time so this file imports cleanly
+# without ray installed. ``ray.remote(...)`` is applied lazily on first use
+# (cached) inside ``_remote_actor_class()``.
 # ---------------------------------------------------------------------------
-@ray.remote
 class _ProcessActor:
     def __init__(self, registry: Dict[str, Type[Process]],
                  class_name: str, config: dict):
@@ -121,6 +136,18 @@ class _ProcessActor:
         return self.instance.update(state, interval)
 
 
+_REMOTE_ACTOR_CLASS = None  # cached ray.remote(_ProcessActor)
+
+
+def _remote_actor_class():
+    """Return the ray-remote-wrapped _ProcessActor, building it on first call."""
+    global _REMOTE_ACTOR_CLASS
+    if _REMOTE_ACTOR_CLASS is None:
+        _require_ray()
+        _REMOTE_ACTOR_CLASS = ray.remote(_ProcessActor)
+    return _REMOTE_ACTOR_CLASS
+
+
 # ---------------------------------------------------------------------------
 # Actor pool. One pool per (process_class, process_config). Persistent across
 # RayProcess instances and across simulation runs.
@@ -128,11 +155,12 @@ class _ProcessActor:
 class _ActorPool:
     def __init__(self, class_name: str, config: dict, n_workers: int):
         registry = get_registry()
+        actor_cls = _remote_actor_class()
         # Spawn all actors concurrently — actor.remote() returns immediately;
         # we don't ray.get on the constructor. The first .inputs.remote() call
         # implicitly waits for the actor to be ready.
         self.actors = [
-            _ProcessActor.remote(registry, class_name, config)
+            actor_cls.remote(registry, class_name, config)
             for _ in range(n_workers)
         ]
         self._next = 0
@@ -220,6 +248,7 @@ class RayProcess(Process):
     }
 
     def initialize(self, config):
+        _require_ray()
         if not ray.is_initialized():
             ray.init(ignore_reinit_error=True, log_to_driver=False)
 
