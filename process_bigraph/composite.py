@@ -530,6 +530,21 @@ def build_step_network(steps):
                         if producer not in node['after']:
                             node['before'].add(producer)
 
+    # Precompute each step's direct dependents (= the set of steps
+    # that consume something this step writes). ``find_downstream``
+    # was reconstructing this every tick by walking
+    # output_paths × explode_path × nodes lookup; doing it once at
+    # graph-build time makes ``find_downstream`` a plain BFS over a
+    # cached adjacency list.
+    for step_key, ancestor in ancestors.items():
+        direct = set()
+        for output_path in ancestor['output_paths'] or []:
+            for subpath in explode_path(output_path):
+                node = nodes.get(subpath)
+                if node is not None:
+                    direct.update(node['after'])
+        ancestor['_direct_dependents'] = frozenset(direct)
+
     return ancestors, nodes
 
 
@@ -552,36 +567,25 @@ def build_trigger_state(nodes, paths):
 
 def find_downstream(steps, nodes, upstream):
     """
-    Given a set of updated steps, identify all downstream steps that depend on them.
+    Given a set of updated steps, identify all downstream steps that
+    depend on them — directly or transitively.
 
-    Args:
-        steps: Step metadata with input/output info.
-        nodes: Dependency graph.
-        upstream: Initial set of triggered step paths.
-
-    Returns:
-        Set of all steps affected directly or transitively.
+    BFS over the cached ``_direct_dependents`` adjacency that
+    ``build_step_network`` precomputes per step. ``nodes`` is no
+    longer consulted on the hot path (kept in the signature for
+    backward compatibility with callers that still pass it).
     """
     downstream = set(upstream)
-    visited = set([])
-    previous_len = -1
-
-    while len(downstream) > len(visited) and len(visited) > previous_len:
-        previous_len = len(visited)
-        down = set([])
-        for step_path in downstream:
-            if step_path not in visited:
-                step_outputs = steps[step_path]['output_paths']
-                if step_outputs is None:
-                    step_outputs = []  # Ensure step_outputs is always an iterable
-                for output in step_outputs:
-                    for subpath in explode_path(output):
-                        if subpath in nodes:
-                            for dependent in nodes[subpath]['after']:
-                                down.add(dependent)
-                visited.add(step_path)
-        downstream |= down
-
+    queue = list(upstream)
+    while queue:
+        step_path = queue.pop()
+        meta = steps.get(step_path)
+        if meta is None:
+            continue
+        for dep in meta.get('_direct_dependents', ()):
+            if dep not in downstream:
+                downstream.add(dep)
+                queue.append(dep)
     return downstream
 
 
