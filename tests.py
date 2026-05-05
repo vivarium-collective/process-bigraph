@@ -1760,6 +1760,104 @@ def test_dynamic_worker_rewire_preserves_instance(core):
         f"got {a0_outputs_after['self_value']}")
 
 
+class _SelfIntervalProcess(Process):
+    """Emits a fixed value to its own ``interval`` field via an
+    ``overwrite[float]`` output port, and records the interval it
+    receives on every ``update()`` call. Used by
+    ``test_self_interval_overwrite_does_not_accumulate``.
+    """
+    config_schema = {'fixed_interval': 'float'}
+
+    def initialize(self, config):
+        self.received_intervals = []
+
+    def inputs(self):
+        return {'tick': 'float'}
+
+    def outputs(self):
+        return {'interval': 'overwrite[float]'}
+
+    def update(self, state, interval):
+        self.received_intervals.append(interval)
+        return {'interval': self.config['fixed_interval']}
+
+
+def test_self_interval_overwrite_does_not_accumulate(core):
+    """A process wires its ``overwrite[float]`` output back to its own
+    ``interval`` field.
+
+    Two things must hold:
+
+    1. After several ticks the field equals the fixed value emitted by
+       the process (overwrite), rather than the accumulated sum
+       (``initial_interval + fixed_interval * N``) that the additive
+       ``apply(Float)`` would produce when the destination's
+       ProcessLink.interval Float schema wins over the source's
+       Overwrite Wrap during ``promote``.
+    2. The runtime actually uses the overwritten interval to schedule
+       and invoke the next tick — i.e. the ``interval`` argument
+       handed to ``update()`` after the first firing is the fixed
+       value, not the original initial interval and not the
+       accumulated sum.
+    """
+    fixed = 0.25
+    initial_interval = 1.0
+
+    address = (
+        f'local:!{_SelfIntervalProcess.__module__}.'
+        f'{_SelfIntervalProcess.__name__}')
+
+    state = {
+        'tick': 1.0,
+        'self_proc': {
+            '_type': 'process',
+            'address': address,
+            'config': {'fixed_interval': fixed},
+            'inputs': {'tick': ['tick']},
+            'outputs': {'interval': ['self_proc', 'interval']},
+            'interval': initial_interval}}
+
+    composite = Composite({'state': state}, core=core)
+
+    # Advance enough simulated time to fire several updates regardless of
+    # whether the runtime ends up using the overwritten or accumulated
+    # interval to schedule the next tick.
+    composite.run(5.0)
+
+    final = composite.state['self_proc']['interval']
+
+    assert final == fixed, (
+        f'expected interval to be overwritten to {fixed}, got {final} '
+        f'(initial was {initial_interval}). The process emitted '
+        f"'interval' as overwrite[float], so the destination "
+        f"ProcessLink.interval should be replaced — not summed via the "
+        f"additive Float apply.")
+
+    instance = composite.state['self_proc']['instance']
+    received = instance.received_intervals
+
+    # The first firing happens before any update lands, so it must use
+    # the originally-configured interval.
+    assert received[0] == initial_interval, (
+        f'first update() should have received initial interval '
+        f'{initial_interval}, got {received[0]}')
+
+    # Every subsequent firing must see the overwritten value. Under the
+    # accumulating-Float bug the sequence would be
+    # 1.0, 1.25, 1.5, 1.75, ... rather than 1.0, 0.25, 0.25, ...
+    assert all(r == fixed for r in received[1:]), (
+        f'every update() after the first should have received '
+        f'fixed_interval={fixed}, got {received}. The runtime must '
+        f'read the post-apply value of process["interval"] when '
+        f'scheduling and invoking the next tick.')
+
+    # And we should have actually fired more than once — otherwise the
+    # "subsequent" claim is vacuous.
+    assert len(received) >= 2, (
+        f'expected multiple firings within the 5.0s run window; '
+        f'received only {len(received)} intervals: {received}')
+
+
 def test_partial_process_link_update(core):
     """Updating a single field on a ProcessLink (e.g. only ``interval``)
     must preserve the other fields. The default ``apply(Node)`` walked
