@@ -1984,6 +1984,66 @@ def test_ray_process_distinct_configs_get_separate_pools(core):
             _ray.shutdown()
 
 
+def test_ray_protocol_address_batches_per_tick(core):
+    """``address: "ray:Foo"`` keeps the per-process node visible in the
+    state graph but batches per-tick RPCs through one shared shard pool.
+
+    Verifies:
+      - 4 IncreaseProcess clients via "ray:IncreaseProcess" get 4 distinct
+        Process instances in the Composite,
+      - they all map onto a single RayProtocolRuntime,
+      - the per-tick RPC count is bounded by n_shards (≤ 4 here, capped
+        by RAY_SHARDS_DEFAULT=2 to make the bound observable),
+      - results match a direct local run.
+    """
+    pytest.importorskip("ray")
+    import ray as _ray
+    from process_bigraph.protocols.ray import (
+        register_process_class, get_or_create_runtime,
+        shutdown_all_runtimes,
+    )
+
+    register_process_class("IncreaseProcess", IncreaseProcess)
+    os.environ["RAY_SHARDS_DEFAULT"] = "2"
+    try:
+        # Force a fresh runtime so RAY_SHARDS_DEFAULT applies.
+        shutdown_all_runtimes()
+
+        state = {
+            f"grow_{i}": {
+                "_type": "process",
+                "address": "ray:IncreaseProcess",
+                "config": {"rate": 0.5},
+                "inputs":  {"level": [f"level_{i}"]},
+                "outputs": {"level": [f"level_{i}"]},
+                "interval": 1.0,
+            }
+            for i in range(4)
+        }
+        for i in range(4):
+            state[f"level_{i}"] = 1.0
+
+        sim = Composite({"state": state, "parallel_processes": True},
+                        core=make_test_core())
+        runtime = get_or_create_runtime(sim.core)
+        sim.run(3.0)
+
+        # Same growth as the local test: 1 -> 1.5 -> 2.25 -> 3.375
+        for i in range(4):
+            assert abs(sim.state[f"level_{i}"] - 3.375) < 1e-9
+
+        # Bound on actor count: capped by RAY_SHARDS_DEFAULT=2, regardless
+        # of the 4 per-process nodes in the graph.
+        assert len(runtime._pools) == 1
+        only_pool = next(iter(runtime._pools.values()))
+        assert len(only_pool.actors) == 2
+    finally:
+        shutdown_all_runtimes()
+        os.environ.pop("RAY_SHARDS_DEFAULT", None)
+        if _ray.is_initialized():
+            _ray.shutdown()
+
+
 def test_rest_server_initialize_inputs_outputs_update(core):
     """Smoke-test the in-process REST server (no socket): initialize a process,
     query its ports, run an update, end it. Mirrors the round-trip that

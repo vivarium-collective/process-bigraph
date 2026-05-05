@@ -1460,6 +1460,19 @@ class Composite(Process):
     def clean_front(self, state):
         self.find_instance_paths(state)
 
+    def _flush_protocol_runtimes(self) -> None:
+        """Run each active protocol runtime's ``flush_pending`` to resolve
+        any per-tick batched work (e.g. Ray RPCs) before deltas get pulled
+        from their Defers in ``apply_updates``. No-op when no protocol
+        runtime is active — backwards-compatible with all-local docs."""
+        runtimes = getattr(self, '_active_protocol_runtimes', None)
+        if not runtimes:
+            return
+        for rt in runtimes:
+            flush = getattr(rt, 'flush_pending', None)
+            if flush is not None:
+                flush()
+
     def find_instance_paths(self, state: Dict[str, Any]) -> None:
         """
         Identify all Step and Process instances in the current state.
@@ -1467,6 +1480,7 @@ class Composite(Process):
         Populates:
             - self.process_paths
             - self.step_paths
+            - self._active_protocol_runtimes (deduped by identity)
         """
         # Structural change incoming — drop schema-derived caches:
         # ``apply(dict)`` mutates schemas in place for ``_divide``
@@ -1492,6 +1506,19 @@ class Composite(Process):
         for removed_key in front_paths.difference(all_paths):
             # do we want to do anything with these?
             removed_front = self.front.pop(removed_key)
+
+        # Collect the deduped set of runtimes that batched-execution
+        # protocols (Ray, REST-batching, …) attach to their shadow
+        # processes via ``_protocol_runtime``. Each gets ``flush_pending``
+        # called once between the per-tick invoke pass and apply_updates.
+        runtimes = {}
+        for path_dict in (self.process_paths, self.step_paths):
+            for edge in path_dict.values():
+                inst = edge.get('instance')
+                rt = getattr(inst, '_protocol_runtime', None)
+                if rt is not None:
+                    runtimes[id(rt)] = rt
+        self._active_protocol_runtimes = list(runtimes.values())
 
     def _realize_merge_subtrees(self, paths: List[tuple]) -> None:
         """Realize only the subtrees touched by ``port_merges``.
@@ -2318,6 +2345,7 @@ class Composite(Process):
 
                     updates.append(step_update)
 
+            self._flush_protocol_runtimes()
             update_paths = self.apply_updates(updates)
             self.expire_process_paths(update_paths)
 
@@ -2402,6 +2430,7 @@ class Composite(Process):
                         paths.append(path)
 
                 fw_start = _time.monotonic()
+                self._flush_protocol_runtimes()
                 update_paths = self.apply_updates(updates)
                 update_paths.append(('global_time',)) # updated global time can trigger steps
                 self.expire_process_paths(update_paths)
