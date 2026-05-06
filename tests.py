@@ -2319,6 +2319,140 @@ def test_actor_pool_reuses_actors_across_acquires():
             _ray.shutdown()
 
 
+def test_actor_pool_grows_on_acquire_request_larger_than_size():
+    """When acquire(n) asks for more actors than the pool currently has,
+    the pool grows to fit. Existing pooled actors keep their state —
+    only the *new* slots pay the per-actor __init__ cost.
+
+    This covers the multi-grid sweep pattern: first sim wants 2 actors,
+    second wants 8, third wants 32 — all from one shared pool keyed
+    by (actor_class, config_hash).
+    """
+    pytest.importorskip("ray")
+    import ray as _ray
+    from process_bigraph.protocols.pool import (
+        get_or_create_pool, shutdown_all_pools)
+
+    if not _ray.is_initialized():
+        _ray.init(ignore_reinit_error=True, log_to_driver=False)
+
+    @_ray.remote
+    class TaggedActor:
+        def __init__(self, _config):
+            import uuid
+            self.tag = str(uuid.uuid4())
+        def ping(self): return "ready"
+        def info(self): return self.tag
+
+    try:
+        shutdown_all_pools()
+        # Pool starts at size 2 (first sweep).
+        pool = get_or_create_pool(TaggedActor, {}, size=2)
+        actors_2 = pool.acquire(2)
+        tags_first_two = set(_ray.get([a.info.remote() for a in actors_2]))
+        pool.release(actors_2)
+        assert pool.size == 2
+
+        # Second sweep wants 8. Pool should grow to 8 — the original 2
+        # actors keep their tags, the new 6 get fresh tags.
+        actors_8 = pool.acquire(8)
+        assert pool.size == 8
+        tags_all = set(_ray.get([a.info.remote() for a in actors_8]))
+        # Original 2 tags must still be there (state preserved).
+        assert tags_first_two.issubset(tags_all)
+        assert len(tags_all) == 8
+        pool.release(actors_8)
+
+        # Third sweep wants 4 — that's smaller, pool stays at 8.
+        actors_4 = pool.acquire(4)
+        assert pool.size == 8
+        pool.release(actors_4)
+
+        # get_or_create_pool with a larger size also grows.
+        same_pool = get_or_create_pool(TaggedActor, {}, size=12)
+        assert same_pool is pool
+        assert pool.size == 12
+    finally:
+        shutdown_all_pools()
+        if _ray.is_initialized():
+            _ray.shutdown()
+
+
+def test_tick_lifecycle_applied_skips_apply_updates(core):
+    """v3 path: a runtime that mutates ``composite.state`` directly
+    returns ``applied=True`` and the framework skips ``apply_updates``
+    entirely for the managed group. Verifies state mutations land
+    correctly AND that no Defer is placed at any common_path slot.
+
+    This exercises the framework hook used by spatio-flux's
+    ShardManager.tick_lifecycle to bypass the per-tick reconcile/apply
+    schema walk at scale.
+    """
+    class DirectMutationRuntime:
+        def __init__(self):
+            self.tick_count = 0
+
+        def tick_lifecycle(self, *, processes, composite, global_time,
+                           end_time, force_complete):
+            self.tick_count += 1
+            # Mutate composite.state directly — the runtime's whole job.
+            next_time = end_time
+            for req in processes:
+                inc = req['instance'].config.get('increment', 0)
+                target = req['instance'].config.get('target')
+                composite.state[target] += inc
+                future_time = global_time + float(req['interval'])
+                if future_time < next_time:
+                    next_time = future_time
+            return {
+                'next_time': next_time,
+                'process_paths': [r['path'] for r in processes],
+                'applied': True,
+            }
+
+    runtime = DirectMutationRuntime()
+
+    class DirectIncrementer(Process):
+        config_schema = {'increment': 'integer', 'target': 'string'}
+
+        def initialize(self, config):
+            self._protocol_runtime = runtime
+
+        def inputs(self): return {}
+        def outputs(self): return {}
+        def update(self, state, interval):
+            # Should NOT be called — runtime takes over.
+            raise AssertionError("update should not fire when applied=True")
+
+    core.register_link('DirectIncrementer', DirectIncrementer)
+
+    state = {
+        'a': 0,
+        'b': 0,
+        'inc_a': {'_type': 'process',
+                   'address': 'local:DirectIncrementer',
+                   'config': {'increment': 1, 'target': 'a'},
+                   'inputs': {}, 'outputs': {}, 'interval': 1.0},
+        'inc_b': {'_type': 'process',
+                   'address': 'local:DirectIncrementer',
+                   'config': {'increment': 5, 'target': 'b'},
+                   'inputs': {}, 'outputs': {}, 'interval': 1.0},
+    }
+
+    sim = Composite({'state': state}, core=core)
+    sim.run(3.0)
+
+    assert runtime.tick_count == 3
+    assert sim.state['a'] == 3
+    assert sim.state['b'] == 15
+
+    # Front entries for the managed processes should have empty update
+    # slots — nothing should have been queued for apply_updates.
+    for path in (('inc_a',), ('inc_b',)):
+        if path in sim.front:
+            assert sim.front[path]['update'] == {}
+
+
 def test_tick_lifecycle_dispatches_managed_processes(core):
     """Validates the framework hook: a Process whose ``_protocol_runtime``
     implements ``tick_lifecycle`` gets dispatched via that hook (one call

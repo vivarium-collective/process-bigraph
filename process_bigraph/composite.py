@@ -1641,9 +1641,8 @@ class Composite(Process):
             return full_step
 
         next_time = result['next_time']
-        common_path = result['common_path']
         process_paths = result['process_paths']
-        defer = result['defer']
+        applied = result.get('applied', False)
 
         interval = next_time - self.state['global_time']
         if interval < full_step:
@@ -1656,12 +1655,28 @@ class Composite(Process):
             if p not in self.front:
                 self.front[p] = empty_front(self.state['global_time'])
             self.front[p]['time'] = next_time
-            # Mark per-process update slot empty — the actual delta is
-            # carried by the combined defer at common_path below.
+            # Per-process update slot empty: the actual delta is either
+            # carried by the combined defer at common_path (v2 path) or
+            # already applied to ``composite.state`` directly by the
+            # runtime (v3 path with ``applied=True``).
             self.front[p]['update'] = {}
 
-        # Place the single combined Defer at the common path. apply_updates
-        # walks the schema once for this whole tree instead of N times.
+        if applied:
+            # v3 — runtime mutated state directly. Skip apply_updates entirely
+            # for these processes; the framework only needs to advance time.
+            # Useful when per-cell/per-tick reconcile cost dominates and the
+            # runtime can do a vectorized array op instead of a schema walk.
+            #
+            # ``run()`` decides whether to call ``apply_updates`` based on
+            # whether front[path]['update'] is truthy — by leaving them all
+            # empty here AND not placing a defer at common_path, we ensure
+            # apply_updates is never called for this tick's managed group.
+            return full_step
+
+        # v2 — runtime returned a combined Defer; framework runs apply_updates
+        # on it once for the whole batch.
+        common_path = result['common_path']
+        defer = result['defer']
         if common_path not in self.front:
             self.front[common_path] = empty_front(self.state['global_time'])
         self.front[common_path]['time'] = next_time
@@ -3078,12 +3093,38 @@ class Composite(Process):
                 # step_paths indexes incrementally instead of re-scanning
                 # the full state via find_instance_paths.
                 structural_events = [] if had_structural_sentinels else None
+                # DEBUG: track cell_mass before/after apply + global_time
+                _dbg_before = None
+                _dbg_update = None
+                _dbg_gt_before = self.state.get('global_time')
+                _dbg_update_gt = combined_update.get('global_time') if isinstance(combined_update, dict) else None
+                try:
+                    _agent_state = self.state.get('agents', {}).get('00') or self.state.get('agents', {}).get('0')
+                    if _agent_state:
+                        _dbg_before = _agent_state.get('listeners', {}).get('mass', {}).get('cell_mass')
+                    _u_agents = combined_update.get('agents', {}) if isinstance(combined_update, dict) else {}
+                    _u_agent = _u_agents.get('00') if isinstance(_u_agents, dict) else None
+                    if not _u_agent and isinstance(_u_agents, dict):
+                        _u_agent = _u_agents.get('0') if _u_agents else None
+                    if _u_agent:
+                        _dbg_update = _u_agent.get('listeners', {}).get('mass', {}).get('cell_mass')
+                except Exception:
+                    pass
                 self.state, merges = self.core.apply(
                     apply_schema,
                     self.state,
                     combined_update,
                     update_has_structural=had_structural_sentinels,
                     events=structural_events)
+                try:
+                    _agents_dict = self.state.get('agents', {})
+                    _agent_state = _agents_dict.get('00') or _agents_dict.get('0')
+                    _dbg_after = _agent_state.get('listeners', {}).get('mass', {}).get('cell_mass') if _agent_state else None
+                    _gt_after = self.state.get('global_time')
+                    if _dbg_update is not None or (_dbg_before is not None and _dbg_before != _dbg_after):
+                        print(f'[APPLY_DEBUG] composite_id={id(self)} state_id={id(self.state)} agents_id={id(_agents_dict)} gt_before={_dbg_gt_before} gt_after={_gt_after} update_gt={_dbg_update_gt} cm: {_dbg_before} +update={_dbg_update} -> {_dbg_after}', flush=True)
+                except Exception:
+                    pass
                 # For structural sentinels, apply mutates the
                 # access-normalized form of ``apply_schema`` in place
                 # (e.g. ``_divide`` pops the mother key and inserts

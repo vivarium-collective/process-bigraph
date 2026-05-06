@@ -124,6 +124,47 @@ class ActorPool:
         with self._lock:
             self._warmed = True
 
+    def grow(self, new_size: int) -> None:
+        """Increase pool capacity to ``new_size`` by spawning additional
+        actors in parallel. No-op if ``new_size <= current size``.
+
+        Called by ``acquire(n)`` when ``n`` exceeds current size, and by
+        ``get_or_create_pool`` when a caller asks for a larger pool than
+        the existing one. The expensive per-actor ``__init__`` (cobra
+        load etc.) only fires for the *new* slots; existing pooled
+        actors keep their state intact.
+        """
+        if new_size <= 0:
+            return
+        with self._lock:
+            if new_size <= self._size:
+                return
+            if not self._warmed:
+                # First spawn AND grow at once: behave like warm() for
+                # the requested size.
+                self._all = [
+                    self._actor_class.remote(self._actor_config)
+                    for _ in range(new_size)
+                ]
+                self._available = list(self._all)
+                self._in_use = []
+                self._size = new_size
+                new_actors = list(self._all)
+            else:
+                delta = new_size - self._size
+                new_actors = [
+                    self._actor_class.remote(self._actor_config)
+                    for _ in range(delta)
+                ]
+                self._all.extend(new_actors)
+                self._available.extend(new_actors)
+                self._size = new_size
+        # Race new actors' __init__ in parallel — outside the lock so
+        # other threads can still acquire / release while we wait.
+        ray.get([a.ping.remote() for a in new_actors])
+        with self._lock:
+            self._warmed = True
+
     def acquire(self, n: int = 1) -> list:
         """Claim ``n`` actors for one Session.
 
@@ -131,22 +172,26 @@ class ActorPool:
         available set. Sessions must call ``release()`` on these
         handles at the end of their work (``Session.__exit__``).
 
-        Raises ``ValueError`` if ``n`` exceeds pool size or if not
-        enough actors are currently available. (v1 doesn't block —
-        the caller is expected to size pools correctly. v2 may add a
-        blocking variant.)
+        Grows the pool if ``n`` exceeds current size — useful when one
+        sweep runs sims of varying scale (n_shards changing per grid).
+
+        Raises ``ValueError`` only if not enough actors are currently
+        available even after growing — i.e. another session has them
+        in use. (v1 doesn't block; v2 may add a blocking variant.)
         """
         if not self._warmed:
             self.warm()
+        # Grow first if needed. Done outside the acquire lock so the
+        # ray.get(ping) for new actors doesn't block other operations.
+        if n > self._size:
+            self.grow(n)
         with self._lock:
-            if n > self._size:
-                raise ValueError(
-                    f"acquire({n}) exceeds pool size {self._size}")
             if n > len(self._available):
                 raise ValueError(
                     f"acquire({n}) exceeds available {len(self._available)}; "
                     f"in_use={len(self._in_use)}, total={self._size}. "
-                    f"Either grow the pool or release sessions first.")
+                    f"Other sessions have actors checked out — wait for "
+                    f"them to release.")
             actors = self._available[:n]
             self._available = self._available[n:]
             self._in_use.extend(actors)
@@ -228,9 +273,10 @@ def get_or_create_pool(
     return the same pool — actors are shared across Composites
     transparently.
 
-    ``size`` is honored only on first creation; if the pool already
-    exists with a different size, that size wins. (v2 may grow the
-    pool on demand.)
+    If the pool already exists with a smaller size than requested,
+    it grows to ``size``. Existing pooled actors keep their state.
+    A request for a SMALLER size than the existing pool is honored
+    only as a minimum — the pool keeps its current larger size.
     """
     key = _pool_key(actor_class, actor_config)
     with _POOLS_LOCK:
@@ -238,7 +284,11 @@ def get_or_create_pool(
         if pool is None:
             pool = ActorPool(actor_class, actor_config, size, cluster)
             _POOLS[key] = pool
-        return pool
+    # Grow outside the registry lock so concurrent get_or_create_pool
+    # callers don't serialize on a long ray.get(ping) for new actors.
+    if pool.size < size:
+        pool.grow(size)
+    return pool
 
 
 def shutdown_all_pools() -> None:
