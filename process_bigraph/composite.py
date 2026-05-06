@@ -3093,38 +3093,12 @@ class Composite(Process):
                 # step_paths indexes incrementally instead of re-scanning
                 # the full state via find_instance_paths.
                 structural_events = [] if had_structural_sentinels else None
-                # DEBUG: track cell_mass before/after apply + global_time
-                _dbg_before = None
-                _dbg_update = None
-                _dbg_gt_before = self.state.get('global_time')
-                _dbg_update_gt = combined_update.get('global_time') if isinstance(combined_update, dict) else None
-                try:
-                    _agent_state = self.state.get('agents', {}).get('00') or self.state.get('agents', {}).get('0')
-                    if _agent_state:
-                        _dbg_before = _agent_state.get('listeners', {}).get('mass', {}).get('cell_mass')
-                    _u_agents = combined_update.get('agents', {}) if isinstance(combined_update, dict) else {}
-                    _u_agent = _u_agents.get('00') if isinstance(_u_agents, dict) else None
-                    if not _u_agent and isinstance(_u_agents, dict):
-                        _u_agent = _u_agents.get('0') if _u_agents else None
-                    if _u_agent:
-                        _dbg_update = _u_agent.get('listeners', {}).get('mass', {}).get('cell_mass')
-                except Exception:
-                    pass
                 self.state, merges = self.core.apply(
                     apply_schema,
                     self.state,
                     combined_update,
                     update_has_structural=had_structural_sentinels,
                     events=structural_events)
-                try:
-                    _agents_dict = self.state.get('agents', {})
-                    _agent_state = _agents_dict.get('00') or _agents_dict.get('0')
-                    _dbg_after = _agent_state.get('listeners', {}).get('mass', {}).get('cell_mass') if _agent_state else None
-                    _gt_after = self.state.get('global_time')
-                    if _dbg_update is not None or (_dbg_before is not None and _dbg_before != _dbg_after):
-                        print(f'[APPLY_DEBUG] composite_id={id(self)} state_id={id(self.state)} agents_id={id(_agents_dict)} gt_before={_dbg_gt_before} gt_after={_gt_after} update_gt={_dbg_update_gt} cm: {_dbg_before} +update={_dbg_update} -> {_dbg_after}', flush=True)
-                except Exception:
-                    pass
                 # For structural sentinels, apply mutates the
                 # access-normalized form of ``apply_schema`` in place
                 # (e.g. ``_divide`` pops the mother key and inserts
