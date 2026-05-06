@@ -2174,3 +2174,253 @@ def test_rest_server_initialize_inputs_outputs_update(core):
 
     end = client.post(f"/process/IncreaseProcess/end/{pid}", json={})
     assert end.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# ActorPool tests — pool's actors survive multiple acquire/release cycles,
+# and module-global registry shares pools across callers.
+# ---------------------------------------------------------------------------
+
+def test_session_reconfigures_pool_actors_without_respawn():
+    """Validates the central premise of Session: enter calls reconfigure
+    with per-sim config; exit returns actors to pool without killing.
+
+    Using a stateful actor where __init__ sets a stable ``base_id`` and
+    reconfigure rebinds a ``shard_label`` — we observe both that the
+    actor instance is preserved (same base_id) AND that reconfigure
+    fired (label changed)."""
+    pytest.importorskip("ray")
+    import ray as _ray
+    from process_bigraph.protocols.pool import (
+        get_or_create_pool, shutdown_all_pools,
+    )
+    from process_bigraph.protocols.session import Session
+
+    if not _ray.is_initialized():
+        _ray.init(ignore_reinit_error=True, log_to_driver=False)
+
+    @_ray.remote
+    class StatefulActor:
+        def __init__(self, _config):
+            import uuid
+            self.base_id = str(uuid.uuid4())  # set ONCE — pool actor
+            self.label = None                  # rebound by reconfigure
+
+        def ping(self):
+            return "ready"
+
+        def reconfigure(self, config):
+            # Cheap rebind — no re-run of __init__ work.
+            self.label = config.get("label")
+
+        def info(self):
+            return (self.base_id, self.label)
+
+    try:
+        shutdown_all_pools()
+        pool = get_or_create_pool(StatefulActor, {}, size=2)
+        pool.warm()
+
+        # Session 1: reconfigure with label="A".
+        with Session(pool, n_actors=2,
+                     sim_config={"label": "A"}) as session_a:
+            ids_a, labels_a = zip(*_ray.get([a.info.remote()
+                                              for a in session_a.actors]))
+            assert all(label == "A" for label in labels_a)
+        # After session exit, actors must be back in pool, NOT killed.
+        assert pool.stats() == {"size": 2, "warmed": True,
+                                 "available": 2, "in_use": 0}
+
+        # Session 2: same pool, reconfigure with label="B".
+        with Session(pool, n_actors=2,
+                     sim_config={"label": "B"}) as session_b:
+            ids_b, labels_b = zip(*_ray.get([a.info.remote()
+                                              for a in session_b.actors]))
+
+        # Same actors as session 1 (base_ids preserved).
+        assert set(ids_a) == set(ids_b)
+        # But reconfigure rebound the label.
+        assert all(label == "B" for label in labels_b)
+
+        # Reconfigure can be skipped when sim_config is empty.
+        with Session(pool, n_actors=1) as session_c:
+            assert session_c.actors  # claimed
+            assert session_c.n_actors == 1
+        assert pool.stats()["available"] == 2
+    finally:
+        shutdown_all_pools()
+        if _ray.is_initialized():
+            _ray.shutdown()
+
+
+def test_actor_pool_reuses_actors_across_acquires():
+    """Validates the central premise of ActorPool: one ``warm()`` paid up
+    front; subsequent acquire/release cycles do NOT re-spawn actors.
+
+    Done with a stateful counting actor: the count is set in __init__ to
+    a unique random id, so if a session got a fresh actor instead of a
+    pooled one, the id would change.
+    """
+    pytest.importorskip("ray")
+    import ray as _ray
+    from process_bigraph.protocols.pool import (
+        ActorPool, get_or_create_pool, shutdown_all_pools,
+    )
+
+    if not _ray.is_initialized():
+        _ray.init(ignore_reinit_error=True, log_to_driver=False)
+
+    @_ray.remote
+    class CountingActor:
+        def __init__(self, _config):
+            import uuid
+            self.id = str(uuid.uuid4())
+            self.calls = 0
+
+        def ping(self):
+            return "ready"
+
+        def call(self):
+            self.calls += 1
+            return (self.id, self.calls)
+
+    try:
+        shutdown_all_pools()
+        pool = get_or_create_pool(CountingActor, {"foo": "bar"}, size=2)
+        pool.warm()
+
+        # Session 1
+        actors1 = pool.acquire(2)
+        ids_1, counts_1 = zip(*_ray.get([a.call.remote() for a in actors1]))
+        pool.release(actors1)
+        assert pool.stats()["available"] == 2
+        assert pool.stats()["in_use"] == 0
+        assert all(c == 1 for c in counts_1)
+
+        # Session 2 — same pool, SAME actors (state preserved).
+        actors2 = pool.acquire(2)
+        ids_2, counts_2 = zip(*_ray.get([a.call.remote() for a in actors2]))
+        pool.release(actors2)
+        # Actor ids preserved — pool didn't re-spawn.
+        assert set(ids_1) == set(ids_2)
+        # Counts incremented from where session 1 left off.
+        assert all(c == 2 for c in counts_2)
+
+        # Module-global registry: same args → same pool.
+        pool_again = get_or_create_pool(CountingActor, {"foo": "bar"}, size=2)
+        assert pool_again is pool
+
+        # Different config → different pool.
+        other_pool = get_or_create_pool(CountingActor, {"foo": "baz"}, size=2)
+        assert other_pool is not pool
+    finally:
+        shutdown_all_pools()
+        if _ray.is_initialized():
+            _ray.shutdown()
+
+
+def test_tick_lifecycle_dispatches_managed_processes(core):
+    """Validates the framework hook: a Process whose ``_protocol_runtime``
+    implements ``tick_lifecycle`` gets dispatched via that hook (one call
+    per runtime per tick) instead of the per-process invoke loop, and the
+    combined Defer's projected updates apply correctly.
+    """
+    # A toy "runtime" that batches multiple incrementing processes into a
+    # single tick_lifecycle call. Returns one combined Defer covering all
+    # processes' increments.
+    class BatchingRuntime:
+        def __init__(self):
+            self.tick_count = 0
+            self.last_process_count = 0
+
+        def tick_lifecycle(self, *, processes, composite, global_time,
+                           end_time, force_complete):
+            self.tick_count += 1
+            self.last_process_count = len(processes)
+
+            raw_defers = []
+            next_time = end_time
+            for req in processes:
+                proc = req['instance']
+                interval = float(req['interval']) if req['interval'] else 0.0
+                state = composite._cached_view(req['path'])
+                d = composite.process_update(
+                    req['path'],
+                    {'instance': proc, 'interval': interval},
+                    state, interval, already_clean=True,
+                )
+                raw_defers.append(d)
+                future_time = global_time + interval
+                if future_time < next_time:
+                    next_time = future_time
+
+            # Concatenate per-process Defers into one — each .get() emits
+            # a list of (schema, state) tuples.
+            class _Combined:
+                def __init__(self_inner, ds): self_inner._ds = ds
+                def get(self_inner):
+                    out = []
+                    for d in self_inner._ds:
+                        s = d.get()
+                        if s is None: continue
+                        if not isinstance(s, list): s = [s]
+                        out.extend(s)
+                    return out
+
+            return {
+                'common_path': ('counters',),
+                'next_time': next_time,
+                'process_paths': [r['path'] for r in processes],
+                'defer': _Combined(raw_defers),
+            }
+
+    # Module-global so the toy class can register itself once per test
+    # process. Tests are not concurrent, so the shared singleton is OK.
+    runtime = BatchingRuntime()
+
+    class ManagedIncrementer(Process):
+        config_schema = {'increment': 'integer'}
+
+        def initialize(self, config):
+            # Hook the runtime in — Composite picks this up at
+            # find_instance_paths time.
+            self._protocol_runtime = runtime
+
+        def inputs(self):
+            return {'count': 'integer'}
+
+        def outputs(self):
+            return {'count': 'integer'}
+
+        def update(self, state, interval):
+            return {'count': self.config['increment']}
+
+    core.register_link('ManagedIncrementer', ManagedIncrementer)
+
+    state = {
+        'inc1': {'_type': 'process',
+                  'address': 'local:ManagedIncrementer',
+                  'config': {'increment': 1},
+                  'inputs': {'count': ['counters', 'a']},
+                  'outputs': {'count': ['counters', 'a']},
+                  'interval': 1.0},
+        'inc2': {'_type': 'process',
+                  'address': 'local:ManagedIncrementer',
+                  'config': {'increment': 10},
+                  'inputs': {'count': ['counters', 'b']},
+                  'outputs': {'count': ['counters', 'b']},
+                  'interval': 1.0},
+        'counters': {'a': 0, 'b': 0},
+    }
+
+    sim = Composite({'state': state}, core=core)
+    sim.run(3.0)
+
+    # tick_lifecycle should have fired ONCE per tick (3 ticks at interval=1).
+    # Both processes go through the same runtime → one batched call per tick.
+    assert runtime.tick_count == 3
+    assert runtime.last_process_count == 2
+
+    # Updates applied: a += 1 each tick, b += 10 each tick.
+    assert sim.state['counters']['a'] == 3
+    assert sim.state['counters']['b'] == 30

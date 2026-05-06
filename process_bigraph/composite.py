@@ -1140,6 +1140,33 @@ class Process(Open):
         """
         return {}
 
+    def reconfigure(self, config: Dict[str, Any]) -> None:
+        """Re-bind cheap, per-sim configuration without re-running the
+        expensive parts of ``initialize``.
+
+        Default implementation re-runs ``initialize(config)``, which
+        preserves backwards compatibility but pays the full cold-start
+        cost. Subclasses with expensive state (loaded scientific models,
+        JIT caches, GPU contexts, persistent solver bases) should
+        override to update only the cheap fields, leaving the
+        expensive ones in place.
+
+        Used by ``ActorPool`` + ``Session`` (see
+        ``doc/distributed_lifecycles.md``) to claim a pool actor for
+        one Composite's sim and rebind its per-sim parameters
+        (e.g. cell_keys for a sharded dFBA actor) without paying the
+        cobra-Model load again. Without this hook, every
+        ``with Session(pool, ...)`` would have to spawn fresh actors,
+        defeating the pool's point.
+
+        Args:
+            config: New per-sim configuration. Subclasses decide which
+                keys are cheap to rebind vs. require a full re-init;
+                ones that require full re-init can fall through to
+                ``self.initialize(config)``.
+        """
+        self.initialize(config)
+
 
 def as_step(inputs, outputs, name=None, aliases=None):
     """
