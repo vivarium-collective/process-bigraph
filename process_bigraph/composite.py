@@ -19,6 +19,73 @@ import math
 import time as _time
 import numpy as np
 
+
+# ---------------------------------------------------------------------------
+# Optional invocation tracing
+# ---------------------------------------------------------------------------
+# When the env var ``PROCESS_BIGRAPH_TRACE_FILE`` is set to a writable path,
+# every invocation of ``Composite.process_update`` (i.e. every Process/Step
+# call routed through the framework) writes one JSONL record describing the
+# call: path, class, global_time, interval, an input summary, and an output
+# summary. Useful for diagnosing per-step divergence between two runs by
+# diffing two trace files. No overhead when the env var is unset.
+_TRACE_PATH = os.environ.get('PROCESS_BIGRAPH_TRACE_FILE')
+_TRACE_FH = open(_TRACE_PATH, 'a', buffering=1) if _TRACE_PATH else None
+
+
+def _summarize_value(value, depth=0):
+    """Lightweight, JSON-safe summary of an update fragment.
+
+    Tries to surface the values most useful for diffing two traces:
+    - Scalars and short strings inlined.
+    - Numpy arrays summarized as ``{shape, sum, mean, head}``.
+    - Dicts recursed (capped depth).
+    - Lists/tuples shown as their first few items.
+    """
+    if depth > 3:
+        return f'<{type(value).__name__}>'
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return value
+    if isinstance(value, np.ndarray):
+        try:
+            return {
+                '_np': True,
+                'shape': list(value.shape),
+                'dtype': str(value.dtype),
+                'sum': float(value.sum()) if value.dtype.kind in 'fi' else None,
+                'head': value.flatten()[:5].tolist() if value.size else [],
+            }
+        except Exception:
+            return f'<ndarray shape={value.shape}>'
+    if isinstance(value, dict):
+        return {k: _summarize_value(v, depth + 1) for k, v in list(value.items())[:32]}
+    if isinstance(value, (list, tuple)):
+        return [_summarize_value(v, depth + 1) for v in value[:10]]
+    return f'<{type(value).__name__}>'
+
+
+def _trace_invoke(path, instance, state, interval, update):
+    """Append one JSONL record describing a process/step invocation."""
+    if _TRACE_FH is None:
+        return
+    try:
+        gt = state.get('global_time') if isinstance(state, dict) else None
+        rec = {
+            'path': list(path) if isinstance(path, tuple) else path,
+            'cls': type(instance).__name__,
+            'gt': gt,
+            'interval': interval,
+            'input': _summarize_value(state),
+            'output': _summarize_value(update),
+        }
+        _TRACE_FH.write(json.dumps(rec, default=str) + '\n')
+    except Exception as exc:
+        # Tracing must never break a sim. Log a single line and continue.
+        try:
+            _TRACE_FH.write(json.dumps({'trace_error': str(exc)}) + '\n')
+        except Exception:
+            pass
+
 from typing import (
     Any, Dict, List, Optional, Set, Tuple, Union,
     Mapping, MutableMapping, Sequence,
@@ -1473,6 +1540,107 @@ class Composite(Process):
             if flush is not None:
                 flush()
 
+    def _partition_processes_by_runtime(self):
+        """Inspect every process_path and split into:
+
+        - ``managed_paths``: set of process paths whose ``_protocol_runtime``
+          implements ``tick_lifecycle``. These are skipped in the per-process
+          invoke loop and instead dispatched once-per-runtime via
+          ``_run_tick_lifecycle``.
+        - ``runtime_groups``: list of ``(runtime, [(path, process), ...])``,
+          one entry per distinct runtime that opted into tick_lifecycle.
+
+        Runtimes that only implement the older ``flush_pending`` hook (no
+        ``tick_lifecycle``) keep going through the per-process loop —
+        their batching of remote dispatch is unchanged.
+        """
+        managed: set = set()
+        groups: dict = {}
+        for path in self.process_paths:
+            process = get_path(self.state, path)
+            instance = process.get('instance') if isinstance(process, dict) else None
+            if instance is None:
+                continue
+            rt = getattr(instance, '_protocol_runtime', None)
+            if rt is None or not hasattr(rt, 'tick_lifecycle'):
+                continue
+            managed.add(path)
+            entry = groups.setdefault(id(rt), (rt, []))
+            entry[1].append((path, process))
+        return managed, list(groups.values())
+
+    def _run_tick_lifecycle(
+            self,
+            runtime,
+            group,
+            end_time: float,
+            full_step: float,
+            force_complete: bool,
+    ) -> float:
+        """Delegate the full invoke+apply lifecycle for a runtime's managed
+        processes to its ``tick_lifecycle`` method. Returns the updated
+        ``full_step`` (smallest interval across all groups + plain procs).
+
+        The runtime returns one combined Defer covering all its processes;
+        we stash that under a ``common_path`` key in ``self.front`` so the
+        apply pass walks the schema once for the entire batch instead of
+        N times (one per process).
+        """
+        # Build the list of ProcessTickRequest dicts the runtime expects.
+        requests = [
+            {
+                'path': path,
+                'instance': process['instance'],
+                'interval': process.get('interval'),
+            }
+            for path, process in group
+        ]
+        # Pass composite (self) so the runtime can use whatever it needs
+        # — state (composite.state), schema (composite.schema), core
+        # (composite.core), and projection helpers (composite._cached_project)
+        # — without us prematurely committing to a narrower contract.
+        result = runtime.tick_lifecycle(
+            processes=requests,
+            composite=self,
+            global_time=self.state['global_time'],
+            end_time=end_time,
+            force_complete=force_complete,
+        )
+        if result is None:
+            # Runtime declined — caller should fall back to per-process
+            # path. We don't currently support partial fallback in the
+            # same tick; runtimes that may decline should not implement
+            # tick_lifecycle.
+            return full_step
+
+        next_time = result['next_time']
+        common_path = result['common_path']
+        process_paths = result['process_paths']
+        defer = result['defer']
+
+        interval = next_time - self.state['global_time']
+        if interval < full_step:
+            full_step = interval
+
+        # Update each process's front entry with the next scheduled time —
+        # other Composite logic (expire_process_paths, scheduling) reads
+        # these per-path. Keep them in sync with the runtime's batch.
+        for p in process_paths:
+            if p not in self.front:
+                self.front[p] = empty_front(self.state['global_time'])
+            self.front[p]['time'] = next_time
+            # Mark per-process update slot empty — the actual delta is
+            # carried by the combined defer at common_path below.
+            self.front[p]['update'] = {}
+
+        # Place the single combined Defer at the common path. apply_updates
+        # walks the schema once for this whole tree instead of N times.
+        if common_path not in self.front:
+            self.front[common_path] = empty_front(self.state['global_time'])
+        self.front[common_path]['time'] = next_time
+        self.front[common_path]['update'] = defer
+        return full_step
+
     def find_instance_paths(self, state: Dict[str, Any]) -> None:
         """
         Identify all Step and Process instances in the current state.
@@ -2399,15 +2567,35 @@ class Composite(Process):
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
 
-            # Run each process and compute the minimum time step that advances simulation
+            # Partition processes: ones whose runtime opts into batched
+            # tick_lifecycle vs the regular per-process path. The
+            # runtime-managed group(s) get one method call per runtime,
+            # which (a) skips N _cached_view + N invoke calls in this
+            # tick's invoke pass, and (b) returns one combined Defer that
+            # apply_updates walks once instead of N times.
+            managed_paths, runtime_groups = self._partition_processes_by_runtime()
+
+            # Run each plain (non-runtime-managed) process and compute the
+            # minimum time step that advances simulation.
             if self._parallel_processes and len(self.process_paths) > 1:
                 full_step = self._run_processes_layer_parallel(
-                    end_time, full_step, force_complete)
+                    end_time, full_step, force_complete,
+                    skip_paths=managed_paths)
             else:
                 for path in self.process_paths:
+                    if path in managed_paths:
+                        continue
                     process = get_path(self.state, path)
                     full_step = self.run_process(
                         path, process, end_time, full_step, force_complete)
+
+            # Now dispatch each runtime group via its tick_lifecycle hook.
+            # Each call returns one combined Defer (placed at a common-path
+            # slot in self.front) so the downstream apply_updates walks
+            # the schema once for the entire batch.
+            for rt, group in runtime_groups:
+                full_step = self._run_tick_lifecycle(
+                    rt, group, end_time, full_step, force_complete)
 
             if full_step == math.inf:
                 # No process ran — jump to the next scheduled process time
@@ -2543,6 +2731,7 @@ class Composite(Process):
             end_time: float,
             full_step: float,
             force_complete: bool,
+            skip_paths: set = None,
     ) -> float:
         """Parallel analog of the per-tick `for path in self.process_paths`
         loop. Splits run_process into a schedule pass (sequential, cheap)
@@ -2560,10 +2749,17 @@ class Composite(Process):
 
         Not safe when processes share mutable state or hold global locks.
         Like `parallel_steps`, this is opt-in for that reason.
+
+        ``skip_paths`` (set of paths) is consulted in the schedule pass
+        and any matching process is skipped — used by ``run()`` to exclude
+        runtime-managed processes (those handled via ``tick_lifecycle``).
         """
+        skip_paths = skip_paths or set()
         # ---- schedule pass: decide which processes are due now ---------- #
         due = []  # (path, process_dict, state, future_time, process_interval)
         for path in self.process_paths:
+            if path in skip_paths:
+                continue
             process = get_path(self.state, path)
             if path not in self.front:
                 self.front[path] = empty_front(self.state['global_time'])
@@ -2662,6 +2858,15 @@ class Composite(Process):
         t0 = _time.monotonic()
         update = process['instance'].invoke(clean_state, interval)
         self.process_update_time += _time.monotonic() - t0
+        if _TRACE_FH is not None:
+            # Resolve SyncUpdate / Defer to plain dict for the trace; the
+            # invoke return is opaque (SyncUpdate wraps a dict). We only need
+            # a snapshot for the trace, so pull .get() if available.
+            try:
+                resolved = update.get() if hasattr(update, 'get') else update
+            except Exception:
+                resolved = '<unresolvable>'
+            _trace_invoke(path, process['instance'], clean_state, interval, resolved)
         # This nested function projects the update into the global state at the given path
         def defer_project(update_results: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
             schema, state, process_path = args
