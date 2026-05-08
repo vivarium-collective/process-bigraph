@@ -2015,6 +2015,7 @@ def test_parallel_processes_single_process_path(core):
     assert abs(sim.state["level"] - 3.375) < 1e-12
 
 
+@pytest.mark.slow
 def test_ray_process_pool_shared_across_clients(core):
     """Two RayProcess clients with the same (class, config) must share one
     actor pool, and both must see correct results from the underlying
@@ -2051,6 +2052,7 @@ def test_ray_process_pool_shared_across_clients(core):
             _ray.shutdown()
 
 
+@pytest.mark.slow
 def test_ray_process_distinct_configs_get_separate_pools(core):
     """Different (class, config) pairs must allocate independent pools so
     state doesn't leak between configurations."""
@@ -2082,6 +2084,7 @@ def test_ray_process_distinct_configs_get_separate_pools(core):
             _ray.shutdown()
 
 
+@pytest.mark.slow
 def test_ray_protocol_address_batches_per_tick(core):
     """``address: "ray:Foo"`` keeps the per-process node visible in the
     state graph but batches per-tick RPCs through one shared shard pool.
@@ -2142,6 +2145,7 @@ def test_ray_protocol_address_batches_per_tick(core):
             _ray.shutdown()
 
 
+@pytest.mark.slow
 def test_rest_server_initialize_inputs_outputs_update(core):
     """Smoke-test the in-process REST server (no socket): initialize a process,
     query its ports, run an update, end it. Mirrors the round-trip that
@@ -2181,6 +2185,7 @@ def test_rest_server_initialize_inputs_outputs_update(core):
 # and module-global registry shares pools across callers.
 # ---------------------------------------------------------------------------
 
+@pytest.mark.slow
 def test_session_reconfigures_pool_actors_without_respawn():
     """Validates the central premise of Session: enter calls reconfigure
     with per-sim config; exit returns actors to pool without killing.
@@ -2253,6 +2258,7 @@ def test_session_reconfigures_pool_actors_without_respawn():
             _ray.shutdown()
 
 
+@pytest.mark.slow
 def test_actor_pool_reuses_actors_across_acquires():
     """Validates the central premise of ActorPool: one ``warm()`` paid up
     front; subsequent acquire/release cycles do NOT re-spawn actors.
@@ -2319,6 +2325,7 @@ def test_actor_pool_reuses_actors_across_acquires():
             _ray.shutdown()
 
 
+@pytest.mark.slow
 def test_actor_pool_grows_on_acquire_request_larger_than_size():
     """When acquire(n) asks for more actors than the pool currently has,
     the pool grows to fit. Existing pooled actors keep their state —

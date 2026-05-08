@@ -62,6 +62,9 @@ dev = [
     "boto3>=1.28",
 ]
 
+#[tool.uv.sources]
+#bigraph-schema = { path = "../bigraph-schema", editable = true }
+
 [tool.setuptools]
 packages = [
     "process_bigraph",
