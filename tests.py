@@ -1578,10 +1578,12 @@ def test_reaction_step(core):
         config={'rules': [b3], 'mode': 'deterministic'},
         core=core)
 
-    # Alice has two non-`_`-prefixed fields (mass, height) so the
-    # Site `props` captures via the surplus path, binding them as a dict.
-    # With only one field, _match_dict's 1-to-1 path captures the bare
-    # value — see test_fire_rule_b3 in bigraph-schema for that case.
+    # Alice's `mass` and `height` fields are captured by the redex
+    # Site `props`. Per Milner's bigraph semantics, a site is a hole
+    # in the place graph; when filled, its captured region's
+    # children become siblings at the slot position with their
+    # original identifiers preserved (rather than nesting under the
+    # site name `props`).
     state = {
         'state': {
             'bldg': {
@@ -1599,8 +1601,11 @@ def test_reaction_step(core):
     assert 'alice' not in bldg, 'alice should no longer be a sibling'
     lab = bldg['lab']
     assert 'alice' in lab, 'alice should be inside lab'
-    assert lab['alice']['props']['mass'] == 70.0
-    assert lab['alice']['props']['height'] == 1.7
+    # mass and height splice into alice as direct fields
+    assert lab['alice']['mass'] == 70.0
+    assert lab['alice']['height'] == 1.7
+    # the room's pc spliced too, with its original key preserved
+    assert 'pc' in lab and lab['pc']['_control'] == 'computer'
 
     # Stochastic mode
     step_stoch = ReactionStep(
@@ -1655,8 +1660,9 @@ def test_reaction_step_in_composite(core):
     assert 'alice' not in building_after
     lab = building_after['lab']
     assert 'alice' in lab
-    assert lab['alice']['props']['mass'] == 70.0
-    assert lab['alice']['props']['height'] == 1.7
+    # mass/height splice as direct alice fields (Milner site semantics)
+    assert lab['alice']['mass'] == 70.0
+    assert lab['alice']['height'] == 1.7
 
 
 def test_port_outputs_propagate_to_store_schema(core):
