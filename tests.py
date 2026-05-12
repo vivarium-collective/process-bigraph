@@ -27,6 +27,7 @@ from process_bigraph.emitter import (
     SQLiteEmitter,
     save_simulation_metadata, mark_simulation_finished,
     list_simulations, load_history, load_simulation_metadata,
+    load_emit_schema,
 )
 from process_bigraph.protocols.rest import rest_get, rest_post
 from process_bigraph.types import ProcessLink, StepLink
@@ -2144,6 +2145,39 @@ def test_partial_process_link_update(core):
     assert after['config'] == original_config
     assert after['inputs'] == original_inputs
     assert after['outputs'] == original_outputs
+
+
+def test_sqlite_emitter_persists_schema(core, tmp_path):
+    '''emit_schema must be round-tripped to / from the simulations table.'''
+    emit = {'level': 'float', 'time': 'float'}
+    e = SQLiteEmitter({
+        'emit': emit,
+        'file_path': str(tmp_path),
+        'db_file': 'history.db',
+        'simulation_id': 'sim-schema-1',
+    }, core=core)
+    e.close()
+    db = str(tmp_path / 'history.db')
+    schema = load_emit_schema(db, 'sim-schema-1')
+    assert schema == emit
+
+
+def test_load_emit_schema_returns_empty_for_missing_run(core, tmp_path):
+    '''load_emit_schema returns {} for an unknown simulation_id.'''
+    SQLiteEmitter({
+        'emit': {'level': 'float'},
+        'file_path': str(tmp_path),
+        'db_file': 'history.db',
+        'simulation_id': 'sim-schema-2',
+    }, core=core).close()
+    db = str(tmp_path / 'history.db')
+    assert load_emit_schema(db, 'no-such-sim') == {}
+
+
+def test_load_emit_schema_returns_empty_when_db_missing(tmp_path):
+    '''load_emit_schema returns {} when the db file does not exist.'''
+    db = str(tmp_path / 'never-created.db')
+    assert load_emit_schema(db, 'sim-1') == {}
 
 
 def make_test_core():

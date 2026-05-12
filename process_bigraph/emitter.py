@@ -324,7 +324,8 @@ def _init_history_db(conn):
             completed_at TEXT,
             elapsed_seconds REAL,
             composite_config TEXT,
-            metadata TEXT
+            metadata TEXT,
+            emit_schema TEXT
         )
     ''')
     # Migrate older dbs that predate completed_at / elapsed_seconds.
@@ -333,6 +334,8 @@ def _init_history_db(conn):
         conn.execute('ALTER TABLE simulations ADD COLUMN completed_at TEXT')
     if 'elapsed_seconds' not in existing:
         conn.execute('ALTER TABLE simulations ADD COLUMN elapsed_seconds REAL')
+    if 'emit_schema' not in existing:
+        conn.execute('ALTER TABLE simulations ADD COLUMN emit_schema TEXT')
 
 
 def save_simulation_metadata(db_path, simulation_id, composite_config=None,
@@ -363,6 +366,33 @@ def save_simulation_metadata(db_path, simulation_id, composite_config=None,
                 json.dumps(metadata, default=_json_default) if metadata is not None else None,
             ),
         )
+    finally:
+        conn.close()
+
+
+def load_emit_schema(db_path, simulation_id) -> dict:
+    '''Return the recorded emit schema for one simulation, or {} if missing.
+
+    The schema is whatever was passed as the ``emit`` config to SQLiteEmitter:
+    a mapping of port name -> bigraph-schema type string. Returns an empty
+    dict when the db file doesn't exist, or when no row matches the
+    simulation_id, or when the emit_schema column is NULL.
+    '''
+    if not os.path.exists(db_path):
+        return {}
+    conn = sqlite3.connect(db_path, isolation_level=None)
+    try:
+        _init_history_db(conn)  # ensures column exists for legacy DBs
+        row = conn.execute(
+            'SELECT emit_schema FROM simulations WHERE simulation_id = ?',
+            (simulation_id,),
+        ).fetchone()
+        if not row or not row[0]:
+            return {}
+        try:
+            return json.loads(row[0])
+        except (json.JSONDecodeError, TypeError):
+            return {}
     finally:
         conn.close()
 
@@ -555,6 +585,19 @@ class SQLiteEmitter(Emitter):
 
         self._conn = sqlite3.connect(self.db_path, isolation_level=None)
         _init_history_db(self._conn)
+
+        # Persist emit_schema for this simulation_id (idempotent upsert).
+        emit_schema = config.get('emit') or {}
+        if emit_schema:
+            now_iso = datetime.datetime.now(datetime.timezone.utc).strftime('%Y-%m-%dT%H:%M:%SZ')
+            self._conn.execute(
+                'INSERT INTO simulations '
+                '(simulation_id, started_at, emit_schema) '
+                'VALUES (?, ?, ?) '
+                'ON CONFLICT(simulation_id) DO UPDATE SET '
+                '  emit_schema = excluded.emit_schema',
+                (self.simulation_id, now_iso, json.dumps(emit_schema, default=_json_default)),
+            )
 
         name = config.get('name')
         if name is not None:
