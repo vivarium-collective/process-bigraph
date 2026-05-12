@@ -1665,6 +1665,251 @@ def test_reaction_step_in_composite(core):
     assert lab['alice']['height'] == 1.7
 
 
+def _enter_room_rule(rate=None):
+    """A B3-style rule: any free agent enters any room. Reused
+    across the BigraphicalReactiveSystem tests."""
+    from bigraph_schema.schema import Site
+    from bigraph_schema.assembly import ReactionRule
+
+    return ReactionRule(
+        redex={
+            'a': {'_control': 'agent', 'props': Site()},
+            'r': {'_control': 'room', 'contents': Site()}},
+        reactum={
+            'r': {'_control': 'room',
+                  'contents': Site(),
+                  'a': {'_control': 'agent', 'props': Site()}}},
+        instantiation={'props': 'props', 'contents': 'contents'},
+        rate=rate,
+        label='enter_room')
+
+
+def _building_with_agents(n_agents):
+    """Building containing `n_agents` free agents and one room.
+    Each agent has a distinct identifier so firings consume them
+    one at a time."""
+    bldg = {'_control': 'building',
+            'lab': {'_control': 'room',
+                    'pc': {'_control': 'computer'}}}
+    for i in range(n_agents):
+        bldg[f'agent_{i}'] = {
+            '_control': 'agent', 'mass': float(i + 1)}
+    return bldg
+
+
+def test_bigraphical_reactive_system_deterministic(core):
+    """BigraphicalReactiveSystem in deterministic mode fires one
+    rule match per tick (max_per_tick default = 1) and returns the
+    rewritten subtree. Unlike ReactionStep, it's an interval-driven
+    Process: `update` takes an explicit `interval` argument."""
+    from process_bigraph.processes.bigraphical_reactive_system import (
+        BigraphicalReactiveSystem)
+
+    rule = _enter_room_rule()
+    proc = BigraphicalReactiveSystem(
+        config={'rules': [rule], 'mode': 'deterministic'},
+        core=core)
+
+    state = {'state': {'bldg': _building_with_agents(3)}}
+    update = proc.update(state, interval=1.0)
+
+    assert update and 'state' in update
+    bldg = update['state']['bldg']
+    lab = bldg['lab']
+    # Exactly one agent should have moved into the lab.
+    moved = [k for k in lab if k.startswith('agent_')]
+    remaining = [k for k in bldg if k.startswith('agent_')]
+    assert len(moved) == 1
+    assert len(remaining) == 2
+    # And the engine recorded one firing.
+    assert len(proc.fired_log) == 1
+    assert proc.fired_log[0][1] == 'enter_room'
+
+
+def test_bigraphical_reactive_system_no_match_returns_empty(core):
+    """When no rule matches, the engine returns an empty update —
+    no `state` key — so the composite doesn't overwrite the store
+    with the unchanged subtree."""
+    from process_bigraph.processes.bigraphical_reactive_system import (
+        BigraphicalReactiveSystem)
+
+    rule = _enter_room_rule()
+    proc = BigraphicalReactiveSystem(
+        config={'rules': [rule], 'mode': 'deterministic'},
+        core=core)
+
+    # A building with no agents — the redex requires both an agent
+    # and a room, so nothing matches.
+    state = {'state': {'bldg': {
+        '_control': 'building',
+        'lab': {'_control': 'room',
+                'pc': {'_control': 'computer'}}}}}
+    update = proc.update(state, interval=1.0)
+    assert update == {}
+    assert proc.fired_log == []
+
+
+def test_bigraphical_reactive_system_max_per_tick(core):
+    """`max_per_tick > 1` in non-Gillespie mode lets the engine
+    fire multiple rule matches per tick in a single deterministic
+    sweep, capped by the configured value."""
+    from process_bigraph.processes.bigraphical_reactive_system import (
+        BigraphicalReactiveSystem)
+
+    rule = _enter_room_rule()
+    proc = BigraphicalReactiveSystem(
+        config={
+            'rules': [rule],
+            'mode': 'deterministic',
+            'max_per_tick': 2},
+        core=core)
+
+    state = {'state': {'bldg': _building_with_agents(5)}}
+    update = proc.update(state, interval=1.0)
+
+    bldg = update['state']['bldg']
+    moved = [k for k in bldg['lab'] if k.startswith('agent_')]
+    remaining = [k for k in bldg if k.startswith('agent_')]
+    assert len(moved) == 2
+    assert len(remaining) == 3
+    assert len(proc.fired_log) == 2
+
+
+def test_bigraphical_reactive_system_stochastic(core):
+    """Stochastic mode picks one match per tick weighted by rate.
+    With a single rule and multiple matches, this is uniform over
+    matches — but the path through `_pick_candidate` differs from
+    deterministic and uses the seeded RNG."""
+    from process_bigraph.processes.bigraphical_reactive_system import (
+        BigraphicalReactiveSystem)
+
+    rule = _enter_room_rule(rate=1.0)
+    proc = BigraphicalReactiveSystem(
+        config={
+            'rules': [rule],
+            'mode': 'stochastic',
+            'seed': 42},
+        core=core)
+
+    state = {'state': {'bldg': _building_with_agents(4)}}
+    update = proc.update(state, interval=1.0)
+
+    bldg = update['state']['bldg']
+    moved = [k for k in bldg['lab'] if k.startswith('agent_')]
+    remaining = [k for k in bldg if k.startswith('agent_')]
+    assert len(moved) == 1
+    assert len(remaining) == 3
+    assert len(proc.fired_log) == 1
+
+    # Re-seeded runs are reproducible.
+    proc2 = BigraphicalReactiveSystem(
+        config={'rules': [rule], 'mode': 'stochastic', 'seed': 42},
+        core=core)
+    update2 = proc2.update(state, interval=1.0)
+    moved2 = [
+        k for k in update2['state']['bldg']['lab']
+        if k.startswith('agent_')]
+    assert moved == moved2
+
+
+def test_bigraphical_reactive_system_gillespie(core):
+    """Gillespie SSA τ-leap mode fires zero or more rules per
+    tick, sampling exponential waits with parameter
+    ``λ = Σ k_i·|m_i|`` until ``t >= interval``.
+
+    With a high rate and a long interval, the engine should
+    exhaust all matches in a single tick: every agent ends up in
+    the room."""
+    from process_bigraph.processes.bigraphical_reactive_system import (
+        BigraphicalReactiveSystem)
+
+    rule = _enter_room_rule(rate=100.0)
+    proc = BigraphicalReactiveSystem(
+        config={
+            'rules': [rule],
+            'mode': 'gillespie',
+            'seed': 7},
+        core=core)
+
+    state = {'state': {'bldg': _building_with_agents(5)}}
+    update = proc.update(state, interval=10.0)
+
+    bldg = update['state']['bldg']
+    moved = [k for k in bldg['lab'] if k.startswith('agent_')]
+    remaining = [k for k in bldg if k.startswith('agent_')]
+    assert len(moved) == 5
+    assert len(remaining) == 0
+    assert len(proc.fired_log) == 5
+    # Gillespie writes the per-firing simulation time, not the
+    # tick interval. Times should be monotonic non-decreasing and
+    # not exceed `interval`.
+    times = [t for t, _, _ in proc.fired_log]
+    assert all(t <= 10.0 for t in times)
+    assert times == sorted(times)
+
+
+def test_bigraphical_reactive_system_gillespie_max_per_tick(core):
+    """`max_per_tick` caps Gillespie firings even when the
+    interval would otherwise admit more. With a high rate, a
+    long interval, and a cap of 2, only 2 firings happen."""
+    from process_bigraph.processes.bigraphical_reactive_system import (
+        BigraphicalReactiveSystem)
+
+    rule = _enter_room_rule(rate=100.0)
+    proc = BigraphicalReactiveSystem(
+        config={
+            'rules': [rule],
+            'mode': 'gillespie',
+            'seed': 1,
+            'max_per_tick': 2},
+        core=core)
+
+    state = {'state': {'bldg': _building_with_agents(5)}}
+    update = proc.update(state, interval=10.0)
+
+    bldg = update['state']['bldg']
+    moved = [k for k in bldg['lab'] if k.startswith('agent_')]
+    assert len(moved) == 2
+    assert len(proc.fired_log) == 2
+
+
+def test_bigraphical_reactive_system_in_composite(core):
+    """BigraphicalReactiveSystem wired through a Composite. Each
+    tick advances `global_time` by the configured `interval` and
+    fires one deterministic rule match against the building
+    store."""
+    rule = _enter_room_rule()
+
+    spec = {
+        'schema': {'building': 'tree[node]'},
+        'state': {
+            'building': _building_with_agents(2),
+            'brs': {
+                '_type': 'process',
+                'address': (
+                    'local:!process_bigraph.processes'
+                    '.bigraphical_reactive_system'
+                    '.BigraphicalReactiveSystem'),
+                'config': {'rules': [rule], 'mode': 'deterministic'},
+                'inputs': {'state': ['building']},
+                'outputs': {'state': ['building']},
+                'interval': 1.0}}}
+
+    composite = Composite(spec, core=core)
+    before = composite.state['building']
+    assert sum(1 for k in before if k.startswith('agent_')) == 2
+
+    # Two ticks → two agents moved into the room.
+    composite.run(2.0)
+
+    after = composite.state['building']
+    lab = after['lab']
+    moved = [k for k in lab if k.startswith('agent_')]
+    remaining = [k for k in after if k.startswith('agent_')]
+    assert len(moved) == 2
+    assert len(remaining) == 0
+
+
 def test_port_outputs_propagate_to_store_schema(core):
     """A process declaring ``_outputs: array[float[64]]`` should cause the
     wired target store to have an Array schema after Composite init, so
@@ -1948,6 +2193,14 @@ if __name__ == '__main__':
 
     test_reaction_step(core)
     test_reaction_step_in_composite(core)
+
+    test_bigraphical_reactive_system_deterministic(core)
+    test_bigraphical_reactive_system_no_match_returns_empty(core)
+    test_bigraphical_reactive_system_max_per_tick(core)
+    test_bigraphical_reactive_system_stochastic(core)
+    test_bigraphical_reactive_system_gillespie(core)
+    test_bigraphical_reactive_system_gillespie_max_per_tick(core)
+    test_bigraphical_reactive_system_in_composite(core)
 
 
 

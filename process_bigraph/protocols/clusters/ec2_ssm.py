@@ -73,6 +73,31 @@ def _require_boto3():
         ) from e
 
 
+def _instance_arch(instance_type: str) -> str:
+    """Returns 'arm64' for AWS Graviton instance types, 'x86_64' otherwise.
+
+    Graviton families end with 'g' before the dot (e.g. c7g.xlarge,
+    m6g.large, r7gd.metal, t4g.medium). Older 'a1' family is also ARM
+    but that's pre-Graviton and rarely used now.
+    """
+    family = instance_type.split(".", 1)[0]
+    # Strip optional storage suffix like 'd' (e.g. r7gd → r7g) and any
+    # trailing 'n'/'en' network qualifier (e.g. c6gn → c6g).
+    base = family.rstrip("dn") if family.endswith(("dn", "n", "d")) else family
+    # ARM families: <letter><digit>g[<letter>...]. Test the post-digit char.
+    # Skip leading letters, then digits, then check next char.
+    i = 0
+    while i < len(base) and base[i].isalpha():
+        i += 1
+    while i < len(base) and base[i].isdigit():
+        i += 1
+    if i < len(base) and base[i] == "g":
+        return "arm64"
+    if family == "a1":
+        return "arm64"
+    return "x86_64"
+
+
 # ---------------------------------------------------------------------------
 # IMDSv2 — discover network setup from the submit node we're running on.
 # When this module runs *outside* an EC2 instance, callers should pass
@@ -426,9 +451,30 @@ class EC2SSMRayCluster:
 
         ami_id = self._baked_ami_id
         if not ami_id:
-            ami_id = self._ssm.get_parameter(
-                Name="/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id",
-            )["Parameter"]["Value"]
+            # Auto-detect architecture from instance type so the SSM
+            # parameter we pick matches what we're about to launch.
+            # AWS EC2 ARM-family prefixes (Graviton 1/2/3) all end in 'g'
+            # followed by '.' (e.g. c7g.xlarge, m6g.large, t4g.medium,
+            # r7g.metal). Everything else is x86_64.
+            #
+            # Without this, launching c7g/m7g/etc. against the default
+            # x86 AMI fails immediately with:
+            #   InvalidParameterValue: architecture 'arm64' of the
+            #   specified instance type does not match the architecture
+            #   'x86_64' of the specified AMI.
+            head_arch = _instance_arch(self._head_type)
+            worker_arch = _instance_arch(self._worker_type)
+            if head_arch != worker_arch:
+                raise ValueError(
+                    f"Mixed-arch cluster not supported: head={self._head_type} "
+                    f"({head_arch}) vs worker={self._worker_type} ({worker_arch}). "
+                    f"Pass baked_ami_id explicitly if you really want this.")
+            if head_arch == "arm64":
+                ssm_param = "/aws/service/ecs/optimized-ami/amazon-linux-2/arm64/recommended/image_id"
+            else:
+                ssm_param = "/aws/service/ecs/optimized-ami/amazon-linux-2/recommended/image_id"
+            ami_id = self._ssm.get_parameter(Name=ssm_param)["Parameter"]["Value"]
+            print(f"→ arch={head_arch}  ami_ssm_param={ssm_param}")
         print(f"→ ami={ami_id}")
 
         head_id, worker_ids = find_existing_cluster(
