@@ -86,6 +86,7 @@ def _trace_invoke(path, instance, state, interval, update):
         except Exception:
             pass
 
+from dataclasses import dataclass, field
 from typing import (
     Any, Dict, List, Optional, Set, Tuple, Union,
     Mapping, MutableMapping, Sequence,
@@ -100,6 +101,64 @@ from bigraph_schema import (
 
 from bigraph_schema.protocols import local_lookup_module
 from bigraph_schema.methods.events import NodeAdded, NodeRemoved, Divided
+
+
+# =========================
+# Timing summary (per run)
+# =========================
+
+@dataclass
+class TimingSummary:
+    """Wall-clock breakdown of one ``Composite.run()`` call.
+
+    ``process_time`` is the sum of all process ``invoke()`` durations
+    accumulated during the run. ``framework_time`` is the remainder of the
+    total wall-clock time after subtracting ``process_time`` (i.e. view,
+    project, apply, realize, scheduling). ``per_process`` maps each
+    process path to its cumulative ``invoke()`` time over the run.
+
+    Processes dispatched through a runtime's ``tick_lifecycle`` batch hook
+    (e.g. shard managers, EC2/Ray runtimes) are attributed under a single
+    synthetic key ``("<batched>", "<RuntimeClassName>")`` because the
+    framework hands the whole batch to the runtime in a single call and
+    does not see per-process invoke times.
+    """
+
+    total: float
+    process_time: float
+    framework_time: float
+    per_process: Dict[Tuple[Any, ...], float] = field(default_factory=dict)
+
+    def fraction_in_processes(self) -> float:
+        """Share of total time spent inside process ``invoke()`` calls."""
+        return self.process_time / self.total if self.total > 0 else 0.0
+
+    def top(self, n: int = 5) -> List[Tuple[Tuple[Any, ...], float]]:
+        """Return the ``n`` slowest processes as ``(path, seconds)`` tuples."""
+        return sorted(
+            self.per_process.items(), key=lambda kv: kv[1], reverse=True
+        )[:n]
+
+    def format(self, top_n: int = 10) -> str:
+        """Multi-line, human-readable summary suitable for printing."""
+        if self.total <= 0:
+            return "TimingSummary(run() not yet called)"
+        lines = [
+            f"Composite run: total {self.total:.3f}s "
+            f"(process {self.process_time:.3f}s = "
+            f"{self.fraction_in_processes() * 100:.0f}%, "
+            f"framework {self.framework_time:.3f}s)"]
+        if self.per_process:
+            lines.append("")
+            lines.append(f"Top {min(top_n, len(self.per_process))} processes by invoke time:")
+            for path, seconds in self.top(top_n):
+                share = seconds / self.process_time if self.process_time > 0 else 0.0
+                path_str = "/".join(str(p) for p in path) if isinstance(path, tuple) else str(path)
+                lines.append(f"  {seconds:7.3f}s  {share * 100:5.1f}%  {path_str}")
+        return "\n".join(lines)
+
+    def __str__(self) -> str:
+        return self.format()
 
 
 # =========================
@@ -1523,6 +1582,10 @@ class Composite(Process):
         # Timing accumulators for profiling (reset on each run() call)
         self.process_update_time: float = 0.0
         self.framework_time: float = 0.0
+        # Per-process invoke() time, keyed by path. Batched-runtime processes
+        # share a single ``("<batched>", "<RuntimeClass>")`` key.
+        self._per_process_time: Dict[Tuple[Any, ...], float] = {}
+        self._last_run_total_time: float = 0.0
 
         # Precompile view/project operations for fast runtime access.
         self._compiled_links = {}
@@ -1626,6 +1689,7 @@ class Composite(Process):
         # — state (composite.state), schema (composite.schema), core
         # (composite.core), and projection helpers (composite._cached_project)
         # — without us prematurely committing to a narrower contract.
+        tick_t0 = _time.monotonic()
         result = runtime.tick_lifecycle(
             processes=requests,
             composite=self,
@@ -1633,6 +1697,15 @@ class Composite(Process):
             end_time=end_time,
             force_complete=force_complete,
         )
+        # Attribute the whole batch's wall time under a synthetic key so
+        # timing_summary() reports it without pretending per-process
+        # attribution we don't have. process_update_time receives the same
+        # delta so framework_time = total - process_time stays consistent.
+        tick_dt = _time.monotonic() - tick_t0
+        self.process_update_time += tick_dt
+        batch_key = ('<batched>', type(runtime).__name__)
+        self._per_process_time[batch_key] = (
+            self._per_process_time.get(batch_key, 0.0) + tick_dt)
         if result is None:
             # Runtime declined — caller should fall back to per-process
             # path. We don't currently support partial fallback in the
@@ -2597,6 +2670,7 @@ class Composite(Process):
         """
         self.process_update_time = 0.0
         self.framework_time = 0.0
+        self._per_process_time = {}
         run_start = _time.monotonic()
 
         end_time = self.state['global_time'] + interval
@@ -2685,8 +2759,38 @@ class Composite(Process):
 
         total = _time.monotonic() - run_start
         # Framework time = total minus process update time
-        # (the process_update_time was accumulated in process_update)
+        # (the process_update_time was accumulated in process_update and,
+        # for batched-runtime processes, in _run_tick_lifecycle)
         self.framework_time = total - self.process_update_time
+        self._last_run_total_time = total
+
+    def timing_summary(self) -> TimingSummary:
+        """Return a ``TimingSummary`` describing the most recent ``run()`` call.
+
+        The summary holds the aggregate process/framework split that has been
+        available as ``self.process_update_time`` / ``self.framework_time``
+        since v1.4, plus per-process attribution keyed by path. Each path's
+        time is the cumulative ``invoke()`` duration across every tick in
+        the run.
+
+        Processes dispatched through a runtime's ``tick_lifecycle`` (e.g.
+        sharded Ray runtimes) are reported under a single synthetic key
+        ``("<batched>", "<RuntimeClassName>")`` — the framework hands the
+        whole batch to the runtime in one call and has no visibility into
+        per-process invoke timing inside the batch.
+
+        Example::
+
+            sim = Composite(doc, core=core)
+            sim.run(10.0)
+            print(sim.timing_summary().format())
+        """
+        return TimingSummary(
+            total=self._last_run_total_time,
+            process_time=self.process_update_time,
+            framework_time=self.framework_time,
+            per_process=dict(self._per_process_time),
+        )
 
     def run_process(
             self,
@@ -2899,7 +3003,12 @@ class Composite(Process):
         # Invoke the process and retrieve a wrapped SyncUpdate object
         t0 = _time.monotonic()
         update = process['instance'].invoke(clean_state, interval)
-        self.process_update_time += _time.monotonic() - t0
+        dt = _time.monotonic() - t0
+        self.process_update_time += dt
+        # Per-process attribution. Same benign race as process_update_time
+        # under parallel dispatch — this is metric data only.
+        key = tuple(path) if isinstance(path, (list, tuple)) else (path,)
+        self._per_process_time[key] = self._per_process_time.get(key, 0.0) + dt
         if _TRACE_FH is not None:
             # Resolve SyncUpdate / Defer to plain dict for the trace; the
             # invoke return is opaque (SyncUpdate wraps a dict). We only need
