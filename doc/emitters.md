@@ -183,6 +183,9 @@ emitter_from_wires({
 
 ## Long-term storage with `SQLiteEmitter`
 
+> **Note:** `SQLiteEmitter` (and `ParquetEmitter`) now live in the focused
+> [`pbg-emitters`](https://github.com/vivarium-collective/pbg-emitters) library so each emitter can ship its own optional heavy deps without forcing them on every process-bigraph user. Install via `pip install pbg-emitters[sqlite]` (or `pip install process-bigraph[emitters]` for both backends). All the examples below continue to work — `process_bigraph.emitter` re-exports `SQLiteEmitter` and its helpers when `pbg-emitters` is on the import path.
+
 `RAMEmitter` throws everything away when the Python process ends. `JSONEmitter` rewrites the whole history file on every tick, which is fine for small runs but expensive for long ones. `SQLiteEmitter` appends one row per tick into a single `.db` file, indexed by a `simulation_id` — ideal for long runs and for analysis sessions that happen weeks after the simulation.
 
 ### Writing history

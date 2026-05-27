@@ -43,6 +43,16 @@ ec2-ssm = [
     "boto3>=1.28",
 ]
 
+# SQLiteEmitter + ParquetEmitter were extracted to the focused pbg-emitters
+# library (https://github.com/vivarium-collective/pbg-emitters) so each
+# emitter can ship its own heavy deps without forcing them on every user.
+# ``process_bigraph.emitter`` re-exports them as a back-compat shim — install
+# this extra to enable the shim. Pulls in both emitters' optional extras.
+# Install with: pip install process-bigraph[emitters]
+emitters = [
+    "pbg-emitters[sqlite,parquet]",
+]
+
 [dependency-groups]
 dev = [
     "ipdb>=0.13.13",
@@ -60,6 +70,10 @@ dev = [
     "fire",
     "typing-inspect>=0.9.0",
     "boto3>=1.28",
+    # Lets the back-compat re-export shim resolve in CI / dev so the
+    # SQLiteEmitter tests run; production users opt in via
+    # ``process-bigraph[emitters]``.
+    "pbg-emitters[sqlite]",
 ]
 
 #[tool.uv.sources]
