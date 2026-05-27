@@ -46,14 +46,11 @@ ec2-ssm = [
 # SQLiteEmitter + ParquetEmitter were extracted to the focused pbg-emitters
 # library (https://github.com/vivarium-collective/pbg-emitters) so each
 # emitter can ship its own heavy deps without forcing them on every user.
-# ``process_bigraph.emitter`` re-exports them as a back-compat shim — install
-# this extra to enable the shim. Pulls in both emitters' optional extras.
-# Install with: pip install process-bigraph[emitters]
-emitters = [
-    # PEP 508 direct-URL since pbg-emitters is not yet on PyPI — works
-    # with both pip and uv.
-    "pbg-emitters[sqlite,parquet] @ git+https://github.com/vivarium-collective/pbg-emitters.git@main",
-]
+# ``process_bigraph.emitter`` re-exports them as a back-compat shim. To use
+# the shim, install pbg-emitters separately:
+#   pip install "pbg-emitters[sqlite,parquet] @ git+https://github.com/vivarium-collective/pbg-emitters.git@main"
+# (Not declared here as a project extra because PyPI rejects direct-URL
+# deps in published optional-dependencies metadata.)
 
 [dependency-groups]
 dev = [
