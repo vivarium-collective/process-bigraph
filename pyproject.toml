@@ -43,6 +43,20 @@ ec2-ssm = [
     "boto3>=1.28",
 ]
 
+# Hive-partitioned ParquetEmitter + DuckDB reader helpers
+# (process_bigraph.parquet_emitter). Lets composites stream simulation
+# state into a queryable Parquet dataset and read it back with the same
+# helpers downstream analysis scripts use.
+# Install with: pip install process-bigraph[parquet]
+parquet = [
+    "duckdb",
+    "polars",
+    "pyarrow",
+    "fsspec",
+    "numpy",
+    "tqdm",
+]
+
 [dependency-groups]
 dev = [
     "ipdb>=0.13.13",
@@ -60,6 +74,12 @@ dev = [
     "fire",
     "typing-inspect>=0.9.0",
     "boto3>=1.28",
+    # Parquet emitter test stack (duckdb/polars/fsspec/pyarrow/tqdm).
+    "duckdb",
+    "polars",
+    "pyarrow",
+    "fsspec",
+    "tqdm",
 ]
 
 #[tool.uv.sources]

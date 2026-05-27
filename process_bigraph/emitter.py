@@ -637,3 +637,14 @@ class SQLiteEmitter(Emitter):
 # Base Emitter Mapping
 # ====================
 
+
+# Optional Parquet emitter. Re-exported here for convenience so that
+# ``from process_bigraph.emitter import ParquetEmitter`` works whenever
+# the [parquet] optional-dependency group is installed. The import is
+# guarded so the rest of this module remains usable when the heavy
+# duckdb/polars/fsspec stack is absent.
+try:
+    from process_bigraph.parquet_emitter import ParquetEmitter  # noqa: F401
+except ImportError:
+    pass  # [parquet] extra not installed
+
