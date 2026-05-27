@@ -111,6 +111,12 @@ def realize(core, schema: ProcessLink, state, path=()):
     """
     Realize a ProcessLink against a provided state value.
     """
+    # Tree.realize speculatively probes leaf types; only an explicit
+    # process declaration (dict with 'address') matches. Return
+    # (schema, None, []) for anything else so Tree.realize recurses.
+    if not isinstance(state, dict):
+        return schema, None, []
+
     link_schema, link_state, merges = realize_link(core, schema, state, path=path)
 
     # Realize the interval field (schema is Float). We pass the incoming value if present.
@@ -128,6 +134,9 @@ def realize(core, schema: StepLink, state, path=()):
     """
     Realize a StepLink against a provided state value.
     """
+    if not isinstance(state, dict):
+        return schema, None, []
+
     link_schema, link_state, merges = realize_link(core, schema, state, path=path)
 
     _, link_state['priority'], _ = realize(
