@@ -787,7 +787,13 @@ class EC2SSMRayCluster:
             f"docker run -d --name {self._container} --network host "
             f"  --shm-size=10g --restart unless-stopped "
             f"  --entrypoint ray {self._image_uri} "
-            f"  start --head --port=6379 --dashboard-host=0.0.0.0 --block",
+            # --num-cpus=0 keeps the head as orchestrator-only: Ray
+            # won't schedule actors/tasks here, leaving the box's RAM
+            # for the driver + Ray daemons + dashboard. Without this,
+            # Ray packs actors into the head when its CPU quota is
+            # available, which OOM's small head instances (4–8 GB).
+            f"  start --head --num-cpus=0 --port=6379 "
+            f"  --dashboard-host=0.0.0.0 --block",
             "sleep 5",
             f"docker logs --tail 30 {self._container}",
         ], name="start-head", timeout_s=180)
