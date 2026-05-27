@@ -50,7 +50,9 @@ ec2-ssm = [
 # this extra to enable the shim. Pulls in both emitters' optional extras.
 # Install with: pip install process-bigraph[emitters]
 emitters = [
-    "pbg-emitters[sqlite,parquet]",
+    # PEP 508 direct-URL since pbg-emitters is not yet on PyPI — works
+    # with both pip and uv.
+    "pbg-emitters[sqlite,parquet] @ git+https://github.com/vivarium-collective/pbg-emitters.git@main",
 ]
 
 [dependency-groups]
@@ -73,7 +75,7 @@ dev = [
     # Lets the back-compat re-export shim resolve in CI / dev so the
     # SQLiteEmitter tests run; production users opt in via
     # ``process-bigraph[emitters]``.
-    "pbg-emitters[sqlite]",
+    "pbg-emitters[sqlite] @ git+https://github.com/vivarium-collective/pbg-emitters.git@main",
 ]
 
 #[tool.uv.sources]
