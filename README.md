@@ -124,6 +124,11 @@ Live test report: https://vivarium-collective.github.io/spatio-flux/report/index
 - **E. coli Whole-Cell Wiring Diagram**  
   https://raw.githubusercontent.com/vivarium-collective/bigraph-viz/main/doc/_static/ecoli.png
 
+- **Claude Code skills** — wrap simulators, compose `pbg-*` packages, and
+  scaffold process-bigraph research workspaces with the
+  [**pbg-superpowers**](https://github.com/vivarium-collective/pbg-superpowers)
+  Claude Code plugin (install with `/plugin install pbg-superpowers`).
+
 ---
 
 ## 📜 License
