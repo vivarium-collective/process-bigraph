@@ -190,6 +190,14 @@ def find_instances(
     """
     Recursively find all dictionary entries that contain an 'instance' of the given type.
 
+    Edge boundaries are opaque — recursion stops at any Process- or
+    Step-bearing dict regardless of whether it matches the searched
+    type. Without this, an outer Composite searching for Steps would
+    walk INTO an inner Composite's config.state and discover that
+    inner cell's encapsulated steps, then try to resolve their wires
+    from the outer's perspective (where relative paths overshoot the
+    top). This breaks the cell-as-Composite-as-Process pattern.
+
     Args:
         state: Nested state dictionary.
         instance_type: Fully qualified path to the target class (e.g., 'module.Class').
@@ -198,6 +206,9 @@ def find_instances(
         A dictionary of matching subtrees keyed by their path segment.
     """
     process_class = local_lookup_module(instance_type)
+    # Edge bases — recursion stops at either.
+    process_base = local_lookup_module('process_bigraph.composite.Process')
+    step_base = local_lookup_module('process_bigraph.composite.Step')
     found: Dict[str, Any] = {}
 
     for key, inner in state.items():
@@ -207,12 +218,61 @@ def find_instances(
             if isinstance(instance, process_class):
                 found[key] = inner
 
+            elif isinstance(instance, (process_base, step_base)):
+                # It's an edge but not the type being searched for.
+                # Don't recurse — boundary is opaque.
+                continue
+
             elif not is_schema_key(key):
                 sub_instances = find_instances(inner, instance_type)
                 if sub_instances:
                     found[key] = sub_instances
 
     return found
+
+
+_INSTANCE_CLASSES_CACHE = None
+
+
+def _instance_classes():
+    """Lazily resolve (Process, Step) classes — they're defined later in
+    this module so we can't reference them at import-time at this position.
+    """
+    global _INSTANCE_CLASSES_CACHE
+    if _INSTANCE_CLASSES_CACHE is None:
+        _INSTANCE_CLASSES_CACHE = (
+            local_lookup_module('process_bigraph.composite.Process'),
+            local_lookup_module('process_bigraph.composite.Step'))
+    return _INSTANCE_CLASSES_CACHE
+
+
+def state_has_instance(state: Any) -> bool:
+    """Return True if ``state`` contains any Process or Step instance
+    anywhere in its tree.
+
+    Used by ``Composite.update`` to decide whether a bridge input might
+    introduce new processes/steps (requiring a full structural rebuild)
+    or is purely state values (where the structural layout cannot have
+    changed and ``find_instance_paths`` / ``_build_view_project_cache``
+    can be skipped).
+
+    For remote bridges (Ray, REST) instances cannot cross the boundary —
+    only pure state — so this check virtually always returns False
+    there. For local bridges, instances CAN cross (e.g. an outer
+    composite handing a freshly-instantiated process to an inner one),
+    so this check is what makes that case still correct.
+    """
+    if not isinstance(state, dict):
+        return False
+    classes = _instance_classes()
+    inst = state.get('instance')
+    if isinstance(inst, classes):
+        return True
+    for key, inner in state.items():
+        if isinstance(inner, dict) and not is_schema_key(key):
+            if state_has_instance(inner):
+                return True
+    return False
 
 
 def find_instance_paths(
@@ -1549,14 +1609,49 @@ class Composite(Process):
                     edge_schema, edge_state,
                     self.schema, self.state)
 
-        # Wire the input/output schema for the Composite from the bridge config.
-        self.process_schema = {
-            port: self.core.wire_schema(
-                self.schema,
-                self.state,
-                self.bridge.get(port, {}))
-            for port in ['inputs', 'outputs']
-        }
+        # Wire the input/output schema for the Composite from the
+        # bridge config. By default we derive each port's schema from
+        # its destination slot via ``wire_schema``.
+        #
+        # OUTPUTS override: ``config['interface']['outputs']`` (if set)
+        # replaces the wire-derived schema. Inputs are NOT overridable
+        # here — they still come from wire_schema so existing
+        # wholesale-set semantics through Composite.update's merge()
+        # remain unchanged.
+        #
+        # The outputs override is what makes deeply-nested Composite-
+        # as-Process patterns affordable: without it, a cell-Composite
+        # bridging cell.state.agents to outer.agents propagates the
+        # ENTIRE inner cell tree's schema (Map[cell_tree]) up via
+        # port_merges, which then materializes the cell's processes
+        # (bulk-timeline, global_clock, etc.) as duplicates at the
+        # outer level (the cell tree's defaults expand into outer
+        # state during realize). Declaring a narrow output schema
+        # (e.g. ``map[any]``) scopes the bridge propagation to just
+        # the divide-event payload shape, no schema leak.
+        user_interface = self.config.get('interface', {}) or {}
+        self.process_schema = {}
+        for port in ['inputs', 'outputs']:
+            wired = self.core.wire_schema(
+                self.schema, self.state, self.bridge.get(port, {}))
+            override = (
+                user_interface.get(port)
+                if port == 'outputs' and isinstance(user_interface, dict)
+                else None)
+            if override:
+                # User-declared port schemas override wire-derived
+                # ones. Resolve string-form declarations
+                # (e.g. ``'map[any]'``) into Node instances.
+                merged = {}
+                for port_name, port_decl in override.items():
+                    merged[port_name] = self.core.access(port_decl)
+                # Fill in any wired ports the user didn't redeclare.
+                if isinstance(wired, dict):
+                    for k, v in wired.items():
+                        merged.setdefault(k, v)
+                self.process_schema[port] = merged
+            else:
+                self.process_schema[port] = wired
 
         # Set the global time precision used to round step time advances.
         self.global_time_precision = self.config.get('global_time_precision')
@@ -3344,11 +3439,26 @@ class Composite(Process):
             self.bridge.get('inputs', {}),
             [],
             state)
-        self.merge({}, project_state)
-
-        # first_update = self.read_bridge(
-        #     self.state)
-        # self.bridge_updates = [first_update]
+        # Absorb the projected input into our own state. Three cases:
+        #   1) Empty input: nothing to do — skip entirely.
+        #   2) Value-only input (no embedded Process/Step instances):
+        #      schema-aware combine of values is sufficient. Skip
+        #      find_instance_paths + _build_view_project_cache — the
+        #      structural layout (process/step paths) cannot have
+        #      changed.
+        #   3) Structural input (carries new Process/Step instances):
+        #      fall back to full merge() so process/step paths and
+        #      view/project caches are rebuilt.
+        # Without this split, every Composite-as-Process tick paid a
+        # full re-walk of the inner cell (5000+ paths in vEcoli) plus
+        # precompile_link for all 56 inner processes — for a typical
+        # leaf-value bridge input that's pure overhead.
+        if project_state:
+            if state_has_instance(project_state):
+                self.merge({}, project_state)
+            else:
+                self.schema, self.state = self.core.combine(
+                    self.schema, self.state, {}, project_state)
 
         self.bridge_updates = []
 
