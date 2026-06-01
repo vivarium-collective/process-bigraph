@@ -17,7 +17,24 @@ import copy
 import json
 import math
 import time as _time
+import contextvars
 import numpy as np
+
+
+# Set by ``Composite.run`` for the duration of the run loop so Steps
+# / nested code can reach their parent Composite without going through
+# wires. Used by cell-as-Composite division where the inner
+# CompositeDivision needs the parent's full cell tree state to build
+# daughter cell trees — and where Ray actors' module globals can't be
+# set from the driver. Each actor's Composite sets the contextvar on
+# its own run; Steps invoked inside read it.
+current_composite_var: contextvars.ContextVar = contextvars.ContextVar(
+    'current_composite', default=None)
+
+
+def get_current_composite():
+    """Get the Composite currently driving a ``run`` invocation, if any."""
+    return current_composite_var.get()
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +198,50 @@ def assert_interface(interface: Dict[str, Any]) -> None:
         f"Every interface requires exactly the keys 'inputs' and 'outputs', "
         f"but found: {existing_keys}"
     )
+
+
+def _strip_paths(state: Dict[str, Any],
+                 paths: set) -> Dict[str, Any]:
+    """Return ``state`` with subtrees at ``paths`` removed.
+
+    Each path in ``paths`` is a tuple of segments (absolute path
+    from ``state`` root). Builds a new dict — does NOT mutate
+    ``state``. Used by ``Composite.apply_updates`` to drop
+    conduit-bound data from the per-tick update before local apply,
+    so the data flows only through the bridge.
+
+    Example::
+
+        _strip_paths({'a': 1, 'b': {'c': 2}}, {('b',)})
+        # → {'a': 1}
+
+    Implementation: top-level keys that are conduit roots are
+    skipped; non-conduit keys are kept by reference (cheap, no
+    deep copy).
+    """
+    if not paths:
+        return state
+    # Build the set of top-level keys we need to skip or descend into.
+    skip_roots = set()
+    descend_paths_by_root: Dict[Any, set] = {}
+    for p in paths:
+        if not p:
+            continue
+        if len(p) == 1:
+            skip_roots.add(p[0])
+        else:
+            descend_paths_by_root.setdefault(p[0], set()).add(p[1:])
+    result = {}
+    for k, v in state.items():
+        if k in skip_roots:
+            continue
+        if k in descend_paths_by_root and isinstance(v, dict):
+            sub = _strip_paths(v, descend_paths_by_root[k])
+            if sub:
+                result[k] = sub
+        else:
+            result[k] = v
+    return result
 
 
 def find_instances(
@@ -1558,8 +1619,35 @@ class Composite(Process):
             initial_schema,
             initial_state)
 
+        # Ensure numpy arrays in self.state are writeable. Ray puts
+        # large arrays in plasma with the read-only flag for zero-copy,
+        # which then breaks any in-place ``state['count'][idx] += d``
+        # apply later. Cheap walk — only touches arrays in-place via
+        # ``setflags(write=True)``.
+        try:
+            from bigraph_schema import make_arrays_writeable
+            make_arrays_writeable(self.state)
+        except Exception:
+            pass
+
         # Load the bridge configuration, which defines how inputs/outputs connect to the world.
         self.bridge = self.config.get('bridge', {})
+
+        # CONDUITS: bridge outputs that propagate to bridge_updates
+        # ONLY — NOT applied to the local inner state. Same wire shape
+        # as ``bridge.outputs`` (``{port_name: wire_path}``), declared
+        # under ``bridge.conduits``. Used when a step writes a payload
+        # that's meant ENTIRELY for the outer composite — e.g. a
+        # ``CompositeDivision`` _add/_remove sentinel that the bridge
+        # should hand to the outer.agents map but that must NOT also
+        # land locally (where it would create nested daughter cell-
+        # Composites inside the mother and cascade through divide
+        # again). Conduit paths are stripped from the per-tick update
+        # state before ``apply_updates`` reconciles + applies.
+        self._conduit_paths = set()
+        for _wire in (self.bridge.get('conduits') or {}).values():
+            if isinstance(_wire, (list, tuple)):
+                self._conduit_paths.add(tuple(_wire))
 
         # initialize an empty front for finding the instance paths
         self.front = {}
@@ -1592,11 +1680,6 @@ class Composite(Process):
                         initial_schema, initial_state)
 
                 except Exception as e:
-                    import sys as _sys
-                    _sys.stderr.write(f'[INIT_COMBINE_FAIL] edge={path}\n')
-                    _sys.stderr.write(f'[INIT_COMBINE_FAIL] new_schema={initial_schema}\n')
-                    _sys.stderr.write(f'[INIT_COMBINE_FAIL] err={e}\n')
-                    _sys.stderr.flush()
                     raise Exception(
                         f'initial state from edge does not match initial state from other edges:\n'
                         f'{path}\n{edge}\n{edge_state}\n'
@@ -1608,6 +1691,17 @@ class Composite(Process):
                 self.schema, self.state = self.core.combine(
                     edge_schema, edge_state,
                     self.schema, self.state)
+
+        # Build the effective bridge dict: conduits are merged into
+        # outputs for the purposes of process_schema / read_bridge /
+        # wire_schema (both feed into bridge_updates). Conduit paths
+        # are separately tracked for local-apply stripping.
+        effective_bridge = dict(self.bridge)
+        if self.bridge.get('conduits'):
+            effective_outputs = dict(self.bridge.get('outputs') or {})
+            effective_outputs.update(self.bridge['conduits'])
+            effective_bridge['outputs'] = effective_outputs
+        self._effective_bridge = effective_bridge
 
         # Wire the input/output schema for the Composite from the
         # bridge config. By default we derive each port's schema from
@@ -1633,7 +1727,7 @@ class Composite(Process):
         self.process_schema = {}
         for port in ['inputs', 'outputs']:
             wired = self.core.wire_schema(
-                self.schema, self.state, self.bridge.get(port, {}))
+                self.schema, self.state, effective_bridge.get(port, {}))
             override = (
                 user_interface.get(port)
                 if port == 'outputs' and isinstance(user_interface, dict)
@@ -2453,7 +2547,11 @@ class Composite(Process):
         # Fast path: composites without an output bridge (like vEcoli)
         # call this on every apply_updates. Skip the view_ports call
         # entirely when there's nothing to read.
-        bridge_outputs = self.bridge.get('outputs') if self.bridge else None
+        # ``_effective_bridge`` merges ``bridge.outputs`` with
+        # ``bridge.conduits`` so conduit data also flows up to the
+        # outer (the difference is purely whether it ALSO gets
+        # applied locally — see ``_strip_conduit_paths``).
+        bridge_outputs = self._effective_bridge.get('outputs') if self._effective_bridge else None
         if not bridge_outputs:
             return None
 
@@ -2768,6 +2866,19 @@ class Composite(Process):
         self._per_process_time = {}
         run_start = _time.monotonic()
 
+        # Set the current-Composite contextvar so nested Steps can
+        # reach the parent Composite (e.g. for CompositeDivision to
+        # read parent cell tree state without going through wires).
+        # Reset on exit so we don't leak the reference into other
+        # control flows on the same thread.
+        _cc_token = current_composite_var.set(self)
+        try:
+            return self._run_inner(interval, force_complete, run_start)
+        finally:
+            current_composite_var.reset(_cc_token)
+
+    def _run_inner(self, interval: float, force_complete: bool,
+                   run_start: float) -> None:
         end_time = self.state['global_time'] + interval
 
         # Run any steps that are ready (from init or previous triggers)
@@ -3207,6 +3318,20 @@ class Composite(Process):
                 bridge_update = self.read_bridge(update_state)
                 if bridge_update:
                     self.bridge_updates.append(bridge_update)
+
+                # CONDUITS: data destined for ``bridge.conduits`` ports
+                # is emitted via the bridge above but stripped from the
+                # local update_state so it never lands in self.state.
+                # Used by cell-as-Composite divide where the daughter
+                # _add/_remove sentinels must reach the outer.agents
+                # map but must NOT instantiate nested daughter cell-
+                # Composites inside the mother's local state (which
+                # would cascade re-divide).
+                if self._conduit_paths and isinstance(update_state, dict):
+                    update_state = _strip_paths(update_state,
+                                                self._conduit_paths)
+                    if not update_state:
+                        continue  # entirely conduit — no local apply
 
                 resolved_updates.append((update_schema, update_state))
 

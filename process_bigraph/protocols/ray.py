@@ -101,14 +101,43 @@ from bigraph_schema.methods import load_protocol
 # ---------------------------------------------------------------------------
 _PROCESS_REGISTRY: Dict[str, Type[Process]] = {}
 
+# Type-providers are pickleable references (``(module_path, attr_name)``)
+# to functions ``fn(core) → None`` that register custom types on a
+# core. Driver registers them once; each Ray actor calls every
+# provider against its freshly-allocated core before instantiating
+# the Process. Lets cell-as-Composite-on-Ray work — without this the
+# actor's allocate_core() doesn't have project-specific types like
+# vEcoli's ``sim_data_object_store`` and the actor's Composite init
+# crashes inside ``realize`` walking the cell tree.
+_TYPE_PROVIDERS: list = []
+
 
 def register_process_class(name: str, cls: Type[Process]) -> None:
     """Register a Process class so RayProcess can resolve it by name."""
     _PROCESS_REGISTRY[name] = cls
 
 
+def register_type_provider(module: str, attr: str,
+                            args: tuple = (), kwargs: dict = None) -> None:
+    """Register a type-registration function for actors to call on
+    their core. ``module`` is the importable Python module path,
+    ``attr`` is a top-level attribute callable as ``fn(core, *args, **kwargs)``.
+    Multiple providers may be registered; actors call them in order.
+
+    Use ``args``/``kwargs`` to thread per-run data into the provider
+    (e.g. a sim_data path the actor should load from disk). Both must
+    be picklable so they cross the actor boundary intact."""
+    if kwargs is None:
+        kwargs = {}
+    _TYPE_PROVIDERS.append((module, attr, tuple(args), dict(kwargs)))
+
+
 def get_registry() -> Dict[str, Type[Process]]:
     return dict(_PROCESS_REGISTRY)
+
+
+def get_type_providers() -> list:
+    return list(_TYPE_PROVIDERS)
 
 
 # ---------------------------------------------------------------------------
@@ -118,14 +147,80 @@ def get_registry() -> Dict[str, Type[Process]]:
 # without ray installed. ``ray.remote(...)`` is applied lazily on first use
 # (cached) inside ``_remote_actor_class()``.
 # ---------------------------------------------------------------------------
+def _apply_type_providers(core, providers: list) -> None:
+    """Import each (module, attr, args, kwargs) provider and call
+    ``fn(core, *args, **kwargs)`` to register custom types. Imports
+    are lazy so the provider's module doesn't have to be installed
+    where the protocol module loads. Legacy 2-tuple form
+    ``(module, attr)`` is also accepted for back-compat."""
+    import importlib
+    for entry in providers:
+        if len(entry) == 2:
+            module_name, attr_name = entry
+            args, kwargs = (), {}
+        else:
+            module_name, attr_name, args, kwargs = entry
+        try:
+            mod = importlib.import_module(module_name)
+            fn = getattr(mod, attr_name)
+            fn(core, *args, **kwargs)
+        except Exception as e:
+            import sys
+            sys.stderr.write(
+                f'[ray-protocol] type provider {module_name}.{attr_name} '
+                f'failed: {type(e).__name__}: {e}\n')
+            sys.stderr.flush()
+            raise
+
+
+def _make_state_writeable(config: dict) -> None:
+    """Walk ``config['state']`` and copy any read-only numpy arrays.
+    Ray's plasma store hands actors arrays with the read-only flag for
+    zero-copy semantics; Cython buffers (stochastic_arrow, fbax, ...)
+    refuse to accept them. Done before Composite instantiation so the
+    actor's self.state starts fully mutable.
+    """
+    state = config.get('state')
+    if state is None:
+        return
+    try:
+        from bigraph_schema import make_arrays_writeable
+        make_arrays_writeable(state)
+    except Exception:
+        # Fallback walk in case make_arrays_writeable doesn't reach
+        # structured-array subfields or nested lists.
+        import numpy as _np
+        def _walk(node):
+            if isinstance(node, dict):
+                for k, v in list(node.items()):
+                    if isinstance(v, _np.ndarray) and not v.flags.writeable:
+                        node[k] = v.copy()
+                        node[k].flags.writeable = True
+                    elif isinstance(v, (dict, list)):
+                        _walk(v)
+            elif isinstance(node, list):
+                for i, v in enumerate(node):
+                    if isinstance(v, _np.ndarray) and not v.flags.writeable:
+                        node[i] = v.copy()
+                        node[i].flags.writeable = True
+                    elif isinstance(v, (dict, list)):
+                        _walk(v)
+        _walk(state)
+
+
 class _ProcessActor:
     def __init__(self, registry: Dict[str, Type[Process]],
-                 class_name: str, config: dict):
+                 class_name: str, config: dict,
+                 type_providers: list = None):
         for k, v in registry.items():
             _PROCESS_REGISTRY[k] = v
         cls = _PROCESS_REGISTRY[class_name]
         from process_bigraph import allocate_core
-        self.instance = cls(config, core=allocate_core())
+        core = allocate_core()
+        if type_providers:
+            _apply_type_providers(core, type_providers)
+        _make_state_writeable(config)
+        self.instance = cls(config, core=core)
 
     def inputs(self):
         return self.instance.inputs()
@@ -156,12 +251,13 @@ def _remote_actor_class():
 class _ActorPool:
     def __init__(self, class_name: str, config: dict, n_workers: int):
         registry = get_registry()
+        type_providers = get_type_providers()
         actor_cls = _remote_actor_class()
         # Spawn all actors concurrently — actor.remote() returns immediately;
         # we don't ray.get on the constructor. The first .inputs.remote() call
         # implicitly waits for the actor to be ready.
         self.actors = [
-            actor_cls.remote(registry, class_name, config)
+            actor_cls.remote(registry, class_name, config, type_providers)
             for _ in range(n_workers)
         ]
         self._next = 0
@@ -190,6 +286,23 @@ def _config_hash(config: Any) -> str:
         s = json.dumps(config, sort_keys=True, default=repr)
     except TypeError:
         s = repr(config)
+    return hashlib.sha1(s.encode()).hexdigest()[:12]
+
+
+def _config_hash_pool_key(config: Any) -> str:
+    """Hash for actor-pool keying. Excludes ``state`` so cells with
+    different state (e.g. mother + her daughters after divide) share
+    the same actor pool — each actor then holds many Composite
+    instances keyed by proc_id. Compared to ``_config_hash``, this
+    drops per-cell-only fields that don't affect actor lifecycle."""
+    if isinstance(config, dict):
+        pool_config = {k: v for k, v in config.items() if k != 'state'}
+    else:
+        pool_config = config
+    try:
+        s = json.dumps(pool_config, sort_keys=True, default=repr)
+    except TypeError:
+        s = repr(pool_config)
     return hashlib.sha1(s.encode()).hexdigest()[:12]
 
 
@@ -332,32 +445,77 @@ def _batch_actor_class():
 
     @ray.remote
     class _RayBatchActor:
-        """Long-lived actor hosting one underlying Process instance.
-        ``batch_update`` runs N (state, interval) pairs in a tight Python
-        loop and returns the per-client deltas. Persistent state — the
-        underlying Process is kept across ticks, so warm-started solver
-        bases survive."""
+        """Long-lived actor hosting MANY underlying Process instances,
+        keyed by proc_id. Cells with the same shared config (schema/
+        bridge/address — see ``_pool_config``) share one actor pool;
+        each cell gets its own Composite inside the actor. This amortizes
+        sim_data + Cython import overhead across all cells on a node.
+
+        Lifecycle:
+        - ``__init__``: set up registry + core + type providers ONCE.
+            No Composite built yet. The optional ``warm_config`` lets
+            ping include a smoke check; not required.
+        - ``init_cell(proc_id, full_config)``: build the per-cell
+            Composite on first encounter of that proc_id. Driver
+            ensures init_cell is called before the first batch_update
+            for that proc_id.
+        - ``batch_update(batch, interval)``: route per-proc_id to the
+            right Composite. Persistent state — Composites are kept
+            across ticks so warm solver state survives.
+        """
 
         def __init__(self, registry: Dict[str, Type[Process]],
-                     class_name: str, config: dict):
+                     class_name: str,
+                     type_providers: list = None,
+                     warm_config: dict = None):
             for k, v in registry.items():
                 _PROCESS_REGISTRY[k] = v
-            cls = _PROCESS_REGISTRY[class_name]
+            self.cls = _PROCESS_REGISTRY[class_name]
             from process_bigraph import allocate_core
-            self.instance = cls(config, core=allocate_core())
+            self.core = allocate_core()
+            if type_providers:
+                _apply_type_providers(self.core, type_providers)
+            self.composites: Dict[int, Any] = {}
+
+        def init_cell(self, proc_id: int, config: dict) -> str:
+            """Build the per-cell Composite. Idempotent: a proc_id
+            already initialized is a no-op (driver may retry on
+            actor recovery)."""
+            if proc_id in self.composites:
+                return "exists"
+            _make_state_writeable(config)
+            self.composites[proc_id] = self.cls(config, core=self.core)
+            return "built"
+
+        def has_cell(self, proc_id: int) -> bool:
+            return proc_id in self.composites
 
         def inputs(self):
-            return self.instance.inputs()
+            # Inputs schema is per-cell. With multi-cell actors,
+            # the driver should be using RayShadowProcess._template_inputs
+            # (the inputs/outputs cached at protocol-bind time, before
+            # the actor was even spun up). This method preserved for
+            # back-compat with any caller that still pings actors for
+            # I/O shape. Returns first cell's inputs if available.
+            if self.composites:
+                return next(iter(self.composites.values())).inputs()
+            return {}
 
         def outputs(self):
-            return self.instance.outputs()
+            if self.composites:
+                return next(iter(self.composites.values())).outputs()
+            return {}
 
         def batch_update(self, batch: list, interval: float) -> dict:
-            # batch: list of (proc_id, inputs_dict). Single interval —
-            # batched processes share the same tick width.
             out = {}
             for proc_id, inputs in batch:
-                out[proc_id] = self.instance.update(inputs, float(interval))
+                composite = self.composites.get(proc_id)
+                if composite is None:
+                    raise RuntimeError(
+                        f"_RayBatchActor.batch_update: proc_id "
+                        f"{proc_id} not initialized — driver must "
+                        f"call init_cell before first batch_update.")
+                out[proc_id] = composite.update(inputs, float(interval))
             return out
 
         def ping(self) -> str:
@@ -376,12 +534,16 @@ def _stable_proc_id(shadow: "RayShadowProcess") -> int:
 
 @dataclass
 class _ShardPool:
-    """One pool of N batch actors keyed by (target_class, config_hash).
-    Process ids assigned to a shard on first enqueue stay sticky — keeps
-    warm solver state aligned with the cells it's seen."""
+    """One pool of N batch actors keyed by (target_class, shared_config_hash).
+    Each actor hosts MANY Composites keyed by proc_id (one per cell that
+    routes to that shard). Process ids assigned to a shard on first
+    enqueue stay sticky — keeps warm solver state aligned with the cells
+    it's seen. ``proc_initialized`` tracks which proc_ids have had
+    ``init_cell`` called on their actor."""
     actors: List[Any]
     proc_to_shard: Dict[int, int] = field(default_factory=dict)
     pending: Dict[int, list] = field(default_factory=lambda: defaultdict(list))
+    proc_initialized: set = field(default_factory=set)
 
 
 class RayProtocolRuntime:
@@ -422,13 +584,31 @@ class RayProtocolRuntime:
     # -- pool management ---------------------------------------------- #
 
     def _pool_for(self, class_name: str, config: dict) -> _ShardPool:
-        key = f"{class_name}:{_config_hash(config)}"
+        """Resolve (or create) the actor pool for this class. Pool
+        keying uses ONLY ``class_name`` (plus an optional explicit
+        ``pool_key`` config field) — cells of the same target class
+        share one pool of actors regardless of their per-cell config.
+        Each actor holds its own ``{proc_id: Composite}`` dict; per-cell
+        config is delivered to the actor via ``init_cell`` on first
+        enqueue, so the actor still gets the per-cell setup it needs.
+
+        Why class-only? Pickling schema dicts through actor↔driver
+        round-trips produces new Schema Node instances whose ``repr()``
+        is not byte-stable, so hashing schema as the pool key produces
+        a NEW pool per daughter (one per divide) — defeating the actor
+        pool optimization. Users who genuinely need pool isolation
+        between distinct schemas of the same class can set an explicit
+        ``pool_key`` string in config."""
+        explicit_key = config.get('pool_key') if isinstance(config, dict) else None
+        key_suffix = explicit_key if explicit_key else 'default'
+        key = f"{class_name}:{key_suffix}"
         pool = self._pools.get(key)
         if pool is None:
             actor_cls = _batch_actor_class()
             registry = get_registry()
+            type_providers = get_type_providers()
             actors = [
-                actor_cls.remote(registry, class_name, config)
+                actor_cls.remote(registry, class_name, type_providers)
                 for _ in range(self.n_shards_default)
             ]
             # Race all __init__'s in parallel so cold-start doesn't
@@ -455,10 +635,19 @@ class RayProtocolRuntime:
     def enqueue(self, proc_id: int, class_name: str, config: dict,
                 inputs: dict, interval: float) -> None:
         """Add one process's update to its shard's pending batch.
-        Threadsafe — Composite may call this from N parallel threads."""
+        Threadsafe — Composite may call this from N parallel threads.
+
+        On first enqueue for a proc_id, syncronously initialize the
+        cell on its assigned actor (``init_cell.remote(proc_id, config)``).
+        This may be slow on first call (loads sim_data etc.) — kept
+        synchronous so batch_update later finds the Composite ready."""
         with self._lock:
             pool = self._pool_for(class_name, config)
             shard_idx = self._shard_index_for(pool, proc_id)
+            if proc_id not in pool.proc_initialized:
+                actor = pool.actors[shard_idx]
+                ray.get(actor.init_cell.remote(proc_id, config))
+                pool.proc_initialized.add(proc_id)
             pool.pending[shard_idx].append((proc_id, inputs, float(interval)))
 
     def collect(self, proc_id: int) -> dict:
