@@ -118,6 +118,8 @@ from bigraph_schema import (
 
 from bigraph_schema.protocols import local_lookup_module
 from bigraph_schema.methods.events import NodeAdded, NodeRemoved, Divided
+from bigraph_schema.methods.events import (
+    ReconcileSummary, install_reconcile_sink, uninstall_reconcile_sink)
 
 
 # =========================
@@ -616,52 +618,6 @@ def find_leaves(tree_structure, path=None):
                 leaves.append(path + tuple(value))
 
     return leaves
-
-
-def _pre_extract_edge_schemas(core, state, initial_schema, path=()):
-    """Walk the state tree to find edges (processes/steps) and wire their
-    port schemas into the schema tree so that realize uses correct types."""
-    from bigraph_schema.schema import deep_merge
-
-    schema = dict(initial_schema)
-
-    def _walk(node, current_path):
-        if not isinstance(node, dict):
-            return
-        # Check if this node is an edge (has instance + wires)
-        instance = node.get('instance')
-        if instance is not None and hasattr(instance, 'ports_schema'):
-            wires = node.get('inputs', {})
-            try:
-                ports = instance.ports_schema()
-            except Exception:
-                return
-            parent_path = current_path[:-1]
-            for port_name, port_schema in ports.items():
-                wire = wires.get(port_name)
-                if wire is None:
-                    wire = [port_name]
-                if isinstance(wire, str):
-                    wire = [wire]
-                # Build absolute path from parent + wire
-                abs_path = list(parent_path) + list(wire)
-                # Set schema at this path
-                target = schema
-                for step in abs_path[:-1]:
-                    if step not in target or not isinstance(target.get(step), dict):
-                        target[step] = {}
-                    target = target[step]
-                last = abs_path[-1]
-                if last not in target:
-                    target[last] = port_schema
-                # Don't overwrite existing schema — first one wins
-        else:
-            for key, value in node.items():
-                if isinstance(key, str) and not key.startswith('_'):
-                    _walk(value, current_path + (key,))
-
-    _walk(state, ())
-    return schema
 
 
 def build_step_network(steps):
@@ -3239,50 +3195,6 @@ class Composite(Process):
         # Return a deferred object that will project the update when requested
         return Defer(update, defer_project, (self.schema, self.state, path))
 
-    @staticmethod
-    def _has_structural_keys(state: Any) -> bool:
-        """Check if a state dict contains keys that signal structural changes.
-
-        Structural changes (_add, _remove, _type, _divide) require
-        re-running realize() and find_instance_paths(). Plain value
-        updates do not. _divide replaces a mother with two daughters
-        — the daughter agents have new process instances that the
-        framework needs to discover.
-        """
-        if not isinstance(state, dict):
-            return False
-        for key, value in state.items():
-            if key in ('_add', '_remove', '_divide'):
-                return True
-            if key == '_type':
-                return True
-            if isinstance(value, dict) and Composite._has_structural_keys(value):
-                return True
-        return False
-
-    def _update_touches_process_path(
-            self, update_paths: List[Union[str, Tuple[str, ...]]]) -> bool:
-        """Return True if any update path goes into an existing process.
-
-        Mirrors the overlap check in `expire_process_paths` — process
-        paths and update paths are already on hand from `_walk_update`,
-        so detecting "this update changed a process's metadata" doesn't
-        need a second walk.
-        """
-        if not self.process_paths:
-            return False
-        process_path_tuples = [tuple(p) for p in self.process_paths]
-        process_roots = {p[0] for p in process_path_tuples if p}
-        for update_path in update_paths:
-            if not update_path or update_path[0] not in process_roots:
-                continue
-            update_tuple = tuple(update_path)
-            for proc_path in process_path_tuples:
-                plen = len(proc_path)
-                if len(update_tuple) >= plen and update_tuple[:plen] == proc_path:
-                    return True
-        return False
-
     def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
         """
         Apply a series of deferred updates and record the resulting bridge outputs.
@@ -3369,8 +3281,6 @@ class Composite(Process):
             # Install a summary sink so reconcile populates leaf paths
             # and the structural-sentinel flag during its existing walk
             # — eliminates the redundant per-defer _walk_update pass.
-            from bigraph_schema.methods.events import (
-                ReconcileSummary, install_reconcile_sink, uninstall_reconcile_sink)
             summary = ReconcileSummary(paths=[])
             prev_sink = install_reconcile_sink(summary)
             try:
@@ -3590,16 +3500,3 @@ class Composite(Process):
         self.run(interval)
 
         return self.bridge_updates
-
-
-def encode_key(o):
-        if isinstance(o, np.ndarray):
-            o.tolist()
-
-        elif isinstance(o, dict):
-            return {
-                str(k): encode_key(v)
-                for k, v in o.items()}
-
-        else:
-            return o
