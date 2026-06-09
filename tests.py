@@ -2296,6 +2296,122 @@ def test_parallel_processes_single_process_path(core):
     assert abs(sim.state["level"] - 3.375) < 1e-12
 
 
+def test_by_hash_cache_is_per_instance(core):
+    """A ``_cache='by_hash'`` Step must keep its memoization cache on the
+    *instance*, not on the class. Two Steps of the same type (e.g. one per
+    Composite) running in one process must not share cached results — a
+    cache hit on one must never suppress recomputation on the other.
+
+    Regression guard: when the cache lived in a class-level dict, the
+    second instance's first invoke with the same (config, state) hash
+    silently returned the first instance's result and skipped ``update``,
+    leaking results across simulations and growing without bound.
+    """
+    calls = []
+
+    class _CachedStep(Step):
+        _cache = 'by_hash'
+        _schema_version = 'v1'
+
+        def inputs(self):
+            return {'x': 'float'}
+
+        def outputs(self):
+            return {'y': 'float'}
+
+        def update(self, state):
+            calls.append(id(self))
+            return {'y': state['x'] + 1.0}
+
+    a = _CachedStep(core=core)
+    b = _CachedStep(core=core)
+
+    # First invoke on `a`: computes + caches.
+    assert a.invoke({'x': 1.0}).get() == {'y': 2.0}
+    assert len(calls) == 1
+    # Same (config, state) again on `a`: cache HIT, no recompute — the
+    # by-hash optimisation must still work *within* a single instance.
+    assert a.invoke({'x': 1.0}).get() == {'y': 2.0}
+    assert len(calls) == 1
+
+    # `b` is a different instance with an identical cache key. It must NOT
+    # see `a`'s cache: it recomputes (correct result, fresh update call).
+    assert b.invoke({'x': 1.0}).get() == {'y': 2.0}
+    assert len(calls) == 2
+
+    # The caches are distinct dict objects, each holding only its own entry,
+    # and the class never accumulates a shared cache.
+    assert a._by_hash_cache is not b._by_hash_cache
+    assert len(a._by_hash_cache) == 1
+    assert len(b._by_hash_cache) == 1
+    assert _CachedStep.__dict__.get('_by_hash_cache') is None
+
+
+class _SharedRegProc:
+    """Minimal stand-in for a shared process instance used to exercise the
+    per-core ``_shared_processes`` registry through the realize dispatch.
+
+    It deliberately does NOT subclass Edge/Process: ``SharedProcess.realize``
+    instantiates the class as ``cls(config)`` with no core, which Edge
+    forbids. Only the attributes the dispatch touches are provided.
+    """
+
+    def __init__(self, config):
+        self.config = config
+        self.core = None
+
+
+def test_shared_process_registry_per_core():
+    """The shared-process registry must be scoped per ``core`` so two
+    simulations (two Composites / two cores) in one process cannot clobber
+    each other's shared process registered under the same id.
+
+    Regression guard: the registry used to be a single module-level dict,
+    so the second core's ``realize`` overwrote the first core's entry under
+    the same id, and every later lookup resolved to the wrong instance.
+    """
+    from bigraph_schema.methods import realize as realize_mm, serialize as serialize_mm
+    from process_bigraph.types.process import (
+        SharedProcess, SharedProcessRef, _core_shared_processes,
+        get_shared_process, _shared_processes, _lookup_shared_process_id)
+
+    core1 = make_test_core()
+    core2 = make_test_core()
+    addr = f'local:!{__name__}._SharedRegProc'
+    sp = SharedProcess()
+
+    # Both cores register a shared process under the SAME id 'proc' but with
+    # different configs.
+    _, r1, _ = realize_mm(
+        core1, sp, {'address': addr, 'config': {'rate': 0.1}}, path=('proc',))
+    _, r2, _ = realize_mm(
+        core2, sp, {'address': addr, 'config': {'rate': 0.9}}, path=('proc',))
+
+    # No cross-core clobbering: each core resolves to its own instance.
+    assert r1[0].config['rate'] == 0.1
+    assert r2[0].config['rate'] == 0.9
+    assert get_shared_process('proc', core=core1).config['rate'] == 0.1
+    assert get_shared_process('proc', core=core2).config['rate'] == 0.9
+
+    # Registries are distinct per core, and the module-level fallback dict
+    # is not used at all when a core scope is available.
+    assert _core_shared_processes(core1) is not _core_shared_processes(core2)
+    assert _shared_processes == {}
+
+    # The instance is stamped with its id so reverse-lookup (used by
+    # serialize/bundle of a ref, which have no core handle) needs no global.
+    assert r1[0]._shared_process_id == 'proc'
+    assert _lookup_shared_process_id(r1) == 'proc'
+
+    # SharedProcessRef resolves against its own core's registry.
+    spr = SharedProcessRef()
+    _, ref1, _ = realize_mm(core1, spr, 'proc', path=('ref',))
+    _, ref2, _ = realize_mm(core2, spr, 'proc', path=('ref',))
+    assert ref1.config['rate'] == 0.1
+    assert ref2.config['rate'] == 0.9
+    assert serialize_mm(spr, r1) == 'proc'
+
+
 @pytest.mark.slow
 def test_ray_process_pool_shared_across_clients(core):
     """Two RayProcess clients with the same (class, config) must share one

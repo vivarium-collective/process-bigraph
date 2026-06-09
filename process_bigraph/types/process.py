@@ -7,6 +7,7 @@ This module extends bigraph_schema by defining new schema node classes used by p
 """
 
 import importlib
+import threading
 import typing
 import numpy as np
 from plum import dispatch
@@ -237,15 +238,73 @@ def register_types(core):
 # ``SharedProcess`` entry in the document's ``process`` store.
 # ============================================================================
 
+# Per-``core`` shared-process registries are the primary store: each
+# Composite owns its own ``core`` (``allocate_core`` returns a fresh core
+# per call), so scoping the registry on the core isolates one simulation's
+# shared processes from another's even when several Composites run in the
+# same process or across the ThreadPoolExecutor used by ``parallel_steps`` /
+# ``parallel_processes``. The module-level dict below is only a fallback for
+# the (unusual) case where a dispatch is reached without a core, and is what
+# ``clear_shared_processes`` / ``get_shared_process`` operate on for
+# backwards compatibility.
 _shared_processes: typing.Dict[str, object] = {}
 
+# Guards lazy creation of per-core registries and writes into both the
+# per-core and the module-level fallback dicts. Registry mutation happens at
+# realize/divide time (composite init / load / division), not on the
+# parallel update hot path, so contention is negligible.
+_shared_processes_lock = threading.Lock()
 
-def clear_shared_processes():
-    """Clear the shared-process registry (e.g. between simulations)."""
-    _shared_processes.clear()
+# Attribute used to stash the per-core registry on a ``core`` instance.
+_CORE_REGISTRY_ATTR = '_shared_process_registry'
 
 
-def get_shared_process(process_id):
+def _core_shared_processes(core) -> typing.Dict[str, object]:
+    """Return the shared-process registry scoped to ``core``.
+
+    Created lazily on first use and stored on the core instance, so it is
+    garbage-collected with the core (and therefore with its Composite) and
+    never leaks results into a different simulation's core. Falls back to the
+    module-level dict when ``core`` is ``None`` (no scope available).
+    """
+    if core is None:
+        return _shared_processes
+    registry = getattr(core, _CORE_REGISTRY_ATTR, None)
+    if registry is None:
+        with _shared_processes_lock:
+            registry = getattr(core, _CORE_REGISTRY_ATTR, None)
+            if registry is None:
+                registry = {}
+                setattr(core, _CORE_REGISTRY_ATTR, registry)
+    return registry
+
+
+def clear_shared_processes(core=None):
+    """Clear a shared-process registry (e.g. between simulations).
+
+    With ``core`` given, clears that core's scoped registry; otherwise
+    clears the module-level fallback dict.
+    """
+    if core is None:
+        with _shared_processes_lock:
+            _shared_processes.clear()
+    else:
+        registry = getattr(core, _CORE_REGISTRY_ATTR, None)
+        if registry is not None:
+            with _shared_processes_lock:
+                registry.clear()
+
+
+def get_shared_process(process_id, core=None):
+    """Look up a registered shared-process instance by id.
+
+    Prefers ``core``'s scoped registry when provided; otherwise consults the
+    module-level fallback dict.
+    """
+    if core is not None:
+        instance = _core_shared_processes(core).get(process_id)
+        if instance is not None:
+            return instance
     return _shared_processes.get(process_id)
 
 
@@ -364,7 +423,15 @@ def realize(core, schema: SharedProcess, state, path=()):
                   f"{process_id}: {e}", flush=True)
 
     if process_id is not None:
-        _shared_processes[process_id] = instance
+        # ``_core_shared_processes`` does its own locked lazy-create; the
+        # dict item assignment itself is atomic under CPython, so no extra
+        # lock is needed here (and acquiring one would re-enter the
+        # non-reentrant lock taken inside the helper → deadlock).
+        _core_shared_processes(core)[process_id] = instance
+        # Stamp the id on the instance so serialize/bundle of a
+        # SharedProcessRef can reverse-resolve it WITHOUT consulting any
+        # (potentially cross-simulation) global registry.
+        instance._shared_process_id = process_id
 
     instance._shared_address = address if isinstance(address, str) else (
         f"local:!{cls.__module__}.{cls.__name__}")
@@ -484,6 +551,12 @@ def _lookup_shared_process_id(state):
     """
     if isinstance(state, tuple) and len(state) > 0:
         state = state[0]
+    # Prefer the id stamped on the instance at realize time — this avoids
+    # depending on any global/per-core registry from a context (serialize/
+    # bundle) that has no ``core`` handle.
+    stamped = getattr(state, '_shared_process_id', None)
+    if isinstance(stamped, str):
+        return stamped
     for pid, inst in _shared_processes.items():
         if inst is state:
             return pid
@@ -529,10 +602,16 @@ def realize(core, schema: SharedProcessRef, state, path=()):
     if process_id is None:
         return schema, state, []
 
-    instance = _shared_processes.get(process_id)
+    registry = _core_shared_processes(core)
+    instance = registry.get(process_id)
     if instance is None:
+        # Fall back to the module-level registry for any path that realized
+        # the SharedProcess without a core scope.
+        instance = _shared_processes.get(process_id)
+    if instance is None:
+        available = sorted(set(registry.keys()) | set(_shared_processes.keys()))
         raise RuntimeError(
             f"SharedProcessRef at {path}: process_id '{process_id}' "
-            f"not found. Available: {sorted(_shared_processes.keys())}. "
+            f"not found. Available: {available}. "
             f"Ensure SharedProcess entries are realized before refs.")
     return schema, instance, []
