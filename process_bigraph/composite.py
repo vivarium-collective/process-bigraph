@@ -1002,7 +1002,27 @@ class Step(Open):
 
     _cache: str = 'none'
     _schema_version: Optional[str] = None
-    _by_hash_cache: Dict[Any, Any] = {}
+    # Per-instance by-hash result cache. Declared here only as a ``None``
+    # sentinel so the attribute always exists; the real dict is created
+    # lazily *per Step instance* by ``_get_by_hash_cache``. It is NOT a
+    # shared class-level mutable — that would leak cached results across
+    # every Step of this type and across every Composite in the process.
+    # Because the dict lives on the instance, it is garbage-collected with
+    # the Step (and therefore with its owning Composite).
+    _by_hash_cache: Optional[Dict[Any, Any]] = None
+
+    def _get_by_hash_cache(self) -> Dict[Any, Any]:
+        """Return this instance's by-hash cache, creating it on first use.
+
+        The cache is stored in the instance ``__dict__`` so two Step
+        instances (e.g. the same Step type used in two different
+        Composites running in one process) never share cached results.
+        """
+        cache = self.__dict__.get('_by_hash_cache')
+        if cache is None:
+            cache = {}
+            self._by_hash_cache = cache
+        return cache
 
     def triggers(self):
         """Return the subset of input ports that trigger this step.
@@ -1063,9 +1083,10 @@ class Step(Open):
         keyed by ``(_schema_version, hash)``. Hits skip ``update()``
         entirely and return the prior output.
         """
-        cache_key = self._cache_key(state) if self._cache == 'by_hash' else None
+        cache = self._get_by_hash_cache() if self._cache == 'by_hash' else None
+        cache_key = self._cache_key(state) if cache is not None else None
         if cache_key is not None:
-            cached = type(self)._by_hash_cache.get(cache_key)
+            cached = cache.get(cache_key)
             if cached is not None:
                 return SyncUpdate(cached)
 
@@ -1073,7 +1094,7 @@ class Step(Open):
         if scatter_port is None:
             result = self.update(state)
             if cache_key is not None:
-                type(self)._by_hash_cache[cache_key] = result
+                cache[cache_key] = result
             return SyncUpdate(result)
 
         match_set = state.get(scatter_port)
@@ -1107,7 +1128,7 @@ class Step(Open):
         }
 
         if cache_key is not None:
-            type(self)._by_hash_cache[cache_key] = aggregated
+            cache[cache_key] = aggregated
         return SyncUpdate(aggregated)
 
     def _cache_key(self, state: Dict[str, Any]) -> Tuple[str, str]:
