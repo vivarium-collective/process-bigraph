@@ -4,12 +4,15 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "process-bigraph"
-version = "1.4.17"
+version = "1.4.18"
 description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    "bigraph-schema>=1.2.3",
+    # >=1.4.2 required: the bundle Parquet writer (_save_array_parquet) moved
+    # into bigraph-schema in 1.4.2 (layer inversion); process-bigraph no longer
+    # ships it, so save_bundle needs a schema that owns it.
+    "bigraph-schema>=1.4.2",
     "matplotlib",
     "pint>=0.24.4",
     "scipy>=1.8",
