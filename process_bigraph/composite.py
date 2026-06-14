@@ -2383,7 +2383,6 @@ class Composite(Process):
             Summary dict with file counts and sizes.
         """
         from bigraph_schema.methods.bundle import BundleContext
-        from process_bigraph.bundle import save_bundle
 
         if not schema and not state:
             schema = state = True
