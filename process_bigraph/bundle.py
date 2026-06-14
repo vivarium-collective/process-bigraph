@@ -1,16 +1,17 @@
 """
-bundle.py — Array Parquet I/O and bundle loading for composite documents.
+bundle.py — Bundle loading for composite documents.
 
 A bundle is a directory containing:
     document.json     — the composite document with large arrays replaced
                         by ``{"$bundle_ref": "arrays/<hash>.parquet"}`` markers
     arrays/           — externalized arrays as Parquet files
 
-This module provides the array externalization primitives
-(``_save_array_parquet`` / ``_load_array_parquet``) used by the typed-dispatch
-``bundle`` method in bigraph-schema, plus the bundle *load* path
-(``resolve_refs`` / ``load_bundle``). The *save* path lives on
-``Composite.save_bundle``, which drives ``core.bundle`` + ``BundleContext``.
+This module provides the bundle *load* path — ``_load_array_parquet`` plus
+``resolve_refs`` / ``load_bundle``. The matching *write* primitive,
+``_save_array_parquet``, lives in ``bigraph_schema.methods.bundle`` (the layer
+that owns the bundle format via ``BundleContext`` + the dispatched ``bundle``
+method); the two are a format pair and must stay in sync. The save *path* is
+driven by ``Composite.save_bundle`` → ``core.bundle`` + ``BundleContext``.
 
 The format is designed to be:
 - Language-independent (Parquet is readable from Python, R, Rust, Java, …)
@@ -39,92 +40,12 @@ MIN_ARRAY_BYTES = 10_000
 
 
 # ---------------------------------------------------------------------------
-# Parquet I/O for arrays
+# Parquet array reading (the writer is bigraph_schema.methods.bundle)
 # ---------------------------------------------------------------------------
 
-def _save_array_parquet(arr: np.ndarray, filepath: str) -> None:
-    """Save a numpy array to a Parquet file.
-
-    Strategy:
-    - 1D/2D numeric arrays: store as columnar Parquet (one column per
-      array column, or a single column for 1D).
-    - Higher-dimensional or structured arrays: store as a binary blob
-      with shape/dtype metadata.
-    """
-    import pyarrow as pa
-    import pyarrow.parquet as pq
-
-    if arr.dtype.names:
-        # Structured array — each field becomes one or more Parquet columns.
-        # Sub-array fields (e.g. shape (N, 2)) are flattened into separate
-        # columns: field.0, field.1, etc.
-        columns = {}
-        subarray_meta = {}  # field_name -> {'shape': [...], 'dtype': '...'}
-
-        for name in arr.dtype.names:
-            field_data = arr[name]
-            if field_data.dtype.kind == 'U':
-                columns[name] = pa.array(field_data.tolist(), type=pa.string())
-            elif field_data.ndim > 1:
-                # Sub-array field: flatten into N columns
-                sub_shape = field_data.shape[1:]
-                sub_count = int(np.prod(sub_shape))
-                flat = field_data.reshape(len(field_data), sub_count)
-                for i in range(sub_count):
-                    columns[f'{name}.{i}'] = pa.array(flat[:, i])
-                subarray_meta[name] = {
-                    'shape': list(sub_shape),
-                    'dtype': str(field_data.dtype.base),
-                    'count': sub_count,
-                }
-            else:
-                columns[name] = pa.array(field_data)
-
-        table = pa.table(columns)
-
-        # Store the original dtype string and sub-array info in file metadata
-        file_meta = {
-            'dtype': str(arr.dtype),
-            'subarray_fields': subarray_meta,
-        }
-        schema_meta = table.schema.metadata or {}
-        schema_meta[b'bundle_structured'] = json.dumps(file_meta).encode()
-        table = table.replace_schema_metadata(schema_meta)
-
-        pq.write_table(table, filepath, compression='zstd')
-
-    elif arr.ndim == 1 or (arr.ndim == 2 and arr.shape[1] <= 500):
-        # Dense 1D or moderate 2D array — columnar storage.
-        if arr.ndim == 1:
-            table = pa.table({'c0': pa.array(arr)})
-        else:
-            columns = {
-                f'c{i}': pa.array(arr[:, i])
-                for i in range(arr.shape[1])
-            }
-            table = pa.table(columns)
-
-        # Store original dtype in metadata
-        meta = {b'dtype': str(arr.dtype).encode(),
-                b'shape': json.dumps(list(arr.shape)).encode()}
-        table = table.replace_schema_metadata(meta)
-        pq.write_table(table, filepath, compression='zstd')
-
-    else:
-        # Wide 2D (>500 cols) or 3D+ — binary blob with compression.
-        # Storing as raw bytes in a single Parquet row with zstd
-        # compression. This is still very efficient: a 50MB int8 array
-        # compresses to ~15MB.
-        table = pa.table({
-            'data': [arr.tobytes()],
-            'shape': [json.dumps(list(arr.shape))],
-            'dtype': [str(arr.dtype)],
-        })
-        pq.write_table(table, filepath, compression='zstd')
-
-
 def _load_array_parquet(filepath: str) -> np.ndarray:
-    """Load a numpy array from a Parquet file created by _save_array_parquet."""
+    """Load a numpy array from a Parquet file written by
+    ``bigraph_schema.methods.bundle._save_array_parquet`` (the format pair)."""
     import pyarrow.parquet as pq
 
     # Use ParquetFile.read() rather than pq.read_table: the latter
