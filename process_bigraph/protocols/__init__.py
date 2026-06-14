@@ -15,9 +15,6 @@ PROCESS_PROTOCOLS = {
     'rest': RestProtocol,
     'ray': RayProtocol}
 
-# TODO: remove ProcessTypes
-BASE_PROTOCOLS = PROCESS_PROTOCOLS
-
 
 def register_types(core):
     core.register_types(PROCESS_PROTOCOLS)

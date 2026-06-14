@@ -1,19 +1,16 @@
 """
-bundle.py — Save and load composite documents as directory bundles.
+bundle.py — Array Parquet I/O and bundle loading for composite documents.
 
 A bundle is a directory containing:
     document.json     — the composite document with large arrays replaced
                         by ``{"$bundle_ref": "arrays/<hash>.parquet"}`` markers
     arrays/           — externalized arrays as Parquet files
 
-This dramatically reduces document size for composites with large numpy
-arrays in their configs or state (e.g. sequence arrays, stoichiometry
-matrices).  A 2.9 GB JSON document typically compresses to ~50–80 MB.
-
-Usage::
-
-    composite.save_bundle('out/my_bundle')
-    loaded = Composite.load_bundle('out/my_bundle', core=core)
+This module provides the array externalization primitives
+(``_save_array_parquet`` / ``_load_array_parquet``) used by the typed-dispatch
+``bundle`` method in bigraph-schema, plus the bundle *load* path
+(``resolve_refs`` / ``load_bundle``). The *save* path lives on
+``Composite.save_bundle``, which drives ``core.bundle`` + ``BundleContext``.
 
 The format is designed to be:
 - Language-independent (Parquet is readable from Python, R, Rust, Java, …)
@@ -21,10 +18,9 @@ The format is designed to be:
 - Human-inspectable (document.json is small enough to open in an editor)
 """
 
-import hashlib
 import json
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 import numpy as np
 
@@ -40,79 +36,6 @@ REF_KEY = '$bundle_ref'
 # Minimum estimated JSON size (bytes) before an array gets externalized.
 # 10 KB — small arrays stay inline for readability.
 MIN_ARRAY_BYTES = 10_000
-
-
-# ---------------------------------------------------------------------------
-# Helpers: detect and extract arrays from serialized dicts
-# ---------------------------------------------------------------------------
-
-def _estimate_json_size(value) -> int:
-    """Rough byte estimate of a value when rendered as JSON."""
-    if isinstance(value, (int, float)):
-        return 8
-    if isinstance(value, str):
-        return len(value) + 2
-    if isinstance(value, bool) or value is None:
-        return 5
-    if isinstance(value, list):
-        if len(value) == 0:
-            return 2
-        # Sample first element to estimate
-        per_elem = _estimate_json_size(value[0])
-        return len(value) * (per_elem + 2)  # +2 for comma+space
-    if isinstance(value, dict):
-        return sum(
-            len(k) + 4 + _estimate_json_size(v)
-            for k, v in value.items())
-    return 16
-
-
-def _is_numeric_list(value) -> bool:
-    """Check if value is a list of numbers (1D array) or list of lists of
-    numbers (2D+ array)."""
-    if not isinstance(value, list) or len(value) == 0:
-        return False
-    first = value[0]
-    if isinstance(first, (int, float)):
-        return True
-    if isinstance(first, list) and len(first) > 0:
-        return _is_numeric_list_inner(first)
-    return False
-
-
-def _is_numeric_list_inner(value) -> bool:
-    """Recursively check inner lists."""
-    if isinstance(value, (int, float)):
-        return True
-    if isinstance(value, list) and len(value) > 0:
-        return _is_numeric_list_inner(value[0])
-    return False
-
-
-def _is_structured_array(value) -> bool:
-    """Check if value is a vivarium-style __structured_array__ dict."""
-    return (isinstance(value, dict)
-            and value.get('__structured_array__') is True
-            and 'dtype' in value
-            and 'data' in value)
-
-
-def _list_to_ndarray(data, dtype_hint=None):
-    """Convert a nested list back to a numpy array.
-
-    Tries to infer the best dtype. For integer data uses int64,
-    for mixed int/float uses float64.
-    """
-    arr = np.array(data)
-    # If all values are small ints (0-3 or -1), use int8 (sequence data)
-    if arr.dtype.kind in ('i', 'u') and arr.min() >= -1 and arr.max() <= 127:
-        arr = arr.astype(np.int8)
-    return arr
-
-
-def _content_hash(data: bytes) -> str:
-    """Short content hash for deduplication."""
-    return hashlib.sha256(data).hexdigest()[:16]
 
 
 # ---------------------------------------------------------------------------
@@ -266,105 +189,6 @@ def _load_array_parquet(filepath: str) -> np.ndarray:
 
 
 # ---------------------------------------------------------------------------
-# Extract arrays from a serialized document
-# ---------------------------------------------------------------------------
-
-def extract_arrays(
-    document: Dict[str, Any],
-    arrays_dir: str,
-    min_bytes: int = MIN_ARRAY_BYTES,
-) -> Tuple[Dict[str, Any], Dict[str, str]]:
-    """Walk *document* and replace large arrays with ``$bundle_ref`` markers.
-
-    Returns ``(modified_document, ref_map)`` where *ref_map* maps
-    ref paths to filenames.  Arrays are saved to *arrays_dir*.
-
-    Handles:
-    - Nested lists of numbers (from numpy array serialization)
-    - ``__structured_array__`` dicts (vivarium structured array format)
-    """
-    os.makedirs(arrays_dir, exist_ok=True)
-    ref_map: Dict[str, str] = {}  # content_hash -> filename
-    counter = [0]
-
-    def _make_ref(arr: np.ndarray, path_hint: str) -> Dict[str, Any]:
-        """Save array and return a $bundle_ref marker."""
-        raw = arr.tobytes()
-        content_id = _content_hash(raw + str(arr.dtype).encode())
-
-        if content_id in ref_map:
-            # Deduplicated — same content already saved
-            filename = ref_map[content_id]
-        else:
-            # Use path hint for a human-readable filename
-            safe_hint = path_hint.replace('.', '_').replace('/', '_')
-            if len(safe_hint) > 60:
-                safe_hint = safe_hint[:60]
-            filename = f'{safe_hint}_{content_id}.parquet'
-            filepath = os.path.join(arrays_dir, filename)
-            _save_array_parquet(arr, filepath)
-            ref_map[content_id] = filename
-
-        marker = {
-            REF_KEY: f'{ARRAY_DIR}/{filename}',
-            'shape': list(arr.shape),
-            'dtype': str(arr.dtype),
-        }
-        if arr.dtype.names:
-            marker['dtype'] = str(arr.dtype)
-            marker['structured'] = True
-        return marker
-
-    def _walk(node, path=''):
-        """Recursively walk and replace large arrays."""
-        if isinstance(node, dict):
-            # Check for __structured_array__ format
-            if _is_structured_array(node):
-                est = _estimate_json_size(node['data'])
-                if est >= min_bytes:
-                    import ast
-                    dtype = np.dtype(ast.literal_eval(node['dtype']))
-                    data = node['data']
-                    arr = np.array(
-                        [tuple(row) for row in data], dtype=dtype)
-                    return _make_ref(arr, path)
-                return node
-
-            # Walk children
-            result = {}
-            for key, value in node.items():
-                child_path = f'{path}.{key}' if path else key
-                result[key] = _walk(value, child_path)
-            return result
-
-        if isinstance(node, list):
-            # Check if this is a numeric array
-            if _is_numeric_list(node):
-                est = _estimate_json_size(node)
-                if est >= min_bytes:
-                    arr = _list_to_ndarray(node)
-                    return _make_ref(arr, path)
-            else:
-                # Walk list elements (might contain dicts with arrays)
-                return [_walk(item, f'{path}[{i}]') for i, item in enumerate(node)]
-
-        # Convert numpy scalars and tuples to JSON-native types
-        if isinstance(node, (np.integer,)):
-            return int(node)
-        if isinstance(node, (np.floating,)):
-            return float(node)
-        if isinstance(node, (np.bool_,)):
-            return bool(node)
-        if isinstance(node, tuple):
-            return [_walk(item, f'{path}[{i}]') for i, item in enumerate(node)]
-
-        return node
-
-    modified = _walk(document)
-    return modified, ref_map
-
-
-# ---------------------------------------------------------------------------
 # Resolve $bundle_ref markers back into data
 # ---------------------------------------------------------------------------
 
@@ -410,58 +234,8 @@ def resolve_refs(
 
 
 # ---------------------------------------------------------------------------
-# Public API: save_bundle / load_bundle
+# Public API: load_bundle (the save path lives on Composite.save_bundle)
 # ---------------------------------------------------------------------------
-
-def save_bundle(
-    document: Dict[str, Any],
-    outdir: str,
-    min_bytes: int = MIN_ARRAY_BYTES,
-) -> Dict[str, Any]:
-    """Save a composite document as a bundle directory.
-
-    Args:
-        document: Serialized composite document (from serialize_state/schema).
-        outdir: Bundle directory path (will be created).
-        min_bytes: Minimum estimated JSON size to externalize an array.
-
-    Returns:
-        Summary dict with file counts and sizes.
-    """
-    os.makedirs(outdir, exist_ok=True)
-    arrays_dir = os.path.join(outdir, ARRAY_DIR)
-
-    # Extract arrays and get modified document
-    modified_doc, ref_map = extract_arrays(document, arrays_dir, min_bytes)
-
-    # Write the document
-    doc_path = os.path.join(outdir, DOCUMENT_FILE)
-    with open(doc_path, 'w') as f:
-        json.dump(modified_doc, f, separators=(',', ':'))
-
-    # Summary
-    doc_size = os.path.getsize(doc_path)
-    array_sizes = {}
-    for filename in ref_map.values():
-        fpath = os.path.join(arrays_dir, filename)
-        array_sizes[filename] = os.path.getsize(fpath)
-    total_array_bytes = sum(array_sizes.values())
-
-    summary = {
-        'document_size': doc_size,
-        'num_arrays': len(ref_map),
-        'total_array_bytes': total_array_bytes,
-        'total_bytes': doc_size + total_array_bytes,
-        'array_files': array_sizes,
-    }
-
-    print(f"Saved bundle to {outdir}/")
-    print(f"  document.json: {doc_size / 1e6:.1f} MB")
-    print(f"  arrays: {len(ref_map)} files, {total_array_bytes / 1e6:.1f} MB")
-    print(f"  total: {(doc_size + total_array_bytes) / 1e6:.1f} MB")
-
-    return summary
-
 
 def load_bundle(
     bundle_dir: str,
