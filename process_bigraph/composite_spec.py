@@ -12,8 +12,10 @@ and the ``composite_generator`` decorator. Those become thin shims over this.
 """
 from __future__ import annotations
 
+import re
+import importlib
 from dataclasses import dataclass, field, asdict
-from typing import Callable
+from typing import Callable, Any
 
 CANONICAL_TYPES = {"integer", "float", "string", "boolean", "list", "map"}
 
@@ -34,6 +36,73 @@ def normalize_type(t: str) -> str:
     object→map, array→list); an unknown type passes through unchanged.
     """
     return _TYPE_ALIASES.get(t, t)
+
+
+_FULL_PLACEHOLDER = re.compile(r"^\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}$")
+_INLINE_PLACEHOLDER = re.compile(r"\$\{([a-zA-Z_][a-zA-Z0-9_]*)\}")
+
+
+def _cast(value: Any, declared_type: "str | None") -> Any:
+    if declared_type is None:
+        return value
+    t = normalize_type(declared_type)
+    if t == "float":
+        return float(value)
+    if t == "integer":
+        return int(value)
+    if t == "string":
+        return str(value)
+    if t == "boolean":
+        if isinstance(value, str):
+            return value.strip().lower() in ("true", "1", "yes")
+        return bool(value)
+    return value
+
+
+def _resolve_value(value, params, overrides):
+    if not isinstance(value, str):
+        return value
+    m = _FULL_PLACEHOLDER.match(value)
+    if m:
+        pname = m.group(1)
+        if pname not in params:
+            raise KeyError(f"parameter '{pname}' referenced in state but not declared")
+        pdef = params[pname]
+        raw = overrides.get(pname, pdef.get("default"))
+        if raw is None and "default" not in pdef:
+            raise KeyError(f"parameter '{pname}' has no default and no override")
+        return _cast(raw, pdef.get("type"))
+    if _INLINE_PLACEHOLDER.search(value):
+        def repl(match):
+            pname = match.group(1)
+            if pname not in params:
+                raise KeyError(f"parameter '{pname}' referenced in state but not declared")
+            raw = overrides.get(pname, params[pname].get("default"))
+            return str(raw)
+        return _INLINE_PLACEHOLDER.sub(repl, value)
+    return value
+
+
+def substitute_parameters(state, params, overrides=None):
+    """Recursively substitute ``${name}`` placeholders. Returns a new structure."""
+    overrides = overrides or {}
+    if isinstance(state, dict):
+        return {k: substitute_parameters(v, params, overrides) for k, v in state.items()}
+    if isinstance(state, list):
+        return [substitute_parameters(v, params, overrides) for v in state]
+    return _resolve_value(state, params, overrides)
+
+
+def _resolve_builder(builder, module):
+    """Resolve a builder callable; a dotted ``pkg.mod:fn`` string is imported."""
+    if callable(builder):
+        return builder
+    mod_name, _, qual = str(builder).partition(":")
+    mod = importlib.import_module(mod_name or module)
+    obj = mod
+    for part in qual.split("."):
+        obj = getattr(obj, part)
+    return obj
 
 
 @dataclass
@@ -89,3 +158,37 @@ class CompositeSpec:
         d = dict(d)
         d.pop("core_extensions", None)
         return cls(**d)
+
+    def _merged_params(self, overrides):
+        overrides = overrides or {}
+        unknown = set(overrides) - set(self.parameters)
+        if unknown:
+            raise KeyError(f"unknown override(s): {sorted(unknown)}")
+        merged = {k: v.get("default") for k, v in self.parameters.items()}
+        merged.update(overrides)
+        return merged
+
+    def to_document(self, overrides=None, core=None) -> dict:
+        # Validate overrides for both static and generator specs
+        self._merged_params(overrides)
+        if self.kind == "spec":
+            return {
+                "schema": substitute_parameters(self.schema, self.parameters, overrides),
+                "state": substitute_parameters(self.state, self.parameters, overrides),
+            }
+        fn = _resolve_builder(self.builder, self.module)
+        return fn(core=core, **self._merged_params(overrides))
+
+    def to_composite(self, overrides=None, core=None):
+        from process_bigraph import Composite, allocate_core
+        if core is None:
+            core = allocate_core()
+        for ext in self.core_extensions:
+            ext(core)
+        doc = self.to_document(overrides, core=core)
+        return Composite(doc, core=core)
+
+    def default_state(self, base_dir=None) -> "dict | None":
+        if self.state is not None:
+            return self.state
+        return None  # generator artifact path implemented in Task 5
