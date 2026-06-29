@@ -200,3 +200,24 @@ def test_composite_spec_module_has_no_module_level_yaml_import():
     # importing the module must not require it, only from_file on a .yaml does.
     import process_bigraph.composite_spec as m
     assert not hasattr(m, "yaml"), "yaml must not be imported at module level"
+
+
+def test_regenerate_and_read_default_state(tmp_path):
+    def build(core=None, *, seed=0):
+        return {"state": {"count": seed + 1}}
+    s = CompositeSpec(id="m.g", name="g", builder=build,
+                      parameters={"seed": {"type": "integer", "default": 4}},
+                      default_state_ref="g.default-state.json")
+    from process_bigraph.composite_spec import regenerate_default_state
+    out = regenerate_default_state(s, tmp_path)
+    assert out.exists()
+    # display reads the saved state, no rebuild
+    state = s.default_state(base_dir=tmp_path)
+    assert state is not None
+    assert state["count"] == 5
+
+
+def test_default_state_missing_artifact_returns_none(tmp_path):
+    s = CompositeSpec(id="m.g", name="g", builder=lambda core=None: {"state": {}},
+                      default_state_ref="absent.json")
+    assert s.default_state(base_dir=tmp_path) is None

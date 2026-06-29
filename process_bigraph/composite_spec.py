@@ -225,7 +225,31 @@ class CompositeSpec:
     def default_state(self, base_dir=None) -> "dict | None":
         if self.state is not None:
             return self.state
-        return None  # generator artifact path implemented in Task 5
+        if self.default_state_ref and base_dir is not None:
+            artifact = Path(base_dir) / self.default_state_ref
+            if artifact.is_file():
+                data = json.loads(artifact.read_text(encoding="utf-8"))
+                return data.get("state", data)
+        return None
+
+
+def regenerate_default_state(spec: CompositeSpec, base_dir, core=None) -> "Path":
+    """Run a generator's builder with default params, serialize the materialized
+    state, and write the ``default_state_ref`` artifact (+ a provenance stamp).
+
+    This is the one step that needs the heavy build environment (e.g. a ParCa
+    cache for v2ecoli baseline). Display thereafter reads the artifact, no build.
+    """
+    if spec.kind != "generator" or not spec.default_state_ref:
+        raise ValueError("regenerate_default_state requires a generator with default_state_ref")
+    comp = spec.to_composite(core=core)
+    state = comp.serialize_state()
+    param_sig = {k: v.get("default") for k, v in spec.parameters.items()}
+    out = Path(base_dir) / spec.default_state_ref
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(json.dumps({"state": state, "_provenance": {"param_signature": param_sig}},
+                              indent=2), encoding="utf-8")
+    return out
 
 
 _REGISTRY: "dict[str, CompositeSpec]" = {}
