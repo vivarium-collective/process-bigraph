@@ -192,3 +192,51 @@ class CompositeSpec:
         if self.state is not None:
             return self.state
         return None  # generator artifact path implemented in Task 5
+
+
+_REGISTRY: "dict[str, CompositeSpec]" = {}
+
+
+def register(spec: CompositeSpec) -> None:
+    _REGISTRY[spec.id] = spec
+
+
+def get(spec_id: str) -> "CompositeSpec | None":
+    return _REGISTRY.get(spec_id)
+
+
+def all_specs() -> "dict[str, CompositeSpec]":
+    return dict(_REGISTRY)
+
+
+def clear_registry() -> None:
+    _REGISTRY.clear()
+
+
+def composite_spec(*, name, description="", parameters=None, visualizations=None,
+                   emitters=None, analyses=None, tags=None, default_n_steps=None,
+                   core_extensions=None, default_state_ref=None):
+    """Decorator: register a generator function as a CompositeSpec.
+
+    The wrapped fn becomes the spec's ``builder``; its id is
+    ``"<fn.__module__>.<name>"``. Returns the original fn unchanged.
+    """
+    def decorate(fn):
+        spec = CompositeSpec(
+            id=f"{fn.__module__}.{name}",
+            name=name,
+            description=description or (fn.__doc__ or "").strip().split("\n")[0],
+            tags=list(tags or []),
+            parameters=dict(parameters or {}),
+            default_n_steps=default_n_steps,
+            visualizations=list(visualizations or []),
+            analyses=list(analyses or []),
+            emitters=list(emitters or []),
+            builder=fn,
+            module=fn.__module__,
+            default_state_ref=default_state_ref,
+            core_extensions=list(core_extensions or []),
+        )
+        register(spec)
+        return fn
+    return decorate

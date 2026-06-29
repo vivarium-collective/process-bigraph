@@ -118,3 +118,32 @@ def test_to_composite_applies_core_extensions_before_build():
 def test_default_state_inline():
     s = CompositeSpec(id="m.c", name="c", state={"v": 1})
     assert s.default_state() == {"v": 1}
+
+
+def test_decorator_registers_generator():
+    from process_bigraph import composite_spec as cs
+    cs.clear_registry()
+
+    @cs.composite_spec(name="demo", description="d",
+                       parameters={"seed": {"type": "int", "default": 0}},
+                       emitters=[{"address": "local:RAMEmitter"}], default_n_steps=5)
+    def demo(core=None, *, seed=0):
+        return {"state": {"s": seed}}
+
+    spec_id = f"{demo.__module__}.demo"
+    spec = cs.get(spec_id)
+    assert spec is not None and spec.kind == "generator"
+    assert spec.parameters["seed"]["type"] == "integer"  # normalized
+    assert spec.default_n_steps == 5 and spec.builder is demo
+    assert demo(seed=2) == {"state": {"s": 2}}  # decorator returns the original fn
+
+
+def test_register_get_all_clear():
+    from process_bigraph import composite_spec as cs
+    cs.clear_registry()
+    s = CompositeSpec(id="m.c", name="c", state={})
+    cs.register(s)
+    assert cs.get("m.c") is s
+    assert "m.c" in cs.all_specs()
+    cs.clear_registry()
+    assert cs.get("m.c") is None
