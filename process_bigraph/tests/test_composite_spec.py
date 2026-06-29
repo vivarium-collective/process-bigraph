@@ -221,3 +221,10 @@ def test_default_state_missing_artifact_returns_none(tmp_path):
     s = CompositeSpec(id="m.g", name="g", builder=lambda core=None: {"state": {}},
                       default_state_ref="absent.json")
     assert s.default_state(base_dir=tmp_path) is None
+
+
+def test_top_level_exports():
+    import process_bigraph as pbg
+    assert hasattr(pbg, "CompositeSpec")
+    assert hasattr(pbg, "composite_spec")      # the decorator
+    assert hasattr(pbg, "discover_specs")
