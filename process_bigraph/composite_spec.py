@@ -138,10 +138,12 @@ class CompositeSpec:
                              "from the builder document")
         if self.default_state_ref is not None and not has_builder:
             raise ValueError("`default_state_ref` requires a `builder`")
-        # normalize parameter types in place
-        for pdef in self.parameters.values():
-            if isinstance(pdef, dict) and "type" in pdef:
-                pdef["type"] = normalize_type(pdef["type"])
+        # normalize parameter types (non-mutating rebuild)
+        self.parameters = {
+            k: ({**v, "type": normalize_type(v["type"])}
+                if isinstance(v, dict) and "type" in v else v)
+            for k, v in self.parameters.items()
+        }
 
     @property
     def kind(self) -> str:
