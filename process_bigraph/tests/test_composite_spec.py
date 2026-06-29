@@ -1,5 +1,8 @@
 import pytest
+import json
+import textwrap
 from process_bigraph.composite_spec import CompositeSpec, normalize_type, CANONICAL_TYPES, substitute_parameters
+import process_bigraph.composite_spec as cs
 
 
 def test_normalize_type_aliases():
@@ -139,11 +142,54 @@ def test_decorator_registers_generator():
 
 
 def test_register_get_all_clear():
-    from process_bigraph import composite_spec as cs
-    cs.clear_registry()
+    from process_bigraph import composite_spec as cs_mod
+    cs_mod.clear_registry()
     s = CompositeSpec(id="m.c", name="c", state={})
-    cs.register(s)
-    assert cs.get("m.c") is s
-    assert "m.c" in cs.all_specs()
+    cs_mod.register(s)
+    assert cs_mod.get("m.c") is s
+    assert "m.c" in cs_mod.all_specs()
+    cs_mod.clear_registry()
+    assert cs_mod.get("m.c") is None
+
+
+def test_from_file_static_yaml(tmp_path):
+    p = tmp_path / "g.composite.yaml"
+    p.write_text(textwrap.dedent("""
+        name: growth
+        description: demo
+        tags: [a]
+        requires:
+          processes: [P]
+          types: [ty]
+        schema:
+          population: tree
+        parameters:
+          seed: {type: int, default: 0}
+        state:
+          v: "${seed}"
+    """), encoding="utf-8")
+    s = CompositeSpec.from_file(p)
+    assert s.kind == "spec" and s.name == "growth"
+    assert s.schema == {"population": "tree"}
+    assert s.requires == {"processes": ["P"], "types": ["ty"]}
+    assert s.parameters["seed"]["type"] == "integer"  # normalized
+    assert s.id.endswith(".growth")
+
+
+def test_from_file_generator_with_builder_ref(tmp_path):
+    p = tmp_path / "b.composite.json"
+    p.write_text(json.dumps({
+        "name": "bgen", "builder": "process_bigraph.composite_spec:normalize_type",
+        "default_state_ref": "bgen.default-state.json",
+        "parameters": {}}), encoding="utf-8")
+    s = CompositeSpec.from_file(p)
+    assert s.kind == "generator" and s.default_state_ref == "bgen.default-state.json"
+
+
+def test_discover_specs_scans_workspace_files(tmp_path):
     cs.clear_registry()
-    assert cs.get("m.c") is None
+    comp = tmp_path / "composites"
+    comp.mkdir()
+    (comp / "x.composite.yaml").write_text("name: xc\nstate: {a: 1}\n", encoding="utf-8")
+    found = cs.discover_specs(workspace=tmp_path)
+    assert any(s.name == "xc" for s in found.values())

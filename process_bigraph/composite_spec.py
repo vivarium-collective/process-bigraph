@@ -13,9 +13,13 @@ and the ``composite_generator`` decorator. Those become thin shims over this.
 from __future__ import annotations
 
 import re
+import json
 import importlib
+from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Any
+
+import yaml
 
 CANONICAL_TYPES = {"integer", "float", "string", "boolean", "list", "map"}
 
@@ -159,6 +163,34 @@ class CompositeSpec:
         d.pop("core_extensions", None)
         return cls(**d)
 
+    @classmethod
+    def from_file(cls, path) -> "CompositeSpec":
+        path = Path(path)
+        text = path.read_text(encoding="utf-8")
+        raw = json.loads(text) if path.suffix.lower() == ".json" else yaml.safe_load(text)
+        if not isinstance(raw, dict):
+            raise ValueError(f"composite spec {path} must parse to a dict")
+        name = raw.get("name")
+        # id: prefer an explicit id, else "<file-stem-stripped>.<name>"; keep stable + simple
+        stem = path.name.replace(".composite.yaml", "").replace(".composite.json", "")
+        spec_id = raw.get("id") or f"{stem}.{name}"
+        builder = raw.get("builder")
+        return cls(
+            id=spec_id, name=name, description=raw.get("description", ""),
+            tags=list(raw.get("tags") or []),
+            parameters=dict(raw.get("parameters") or {}),
+            default_n_steps=raw.get("default_n_steps"),
+            visualizations=list(raw.get("visualizations") or []),
+            analyses=list(raw.get("analyses") or []),
+            emitters=list(raw.get("emitters") or []),
+            requires=dict(raw.get("requires") or {}),
+            schema=dict(raw.get("schema") or {}) if builder is None else {},
+            state=raw.get("state") if builder is None else None,
+            builder=builder,
+            default_state_ref=raw.get("default_state_ref"),
+            module=raw.get("module", ""),
+        )
+
     def _merged_params(self, overrides):
         overrides = overrides or {}
         unknown = set(overrides) - set(self.parameters)
@@ -240,3 +272,21 @@ def composite_spec(*, name, description="", parameters=None, visualizations=None
         register(spec)
         return fn
     return decorate
+
+
+def discover_specs(workspace=None) -> "dict[str, CompositeSpec]":
+    """Populate + return the registry: import decorator-registered generators
+    AND scan a workspace for ``*.composite.{yaml,json}`` files."""
+    try:
+        from pbg_superpowers.composite_generator import discover_generators
+        discover_generators()  # fires @composite_spec / @composite_generator on import
+    except Exception:
+        pass  # discovery of code generators is best-effort
+    if workspace is not None:
+        for pat in ("*.composite.yaml", "*.composite.json"):
+            for fp in Path(workspace).rglob(pat):
+                try:
+                    register(CompositeSpec.from_file(fp))
+                except Exception:
+                    continue  # a malformed file must not break discovery
+    return all_specs()
