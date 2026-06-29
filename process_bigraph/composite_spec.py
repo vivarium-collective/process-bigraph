@@ -19,8 +19,6 @@ from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Any
 
-import yaml
-
 CANONICAL_TYPES = {"integer", "float", "string", "boolean", "list", "map"}
 
 _TYPE_ALIASES = {
@@ -167,7 +165,11 @@ class CompositeSpec:
     def from_file(cls, path) -> "CompositeSpec":
         path = Path(path)
         text = path.read_text(encoding="utf-8")
-        raw = json.loads(text) if path.suffix.lower() == ".json" else yaml.safe_load(text)
+        if path.suffix.lower() == ".json":
+            raw = json.loads(text)
+        else:
+            import yaml
+            raw = yaml.safe_load(text)
         if not isinstance(raw, dict):
             raise ValueError(f"composite spec {path} must parse to a dict")
         name = raw.get("name")

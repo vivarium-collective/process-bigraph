@@ -193,3 +193,10 @@ def test_discover_specs_scans_workspace_files(tmp_path):
     (comp / "x.composite.yaml").write_text("name: xc\nstate: {a: 1}\n", encoding="utf-8")
     found = cs.discover_specs(workspace=tmp_path)
     assert any(s.name == "xc" for s in found.values())
+
+
+def test_composite_spec_module_has_no_module_level_yaml_import():
+    # yaml must be a lazy/optional import (PyYAML is not a process-bigraph dep);
+    # importing the module must not require it, only from_file on a .yaml does.
+    import process_bigraph.composite_spec as m
+    assert not hasattr(m, "yaml"), "yaml must not be imported at module level"
