@@ -786,10 +786,12 @@ def test_top_level_exports():
 
 ```python
 from process_bigraph.composite_spec import (
-    CompositeSpec, composite_spec, discover_specs, regenerate_default_state,
-    register, get, all_specs, clear_registry, normalize_type, CANONICAL_TYPES,
+    CompositeSpec, discover_specs, regenerate_default_state,
+    normalize_type, CANONICAL_TYPES,
 )
 ```
+
+**Naming note (do NOT export the decorator or registry fns at top level):** the decorator is named `composite_spec` — the SAME name as the module. Exporting it from `__init__` would rebind the `process_bigraph.composite_spec` package attribute to the function, shadowing the module, which breaks every `from process_bigraph import composite_spec as cs; cs.get()/cs.composite_spec()` access pattern (used by the existing tests AND by Tasks 7/9). So leave the decorator + `register`/`get`/`all_specs`/`clear_registry` on the module: they are reached as `process_bigraph.composite_spec.composite_spec`, `.get`, etc. (which is how the existing tests already use them via `cs.*`). `from process_bigraph.composite_spec import composite_spec` also still works for anyone wanting the decorator directly. The top-level package exposes only the non-colliding names above. The Task-6 test below passes either way (`hasattr(pbg, "composite_spec")` is true for the module).
 
 - [ ] **Step 4: Run → pass.** Also run the WHOLE process-bigraph suite to confirm no import cycle: `.venv/bin/python -m pytest -q` (composite_spec imports `process_bigraph.Composite` lazily inside methods, so no cycle at import time).
 
