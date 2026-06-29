@@ -1,7 +1,7 @@
 # CompositeSpec — Unified Composite Declaration — Design
 
 **Date:** 2026-06-28
-**Status:** Design (brainstormed + grounded in a process-bigraph / pbg-superpowers / vivarium-dashboard survey; approved section-by-section by user)
+**Status:** Design (brainstormed + grounded in a process-bigraph / pbg-superpowers / vivarium-dashboard survey; **contract validated against the full ecosystem** — all 13 v2ecoli generators, 93 YAML composites across ~20 pbg-* repos, and ~12 study specs — see §3a; approved section-by-section by user)
 **Author:** Eran Agmon (with Claude)
 **Repos touched:** `process-bigraph` (new abstraction — center of gravity), `pbg-superpowers` (back-compat shim), `vivarium-dashboard` (resolve against the new contract + display robustness + bug fix). Workspaces (`v2ecoli`, `pbg-autopoiesis`) provide the two proof composites.
 
@@ -80,36 +80,75 @@ tags: list[str] = []
 
 # configuration surface
 parameters: dict[str, dict]   # {name: {type, default, description?, choices?}}
-default_n_steps: int | None = None
+                              # `type` ∈ a CANONICAL vocabulary (see "Parameter types" below);
+                              # aliases (bool/boolean, float/number, int/integer) normalized on load.
+default_n_steps: int | None = None   # a DEFAULT/fallback, NOT a hard bound — studies override per run/variant
 
-# associated artifacts — DECLARATIVE this round (stored + surfaced; execution = follow-up)
+# associated artifacts — DECLARATIVE this round (stored + surfaced; execution = follow-up).
+# These are an OPEN menu: studies extend freely and are not constrained to these lists.
+# `state` may ALSO contain inline emitter/viz/analysis STEPS; these fields are the
+# declarative, dashboard-facing surface, not a closed set.
 visualizations: list[dict] = []   # study-spec viz dicts
 analyses:       list[dict] = []   # NEW field, same {address, config?, …} declarative shape
 emitters:       list[dict] = []   # {address, config?, paths?}
-requires: dict = {}               # {processes: [...]} (carried from YAML)
+
+requires: dict = {}               # {processes: [...], types: [...]} — process AND external-type deps
+schema:  dict = {}                # bigraph-schema type declarations for stores (e.g. {population: tree});
+                                  # the static counterpart of a generator document's "schema" envelope key.
+                                  # A Composite DOCUMENT is {schema, state, …} — the spec carries both.
 
 # the body — EXACTLY ONE state source (validated):
-state:   dict | None = None       # static composites inline this (also serves as default state)
-builder: Callable | str | None    # generator: a callable in code; a dotted "pkg.mod:fn" in JSON
+state:   dict | None = None       # static composites inline this (paired with optional `schema`);
+                                  # also serves as the default state for display
+builder: Callable | str | None    # generator: a callable in code; a dotted "pkg.mod:fn" in JSON.
+                                  # Returns a process-bigraph DOCUMENT dict — {state, schema?, and
+                                  # composite-exec keys: skip_initial_steps?, sequential_steps?,
+                                  # flow_order?, run_steps_on_init?}. `to_composite`/`to_document`
+                                  # forward the WHOLE document to Composite(); `default_state` reads
+                                  # only its `state` (from the saved artifact).
 
 # generator-only: where the saved materialized default state lives
 default_state_ref: str | None = None   # e.g. "<id>.default-state.json" (sibling artifact)
 
-# code-only (not serialized)
+# code-only (not serialized) — register types/processes on the core (e.g. map[pymunk_agent],
+# parca core, millard links). LOAD-BEARING and applied to the core BEFORE the builder runs;
+# required for builds in sandboxed/subprocess environments (and for regenerate_default_state).
 core_extensions: list[Callable] = []
 ```
 
+**Parameter types (canonical vocabulary + alias normalization).** The audit found the same
+semantic type spelled inconsistently across composites (`bool`/`boolean`, `float`/`number`,
+`int`/`integer`). The contract defines a canonical set — `integer`, `float`, `string`, `boolean`,
+`list`, `map`/`object` — and the decorator + `from_file` loader **normalize known aliases** to it
+(`bool→boolean`, `number→float`, `int→integer`). Unknown types load as-is with a logged warning.
+This is part of "make it robust": the dashboard config form keys rendering off a single vocabulary.
+
+**Deep-path overrides convention.** Two override styles exist in studies: flat
+`parameter_overrides` (validated against `parameters`) and deep-path `config_overrides` like
+`ecoli-polypeptide-elongation.basal_elongation_rate: 28` (targets `<process>.<config-key>`). The
+latter is NOT a separate contract mechanism — it is a **builder-provided escape hatch**: a generator
+declares a `config_overrides` parameter (type `map`) and applies the patches to its built document
+itself (as v2ecoli `baseline()` does, baseline.py:696). `to_composite(overrides)` forwards all
+overrides to the builder; flat `parameters` are the validated knobs, `config_overrides` is the typed,
+declared escape hatch. No deep-path-aware logic lives in `CompositeSpec`.
+
 **Methods**
-- `to_composite(overrides=None, core=None) -> Composite` — resolve `${param}` substitution (static) or
-  call the builder with merged defaults+overrides (generator); hand the document to `Composite(document, core)`.
-- `to_document(overrides=None) -> dict` — the resolved `{schema, state}` doc, without instantiating `Composite`.
-- `default_state(base_dir=None) -> dict | None` — the state used for **display**: inline `state` (static)
-  or the parsed `default_state_ref` artifact (generator). Returns `None` if a generator's artifact is
-  missing/not-yet-generated (→ dashboard shows the honest degrade notice). **Never runs the builder.**
+- `to_composite(overrides=None, core=None) -> Composite` — apply `core_extensions` to the core FIRST, then
+  resolve `${param}` substitution over `{schema, state}` (static) or call the builder with merged
+  defaults+overrides (generator); hand the **whole** resolved document to `Composite(document, core)`.
+- `to_document(overrides=None) -> dict` — the resolved process-bigraph document, WITHOUT instantiating
+  `Composite`. For a static spec: `{schema, state}` after substitution. For a generator: the entire dict
+  the builder returns (`state`, optional `schema`, plus any composite-exec keys like `skip_initial_steps`,
+  `sequential_steps`, `flow_order`) — passed through verbatim, never narrowed to just state+schema.
+- `default_state(base_dir=None) -> dict | None` — the **state** used for display: inline `state` (static)
+  or the `state` of the parsed `default_state_ref` artifact (generator). Returns `None` if a generator's
+  artifact is missing/not-yet-generated (→ dashboard shows the honest degrade notice). **Never runs the
+  builder; needs no core_extensions** (the artifact is already materialized).
 - `to_dict() / from_dict(d)` — round-trip the portable JSON. A code `builder` callable serializes to its
   dotted `"pkg.mod:fn"` path; `from_dict` leaves it as a string (resolved lazily on `to_composite`).
-- **Validation:** exactly one of `state` / `builder` is set; a `builder` may additionally carry a
-  `default_state_ref`; `default_state_ref` without a `builder` is an error.
+- **Validation:** exactly one of `state` / `builder` is set; `schema` may accompany `state` (static) and
+  defaults to `{}`; a `builder` may additionally carry a `default_state_ref`; `default_state_ref` without
+  a `builder` is an error; parameter `type`s are normalized to the canonical vocabulary on construction.
 
 **Regeneration (generator default-state artifact)**
 - `regenerate_default_state(spec, base_dir, core=None) -> Path` — run `spec.to_composite()` with default
@@ -117,6 +156,40 @@ core_extensions: list[Callable] = []
   small provenance stamp (`{generated_from_commit, param_signature, generated_with}`). This mirrors the
   existing dashboard `regenerate_composite_states.py` pattern. A CI/freshness check (compare stamp vs
   current commit/param signature) is a **follow-up**, not in this spec.
+
+## 3a. Coverage — validated against the ecosystem
+
+The contract was audited against real usage: **all 13 `@composite_generator` generators in v2ecoli**,
+**93 `*.composite.{yaml,json}` files across ~20 pbg-* repos** (autopoiesis, bioreactordesign,
+membrane-actin, tyssue, copasi, tellurium, smoldyn, martini, comets, mem3dg, cellpack, yalla, biomodels,
+nfsim, readdy, medyan, lammps, compucell3d, parsimony, caspule), and **the study→composite interface
+across ~12 `study.yaml` files** (v2ecoli, v2e-invest, autopoiesis, viva-munk, sms-ecoli, bioreactordesign).
+
+| Capability seen in practice | Source | Covered by |
+|---|---|---|
+| name / description / tags | all | `name`/`description`/`tags` |
+| flat config knobs | all generators + most YAML | `parameters` (canonical types) |
+| string enums | baseline `emitter` | `parameters[].choices` |
+| default run length | v2ecoli `default_n_steps`, incl. dynamic (`len(STEP_ORDER)`) | `default_n_steps` (fallback) |
+| declarative viz / emitters / analyses | v2ecoli decorator; tyssue top-level `emitters` | `visualizations`/`emitters`/`analyses` (open menu) |
+| inline emitter/viz STEPS in state | membrane-actin (8 viz steps) | `state` (steps live in state; the fields above are the declarative surface) |
+| process deps | most YAML `requires.processes` | `requires.processes` |
+| **external type deps** | tyssue `requires.types` | **`requires.types` (added)** |
+| **store type declarations** | autopoiesis `schema: {population: tree}`; builder `{state, schema}` envelope | **`schema` (added)** |
+| **composite-exec doc keys** | v2ecoli builders return `skip_initial_steps`/`sequential_steps`/`flow_order` | **whole-document passthrough (added)** |
+| core/type registration | 5 v2ecoli composites (`core_extensions`) | `core_extensions` (load-bearing, pre-builder) |
+| flat parameter_overrides | v4 studies | `parameters` (validated) |
+| deep-path `config_overrides` | param-uq studies; `baseline(config_overrides=…)` | builder escape-hatch param of type `map` (documented convention) |
+| static (data) composite | autopoiesis, all pbg-* wrappers | `state` (+ `schema`) inline |
+| generator (code) composite | v2ecoli | `builder` + saved `default_state_ref` |
+
+**Study-level, NOT composite gaps (out of scope by design):** variant/condition declaration,
+`parameter_overrides`/`config_overrides` *values*, per-variant seeds/durations, `default_emitter` choice
+at run time, `observables`/`readouts`/`behavior_tests`, `pipeline_gate`/`prerequisites`,
+`enforced_params` (critical-param locking). The composite exposes the parameter/emitter/analysis
+**surface**; the study OWNS which variants to run and what to measure. An optional future
+`parameters[].enforced: <reason>` flag (to let a composite mark a knob whose change invalidates the
+model, e.g. v2ecoli `mode: full`) is noted but **deferred** — YAGNI for this round.
 
 ## 4. Registry & discovery
 
@@ -135,9 +208,12 @@ core_extensions: list[Callable] = []
   exposes (`name`, `description`, `parameters`, `visualizations`, `emitters`, `default_n_steps`,
   `core_extensions`) **plus** `analyses` and `tags`. Builds + registers a `CompositeSpec` with
   `builder=<fn>`.
-- **YAML/JSON loader** — `from_file` accepts the existing spec-file keys and the new `analyses`. A static
-  file's `state` becomes the spec's inline `state`. A file MAY instead declare `builder: "pkg.mod:fn"` +
-  `default_state_ref` for a generator authored as data (not required for this round).
+- **YAML/JSON loader** — `from_file` accepts the existing spec-file keys (`name`, `description`, `tags`,
+  `parameters`, `state`, `emitters`, `requires.processes`) plus the keys the audit surfaced: `analyses`,
+  `visualizations`, `default_n_steps`, top-level `schema`, and `requires.types`. A static file's `state`
+  (+ optional `schema`) becomes the spec's inline body; parameter `type`s are alias-normalized. A file MAY
+  instead declare `builder: "pkg.mod:fn"` + `default_state_ref` for a generator authored as data (specified
+  but un-proven this round — no proof composite uses it).
 - **pbg-superpowers shim** — `@composite_generator`, `_REGISTRY`, `build_generator`,
   `discover_generators` become **thin delegators** to the `process-bigraph` registry:
   - `@composite_generator(**kw)` maps its kwargs onto `@composite_spec(**kw)` (no `analyses`/`tags` →
@@ -181,8 +257,8 @@ core_extensions: list[Callable] = []
 
 The dashboard's resolve payload stays **shape-compatible** with today's `CompositeResolvePayload`
 (`{id, name, description, parameters, state, svg, kind, module, default_n_steps}`), **plus** new
-optional `analyses`, `visualizations`, `emitters`, `wiring_status`, and `notice` fields. SP-C's config
-form and the Explorer keep working; the new fields are additive.
+optional `analyses`, `visualizations`, `emitters`, `schema`, `requires`, `tags`, `wiring_status`, and
+`notice` fields. SP-C's config form and the Explorer keep working; the new fields are additive.
 
 ## 9. Error handling
 
@@ -197,11 +273,14 @@ form and the Explorer keep working; the new fields are additive.
 ## 10. Testing
 
 - **process-bigraph (headless, no ParCa):** construct/validate (exactly-one-of `state`/`builder`;
-  `default_state_ref` requires `builder`); `to_dict`/`from_dict` round-trip incl. dotted-builder
-  serialization; `to_document`/`to_composite` produce a runnable `Composite` (fake builder returning a
-  small doc); `default_state` reads inline state and a sibling artifact, and returns `None` when the
-  artifact is absent; decorator registers into the registry; `discover_specs` merges decorator + file
-  specs; `regenerate_default_state` writes the artifact + stamp.
+  `schema` pairs with `state`; `default_state_ref` requires `builder`); parameter-`type` alias
+  normalization (`bool→boolean`, `number→float`, `int→integer`); `to_dict`/`from_dict` round-trip incl.
+  dotted-builder serialization, `schema`, and `requires.{processes,types}`; `to_document` forwards a
+  generator's WHOLE document (extra keys like `skip_initial_steps`/`flow_order` preserved);
+  `to_composite` applies `core_extensions` before building and produces a runnable `Composite` (fake
+  builder returning a small doc); `default_state` reads inline state and the `state` of a sibling
+  artifact, and returns `None` when the artifact is absent; decorator registers into the registry;
+  `discover_specs` merges decorator + file specs; `regenerate_default_state` writes the artifact + stamp.
 - **pbg-superpowers (headless):** old `@composite_generator` registers a `CompositeSpec`; `_REGISTRY`
   view exposes the attributes the dashboard reads; `build_generator` delegates to `to_document`;
   `discover_generators` delegates.
@@ -217,8 +296,9 @@ form and the Explorer keep working; the new fields are additive.
 
 ## 11. Scope boundaries
 
-**In:** the `process-bigraph` `CompositeSpec` abstraction (class, validation, `to_composite`/
-`to_document`/`default_state`/`to_dict`/`from_dict`, decorator, registry, `discover_specs`,
+**In:** the `process-bigraph` `CompositeSpec` abstraction (class with `schema` + `requires.{processes,
+types}` + canonical parameter-type normalization, validation, `to_composite`/`to_document` [whole-document
+passthrough]/`default_state`/`to_dict`/`from_dict`, decorator, registry, `discover_specs`,
 `regenerate_default_state`); the `pbg-superpowers` shim; the dashboard resolve-against-new-contract +
 saved-default-state display + the `walkthrough.js` bug fix; proof on `baseline` (generator) +
 `growth-division` (static).
@@ -244,5 +324,6 @@ SP-D — a remote build could ship its default-state artifact in the workspace t
 2. **Artifact location convention** — `<id>.default-state.json` beside the spec module vs a workspace
    `composites/_state/` dir vs the dashboard's existing `api/composite-state/<id>.json`. Pick one in
    planning; prefer reusing the dashboard snapshot convention if it fits.
-3. **`from_file` builder authoring** — confirm the data-authored-generator path (`builder:` +
-   `default_state_ref` in YAML) is specified but un-proven this round (no proof composite uses it).
+3. **Canonical type vocabulary final list** — confirm the exact set + alias map (the audit found
+   `bool`/`boolean`, `float`/`number`, `int`/`integer`, plus `object`/`map`); decide whether `map` or
+   `object` is canonical. Normalize the existing v2ecoli composites' types as part of the proof.
