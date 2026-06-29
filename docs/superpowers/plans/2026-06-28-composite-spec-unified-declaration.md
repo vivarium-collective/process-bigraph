@@ -17,7 +17,7 @@
 - **A Composite DOCUMENT is `{schema, state, …}`** — generator builders may return extra exec keys (`skip_initial_steps`, `sequential_steps`, `flow_order`, `run_steps_on_init`); `to_document`/`to_composite` forward the WHOLE document verbatim, never narrowed to `{state, schema}`.
 - **`core_extensions` are load-bearing** — applied to the core BEFORE the builder runs.
 - **Worktrees:** process-bigraph work is in `/Users/eranagmon/code/pbg-composite-spec` (branch `feat/composite-spec`). Tasks 7–8 (pbg-superpowers) and 9–10 (vivarium-dashboard) each need their own worktree off `origin/main` — create at task start (see each task). Proof (Task 11) spans v2ecoli + autopoiesis worktrees.
-- **Test command (process-bigraph):** `cd /Users/eranagmon/code/pbg-composite-spec && .venv/bin/python -m pytest process_bigraph/tests/test_composite_spec.py -v`. Ruff: `.venv/bin/ruff check process_bigraph/composite_spec.py`.
+- **Test command (process-bigraph):** the worktree has no `.venv`; use the main checkout's interpreter, which imports the worktree's local `process_bigraph/` because CWD is on `sys.path`: `cd /Users/eranagmon/code/pbg-composite-spec && /Users/eranagmon/code/process-bigraph/.venv/bin/python -m pytest process_bigraph/tests/test_composite_spec.py -v`. Ruff: `/Users/eranagmon/code/process-bigraph/.venv/bin/ruff check process_bigraph/composite_spec.py` (or `python -m ruff` if the `ruff` entrypoint is absent).
 
 ## The Canonical Contract (every task depends on these exact signatures)
 
