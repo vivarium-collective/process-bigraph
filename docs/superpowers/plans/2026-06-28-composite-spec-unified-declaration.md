@@ -1006,7 +1006,12 @@ def build_composite_from_spec(spec, overrides=None, core=None):
 - Modify: `vivarium_dashboard/lib/models.py` (`CompositeResolvePayload`: add optional `analyses`, `visualizations`, `emitters`, `schema`, `requires`, `tags`, `wiring_status`, `notice`)
 - Test: `tests/test_composite_resolve_dispatch.py` (or the existing composite-resolve test file)
 
-**Interfaces — Consumes:** `process_bigraph.composite_spec.{discover_specs,get}`, `CompositeSpec.default_state`. **Produces:** `resolve_composite(ws_root, spec_id, overrides=None) -> dict | None` returning `{id, name, description, parameters, state, schema, requires, tags, visualizations, analyses, emitters, kind, module, default_n_steps, wiring_status, notice}`. `wiring_status ∈ {"ready", "unavailable"}`.
+**Interfaces — Consumes:** `process_bigraph.composite_spec.{get, CompositeSpec}`, `CompositeSpec.default_state`, `vivarium_dashboard.lib.composite_lookup.find_composite_path`. **Produces:** `resolve_composite(ws_root, spec_id, overrides=None) -> dict | None` returning `{id, name, description, parameters, state, schema, requires, tags, visualizations, analyses, emitters, kind, module, default_n_steps, svg, wiring_status, notice}`. `wiring_status ∈ {"ready", "unavailable"}`.
+
+**CRITICAL — preserve the dashboard's id addressing (dual-branch resolve).** The dashboard LISTS composites via `composite_lookup.discover_all_composites` → `pbg_superpowers.composite_discovery.discover_all`, which addresses **generators by `"<module>.<name>"`** and **static specs by `"<pkg>.composites.<stem>"`** (the scheme `find_composite_path` decodes). These are TWO different id schemes, and `CompositeSpec.from_file`'s own default id (`"<stem>.<name>"`) matches NEITHER. So resolve MUST mirror the existing dual-branch lookup, NOT a single `registry.get(spec_id)`:
+1. **Generator branch:** prime the registry, then `spec = _get_spec(spec_id)` (process-bigraph registry; ids are `"<module>.<name>"`).
+2. **Static branch (spec is None):** `path = find_composite_path(ws_root, pkg, spec_id)`; if found, `spec = CompositeSpec.from_file(path)`. The payload's `id` is the REQUESTED `spec_id` (not `spec.id`), so it round-trips with what the dashboard listed.
+3. Neither → `None` (→ 404).
 
 **Constraint:** a generator whose default-state artifact is missing returns **200 + metadata + `wiring_status:"unavailable"` + honest `notice`**, NOT a swallowed None→404. A genuinely-unregistered id still returns None→404.
 
@@ -1020,60 +1025,93 @@ def test_resolve_generator_without_artifact_degrades(tmp_path, monkeypatch):
     cs.register(cs.CompositeSpec(id="m.g", name="g", builder=lambda core=None: {"state": {}},
                                  default_state_ref="m.g.default-state.json",
                                  parameters={"seed": {"type": "integer", "default": 0}}))
-    monkeypatch.setattr(cr, "discover_specs", lambda ws=None: cs.all_specs())
+    monkeypatch.setattr(cr, "_prime_registry", lambda: None)  # don't walk real distributions
     out = cr.resolve_composite(tmp_path, "m.g")
     assert out["wiring_status"] == "unavailable" and out["notice"]
     assert out["parameters"]["seed"]["type"] == "integer"   # metadata present without build
-    assert out["state"] is None
+    assert out["state"] is None and out["kind"] == "generator"
 
 
-def test_resolve_static_ready(tmp_path, monkeypatch):
-    from process_bigraph import composite_spec as cs
+def test_resolve_static_via_find_path(tmp_path, monkeypatch):
+    # A real static spec file resolved through the dashboard's id scheme
+    # "<pkg>.composites.<stem>" via find_composite_path.
     from vivarium_dashboard.lib import composite_resolve as cr
+    from process_bigraph import composite_spec as cs
     cs.clear_registry()
-    cs.register(cs.CompositeSpec(id="m.c", name="c", state={"v": 1}, schema={"v": "float"}))
-    monkeypatch.setattr(cr, "discover_specs", lambda ws=None: cs.all_specs())
-    out = cr.resolve_composite(tmp_path, "m.c")
+    (tmp_path / "workspace.yaml").write_text("name: demo-ws\npackage_path: pbg_demo\n", encoding="utf-8")
+    comp = tmp_path / "pbg_demo" / "composites"
+    comp.mkdir(parents=True)
+    (comp / "c.composite.yaml").write_text(
+        "name: c\nschema:\n  v: float\nstate:\n  v: 1\n", encoding="utf-8")
+    monkeypatch.setattr(cr, "_prime_registry", lambda: None)
+    out = cr.resolve_composite(tmp_path, "pbg_demo.composites.c")
+    assert out is not None and out["id"] == "pbg_demo.composites.c"  # requested id round-trips
     assert out["wiring_status"] == "ready" and out["state"] == {"v": 1}
+    assert out["schema"] == {"v": "float"} and out["kind"] == "spec"
 
 
 def test_resolve_unregistered_returns_none(tmp_path, monkeypatch):
     from process_bigraph import composite_spec as cs
     from vivarium_dashboard.lib import composite_resolve as cr
     cs.clear_registry()
-    monkeypatch.setattr(cr, "discover_specs", lambda ws=None: {})
-    assert cr.resolve_composite(tmp_path, "absent") is None
+    monkeypatch.setattr(cr, "_prime_registry", lambda: None)
+    assert cr.resolve_composite(tmp_path, "pbg_demo.composites.absent") is None
 ```
 
 - [ ] **Step 2: Run → fail.**
 
-- [ ] **Step 3: Implement** — rewrite `resolve_composite` in `composite_resolve.py` to use the unified registry (keep `resolve_composite_for_request` from SP-D1 wrapping it for remote builds):
+- [ ] **Step 3: Implement** — rewrite `resolve_composite` in `composite_resolve.py` (keep `resolve_composite_for_request` from SP-D1 wrapping it for remote builds). Mirror the EXISTING dual-branch structure; only the payload construction changes to use `CompositeSpec`:
 
 ```python
-from process_bigraph.composite_spec import discover_specs, get as _get_spec  # module-level for monkeypatch
+import yaml
+from process_bigraph.composite_spec import CompositeSpec, get as _get_spec  # module-level for monkeypatch
+
+
+def _prime_registry():
+    """Best-effort: import bigraph-schema packages so decorator-registered
+    generators populate the process-bigraph registry. Monkeypatched in tests."""
+    try:
+        from pbg_superpowers.composite_generator import discover_generators
+        discover_generators()
+    except Exception:
+        pass
+
+
+def _artifact_base_dir(ws_root, spec):
+    """Where a generator's default-state artifact lives. Reuses the dashboard's
+    existing snapshot dir if present, else the workspace root (§13 OQ2)."""
+    snap = Path(ws_root) / "api" / "composite-state"
+    return snap if snap.is_dir() else Path(ws_root)
+
 
 def resolve_composite(ws_root, spec_id, overrides=None):
     ws_root = Path(ws_root)
     _ws_add_to_sys_path(ws_root)
-    specs = discover_specs(workspace=ws_root)
-    spec = specs.get(spec_id)
-    if spec is None:
-        return None
-    base_dir = _artifact_base_dir(ws_root, spec)   # where default-state artifacts live
-    state = spec.default_state(base_dir=base_dir)
+    _prime_registry()
+    spec = _get_spec(spec_id)                       # generator branch: "<module>.<name>"
+    if spec is None:                                # static branch: "<pkg>.composites.<stem>"
+        from vivarium_dashboard.lib.composite_lookup import find_composite_path
+        ws_yaml = ws_root / "workspace.yaml"
+        ws_data = yaml.safe_load(ws_yaml.read_text(encoding="utf-8")) if ws_yaml.is_file() else {}
+        pkg = ws_data.get("package_path") or ("pbg_" + str(ws_data.get("name", "")).replace("-", "_"))
+        path = find_composite_path(ws_root, pkg, spec_id)
+        if path is None:
+            return None
+        spec = CompositeSpec.from_file(path)
+    state = spec.default_state(base_dir=_artifact_base_dir(ws_root, spec))
     wiring_status = "ready" if state is not None else "unavailable"
     notice = None
     if wiring_status == "unavailable":
         notice = (f"default state for generator '{spec.name}' is not generated yet — "
-                  f"run it, or regenerate its default-state artifact to see wiring.")
-    try:
-        from vivarium_dashboard.lib.process_docs import attach_process_docs
-        if state is not None:
+                  f"run it, or regenerate its default-state artifact to see the wiring.")
+    if state is not None:
+        try:
+            from vivarium_dashboard.lib.process_docs import attach_process_docs
             attach_process_docs(state)
-    except Exception:
-        pass
+        except Exception:
+            pass
     return {
-        "id": spec.id, "name": spec.name, "description": spec.description,
+        "id": spec_id, "name": spec.name, "description": spec.description,
         "parameters": spec.parameters, "state": state, "schema": spec.schema,
         "requires": spec.requires, "tags": spec.tags,
         "visualizations": spec.visualizations, "analyses": spec.analyses,
@@ -1083,12 +1121,18 @@ def resolve_composite(ws_root, spec_id, overrides=None):
     }
 ```
 
-  Add `_artifact_base_dir(ws_root, spec)` returning the dashboard's existing
-  `api/composite-state/` dir if present else `ws_root` (resolve in code review against
-  the §13 artifact-location decision). In `app.py`, the `/api/composite-resolve` handler
-  returns `CompositeResolvePayload.model_validate(result)` for a non-None result (200,
-  including `wiring_status:"unavailable"`), and only 404s when `result is None`. Add the
-  new optional fields to `CompositeResolvePayload` in `models.py`.
+  In `app.py`, the `/api/composite-resolve` handler returns
+  `CompositeResolvePayload.model_validate(result)` for a non-None result (200, including
+  `wiring_status:"unavailable"`), and only 404s when `result is None`. Add the new optional
+  fields to `CompositeResolvePayload` in `models.py` (`schema: dict = {}`, `requires: dict = {}`,
+  `tags: list = []`, `analyses: list = []`, `visualizations: list = []`, `emitters: list = []`,
+  `wiring_status: str | None = None`, `notice: str | None = None`) — all optional/defaulted so
+  existing callers/snapshots stay valid. **Type-string tolerance:** the dashboard's parameter
+  form/widget code must accept the canonical type vocabulary (`integer`/`boolean`/`float`/
+  `map`/`list`), since the unified path normalizes `int`/`bool`/etc. Grep the param-form code
+  (JS `configure-run.js`/`walkthrough.js` + any Python widget mapping) for exact-string matches
+  on `"int"`/`"bool"`/`"str"`/`"number"`; if found, map them through the canonical set (or accept
+  both). This closes the cross-task `int→integer` hazard flagged in Tasks 7-8.
 
 - [ ] **Step 4: Run → pass.** Test command: `cd /Users/eranagmon/code/vdash-composite-spec && PYTHONPATH=$PWD:/Users/eranagmon/code/investigation-contracts /Users/eranagmon/code/v2ecoli/.venv/bin/python -m pytest tests/test_composite_resolve_dispatch.py -v`.
 
