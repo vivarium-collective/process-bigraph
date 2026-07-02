@@ -7,6 +7,7 @@ Tests for Process Bigraph
 import os
 import pathlib
 import sys
+import json
 import inspect
 import sqlite3
 import tempfile
@@ -1125,6 +1126,52 @@ def test_ram_emitter(core):
     assert 'valueA' in results2[0] and 'valueB' not in results2[0]
     print(results2)
 
+def test_ram_emitter_max_len_bounds_history(core):
+    '''max_len caps history to the most recent N recorded rows (ring buffer),
+    keeping the latest data; default behaviour stays unbounded.'''
+    composite_spec = {
+        'increase': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.3},
+            'inputs': {'level': ['valueA']},
+            'outputs': {'level': ['valueA']}},
+        'emitter': {
+            '_type': 'step',
+            'address': 'local:RAMEmitter',
+            'config': {
+                'emit': {'time': 'node', 'valueA': 'node'},
+                'max_len': 3},
+            'inputs': {'time': ['global_time'], 'valueA': ['valueA']}}}
+
+    composite = Composite({'state': composite_spec}, core=core)
+    composite.run(10)
+
+    emitter = composite.state['emitter']['instance']
+    results = emitter.query()
+    assert isinstance(emitter.history, list)  # stays a list (slicing preserved)
+    assert len(results) == 3, f'expected bounded history of 3, got {len(results)}'
+    # keeps the MOST RECENT rows (times 8, 9, 10 after an 11-row unbounded run)
+    assert results[-1]['time'] == 10
+    assert results[0]['time'] == 8
+
+
+def test_ram_emitter_max_len_rejects_bad_value(core):
+    from process_bigraph.emitter import RAMEmitter
+    with pytest.raises(ValueError):
+        RAMEmitter({'emit': {'x': 'node'}, 'max_len': 0}, core)
+
+
+def test_ram_emitter_unbounded_by_default(core):
+    '''No max_len -> unbounded history (backward compatible).'''
+    from process_bigraph.emitter import RAMEmitter
+    e = RAMEmitter({'emit': {'x': 'node'}}, core)
+    assert e.max_len is None
+    for i in range(20):
+        e.update({'x': i})
+    assert len(e.history) == 20
+
+
 def test_sqlite_emitter(core, tmp_path=None):
     pytest.importorskip('pbg_emitters')
     tmp_dir = tmp_path or tempfile.mkdtemp(prefix='sqlite_emitter_')
@@ -1413,6 +1460,37 @@ def test_json_emitter(core):
     assert len(results) >= 10
     assert results[-1]['global_time'] == 10
     print(results)
+
+
+def test_json_emitter_writes_jsonl(core, tmp_path):
+    '''JSONEmitter is append-only JSON Lines: one JSON object per line.'''
+    from process_bigraph.emitter import JSONEmitter
+    e = JSONEmitter({'emit': {'x': 'node'}, 'file_path': str(tmp_path),
+                     'simulation_id': 'jl-test'}, core)
+    for i in range(5):
+        e.update({'x': i})
+
+    with open(e.filepath) as f:
+        lines = [ln for ln in f.read().splitlines() if ln.strip()]
+    assert len(lines) == 5, 'expected one JSON object per line'
+    assert json.loads(lines[0]) == {'x': 0}       # each line parses standalone
+    assert json.loads(lines[-1]) == {'x': 4}
+
+    results = e.query()
+    assert [r['x'] for r in results] == [0, 1, 2, 3, 4]
+
+
+def test_json_emitter_reads_legacy_array_format(core, tmp_path):
+    '''query() still reads files written in the old single-JSON-array format.'''
+    from process_bigraph.emitter import JSONEmitter
+    e = JSONEmitter({'emit': {'x': 'node'}, 'file_path': str(tmp_path),
+                     'simulation_id': 'legacy-test'}, core)
+    # simulate a file written by an older version (single JSON array)
+    with open(e.filepath, 'w') as f:
+        json.dump([{'x': 10}, {'x': 11}], f, indent=4)
+
+    results = e.query()
+    assert [r['x'] for r in results] == [10, 11]
 
 
 
