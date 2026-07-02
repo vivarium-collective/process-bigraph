@@ -1708,8 +1708,11 @@ class Composite(Process):
         and precomputes projection schemas so that runtime view/project
         calls bypass schema traversal entirely.
 
-        Currently disabled for debugging — all views/projects go through
-        the slow but correct core.view / core.project path.
+        Populates ``self._compiled_links`` with a compiled entry per
+        process/step path (skipping paths that precompile_link cannot
+        resolve). ``_cached_view`` / ``_cached_project`` consult this
+        cache and fall through to the slow ``core.view`` / ``core.project``
+        path for any path not present.
         """
         self._compiled_links = {}
 
