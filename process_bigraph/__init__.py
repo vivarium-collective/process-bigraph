@@ -20,7 +20,7 @@ from process_bigraph.composite import (  # noqa: F401
     Process, Step, Composite, TimingSummary, interval_time_precision, wire_step_layers,
 )
 from process_bigraph.composite_spec import (  # noqa: F401
-    CompositeSpec, discover_specs, regenerate_default_state,
+    CompositeSpec, discover_specs, register_spec_generator, regenerate_default_state,
     normalize_type, CANONICAL_TYPES,
 )
 from process_bigraph.bundle import load_bundle  # noqa: F401

@@ -195,6 +195,87 @@ def test_discover_specs_scans_workspace_files(tmp_path):
     assert any(s.name == "xc" for s in found.values())
 
 
+def test_register_spec_generator_hook_fires_on_discover(tmp_path):
+    """The imperative hook surface: a registered zero-arg callable runs during
+    discover_specs and can populate the registry (no pbg_superpowers import)."""
+    cs.clear_registry()
+
+    calls = []
+
+    def hook():
+        calls.append(True)
+        cs.register(CompositeSpec(id="hooked.g", name="hooked",
+                                  state={"a": 1}))
+    try:
+        cs.register_spec_generator(hook)
+        found = cs.discover_specs()
+        assert calls, "hook was not invoked by discover_specs"
+        assert any(s.name == "hooked" for s in found.values())
+    finally:
+        # keep global hook registry clean for other tests
+        cs._SPEC_GENERATOR_HOOKS.remove(hook)
+
+
+def test_register_spec_generator_is_idempotent():
+    cs._SPEC_GENERATOR_HOOKS.clear()
+
+    def hook():
+        pass
+    try:
+        cs.register_spec_generator(hook)
+        cs.register_spec_generator(hook)
+        assert cs._SPEC_GENERATOR_HOOKS.count(hook) == 1
+    finally:
+        cs._SPEC_GENERATOR_HOOKS.clear()
+
+
+def test_discover_specs_runs_entry_point_group(monkeypatch):
+    """discover_specs loads + runs each entry point in the
+    process_bigraph.spec_generators group."""
+    cs.clear_registry()
+    cs._SPEC_GENERATOR_HOOKS.clear()
+
+    ran = []
+
+    class _FakeEP:
+        name = "fake_generator"
+
+        def load(self):
+            def _run():
+                ran.append(True)
+                cs.register(CompositeSpec(id="ep.g", name="ep_gen",
+                                          state={"a": 1}))
+            return _run
+
+    monkeypatch.setattr(cs, "_iter_spec_generator_entry_points",
+                        lambda: [_FakeEP()])
+    found = cs.discover_specs()
+    assert ran, "entry point was not loaded/run"
+    assert any(s.name == "ep_gen" for s in found.values())
+
+
+def test_discover_specs_logs_entry_point_failure(monkeypatch, caplog):
+    """A failing entry point is logged (not silently swallowed) and does not
+    abort discovery."""
+    cs.clear_registry()
+    cs._SPEC_GENERATOR_HOOKS.clear()
+
+    class _BadEP:
+        name = "bad_generator"
+
+        def load(self):
+            def _boom():
+                raise RuntimeError("kaboom")
+            return _boom
+
+    monkeypatch.setattr(cs, "_iter_spec_generator_entry_points",
+                        lambda: [_BadEP()])
+    import logging
+    with caplog.at_level(logging.WARNING):
+        cs.discover_specs()  # must not raise
+    assert any("bad_generator" in r.message for r in caplog.records)
+
+
 def test_composite_spec_module_has_no_module_level_yaml_import():
     # yaml must be a lazy/optional import (PyYAML is not a process-bigraph dep);
     # importing the module must not require it, only from_file on a .yaml does.

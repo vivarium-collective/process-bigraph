@@ -14,10 +14,13 @@ from __future__ import annotations
 
 import re
 import json
+import logging
 import importlib
 from pathlib import Path
 from dataclasses import dataclass, field, asdict
 from typing import Callable, Any
+
+logger = logging.getLogger(__name__)
 
 CANONICAL_TYPES = {"integer", "float", "string", "boolean", "list", "map"}
 
@@ -476,14 +479,124 @@ def composite_spec(*, name, description="", parameters=None, visualizations=None
     return decorate
 
 
-def discover_specs(workspace=None) -> "dict[str, CompositeSpec]":
-    """Populate + return the registry: import decorator-registered generators
-    AND scan a workspace for ``*.composite.{yaml,json}`` files."""
+# --- spec-generator plugin surface -------------------------------------------
+#
+# The engine must NOT hard-import any downstream skills package to find code
+# generators (that is a dependency inversion). Instead it exposes two inbound
+# registration surfaces that downstream packages (e.g. pbg_superpowers) plug
+# into; ``discover_specs`` fans out over both:
+#
+#   1. The ``process_bigraph.spec_generators`` setuptools entry-point group.
+#      A package declares e.g.::
+#
+#          [project.entry-points."process_bigraph.spec_generators"]
+#          pbg_superpowers = "pbg_superpowers.composite_generator:discover_generators"
+#
+#      Each entry point loads to a zero-arg callable whose side effect is to
+#      register specs (via the ``@composite_spec`` / ``@composite_generator``
+#      decorators, which call ``register`` in this module).
+#
+#   2. ``register_spec_generator(hook)`` — an imperative registration hook for
+#      callers that would rather register at import time than ship an entry
+#      point (e.g. tests, notebooks, dynamically-loaded code).
+#
+# Discovery failures are logged (never silently swallowed).
+
+_SPEC_GENERATOR_HOOKS: "list[Callable[[], Any]]" = []
+
+_SPEC_GENERATOR_ENTRY_POINT_GROUP = "process_bigraph.spec_generators"
+
+
+def register_spec_generator(hook: "Callable[[], Any]") -> "Callable[[], Any]":
+    """Register a zero-arg callable whose side effect populates the spec
+    registry when :func:`discover_specs` runs.
+
+    This is the imperative alternative to the ``process_bigraph.spec_generators``
+    entry-point group. Idempotent: registering the same callable twice is a
+    no-op. Returns the hook so it can be used as a decorator.
+    """
+    if hook not in _SPEC_GENERATOR_HOOKS:
+        _SPEC_GENERATOR_HOOKS.append(hook)
+    return hook
+
+
+def _iter_spec_generator_entry_points():
+    """Yield entry points registered under ``process_bigraph.spec_generators``.
+
+    Tolerates the ``importlib.metadata.entry_points`` API differences between
+    Python versions (3.10+ accepts ``group=``; older returns a dict-like).
+    """
+    try:
+        from importlib.metadata import entry_points
+    except Exception:  # pragma: no cover - importlib.metadata always present on 3.8+
+        return []
+    try:
+        eps = entry_points(group=_SPEC_GENERATOR_ENTRY_POINT_GROUP)
+    except TypeError:
+        # Python < 3.10: entry_points() takes no kwargs, returns a mapping.
+        eps = entry_points().get(_SPEC_GENERATOR_ENTRY_POINT_GROUP, [])
+    return list(eps)
+
+
+def _run_spec_generators() -> bool:
+    """Fire every registered spec-generator plugin (entry points + hooks).
+
+    Returns True if at least one plugin was found (regardless of whether it
+    raised), so ``discover_specs`` can tell whether the modern plugin surface
+    is in use before deciding on the legacy fallback.
+    """
+    ran_any = False
+    for ep in _iter_spec_generator_entry_points():
+        ran_any = True
+        try:
+            hook = ep.load()
+            hook()
+        except Exception:
+            logger.warning(
+                "spec-generator entry point %r failed to run",
+                getattr(ep, "name", ep), exc_info=True)
+    for hook in list(_SPEC_GENERATOR_HOOKS):
+        ran_any = True
+        try:
+            hook()
+        except Exception:
+            logger.warning(
+                "spec-generator hook %r failed to run",
+                getattr(hook, "__name__", hook), exc_info=True)
+    return ran_any
+
+
+def _legacy_discover_generators_fallback() -> None:
+    """Best-effort fallback for environments where pbg_superpowers is installed
+    but has not (yet) declared the ``process_bigraph.spec_generators`` entry
+    point. Preserves pre-existing discovery behaviour during migration.
+
+    A missing pbg_superpowers is expected and stays quiet (it is an optional,
+    downstream package); any *other* failure is logged rather than swallowed.
+    """
     try:
         from pbg_superpowers.composite_generator import discover_generators
-        discover_generators()  # fires @composite_spec / @composite_generator on import
+    except ImportError:
+        return  # pbg_superpowers not installed — nothing to discover, and fine
+    try:
+        discover_generators()  # fires @composite_spec / @composite_generator
     except Exception:
-        pass  # discovery of code generators is best-effort
+        logger.warning(
+            "legacy pbg_superpowers.discover_generators() failed", exc_info=True)
+
+
+def discover_specs(workspace=None) -> "dict[str, CompositeSpec]":
+    """Populate + return the registry: run registered spec-generator plugins
+    AND scan a workspace for ``*.composite.{yaml,json}`` files.
+
+    Code generators are discovered through the ``process_bigraph.spec_generators``
+    entry-point group and :func:`register_spec_generator` hooks. If neither is
+    present, a logged best-effort fallback imports ``pbg_superpowers`` directly
+    (legacy path, retained for backward compatibility during migration).
+    """
+    ran_any = _run_spec_generators()
+    if not ran_any:
+        _legacy_discover_generators_fallback()
     if workspace is not None:
         for pat in ("*.composite.yaml", "*.composite.json"):
             for fp in Path(workspace).rglob(pat):
