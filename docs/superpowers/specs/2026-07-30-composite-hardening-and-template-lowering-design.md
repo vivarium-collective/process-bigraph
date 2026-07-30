@@ -39,6 +39,17 @@ bigraph-schema template primitive so a composite spec *is* a template.
 
 ## PART A — Harden the composite concept (independently shippable)
 
+### A0. Enforce groundness at the boundary (the hardening this spec is named for)
+
+`Composite.__init__` (`composite.py:1023`) does **not** call `is_ground` on the
+document it is handed, so Layer 1's central contract ("filling produces a ground
+document") is unenforced at the one place it is consumed. **A0:** `Composite.__init__`
+rejects a document with open **required** sites, naming the unfilled sites in the
+error. Cheap; turns a contract into a guarantee; and it is the precondition that
+makes gating-by-groundness (umbrella Layer 2) *safe* — a blocked study is a
+non-ground document, and a non-ground document must fail loudly if something tries
+to run it. Ship this first.
+
 ### A1. Emitter materialization belongs in process-bigraph (a real bug)
 
 `CompositeSpec.emitters` is a first-class field, but `to_composite()`
@@ -50,20 +61,24 @@ a composite built via the pure process-bigraph API gets **no observation sink**,
 while one built via the viva shim (`build_composite_from_spec`) does. This is a
 correctness gap, not a style one.
 
-**Fix:** move emitter materialization into process-bigraph and call it from
-`to_composite`/`to_document`:
+**Fix — reuse the constructors that already exist; do not add a third.**
+process-bigraph already has **two** node constructors (`emitter_from_wires`,
+`emitter.py:42`; `generate_emitter_state`, `emitter.py:77`) and **one** installer
+(`add_emitter_to_composite`, `emitter.py:125`). The shim's `_emitter_node_from_decl`
+(`composite_generator.py:332`) is a third that differs only in deriving wires from a
+`paths` list and layering Parquet run-partition keys. Porting it verbatim would leave
+three. Instead:
 
-- New `process_bigraph/emitter_install.py` (or into `emitter.py`) housing
-  `emitter_node(decl, core)` and `install_emitters(document, emitters, core)`,
-  ported from the shim. process-bigraph already owns the emitter types
-  (`emitter.py` — `Emitter(Step)`, RAM/JSON/Console; Parquet/SQLite/XArray via
-  pbg-emitters), so this is the correct home.
-- `to_document(...)` gains the declared emitter nodes in `state`; `to_composite`
-  therefore yields a composite that emits. Add an `emit=True` flag if a
-  caller wants the bare document.
+- Re-express the *declaration* form as `paths → wires`, then delegate to
+  **`emitter_from_wires`**, and install via **`add_emitter_to_composite`** — one
+  constructor, one installer. The Parquet run-partition layering becomes a config
+  overlay applied by the caller, not a branch inside the constructor.
+- Call it from `to_document`/`to_composite` so a spec's declared emitters are
+  present in `state`; add an `emit=False` flag for a caller wanting the bare document.
 - **The shim's `install_default_emitters` becomes a re-export** of the
-  process-bigraph function (behavior-preserving; the shim contract is unchanged),
-  so pbg-superpowers and the dashboard keep working with no source change.
+  process-bigraph path (behavior-preserving; shim contract unchanged), so
+  pbg-superpowers and the dashboard keep working with no source change. Idempotency
+  test: a spec built via both paths gets exactly one sink, never two.
 - Tests: a `CompositeSpec` with a declared emitter, built via `to_composite`,
   produces a composite whose emitter Step is present and gathers results
   (extend `tests/test_composite_spec.py`).
@@ -131,15 +146,24 @@ the bespoke `${name}` engine — is exactly the ~30% that the template's
 `bind`/`compose_at` replaces. `_cast`/`normalize_type` become slot sort/type
 coercion (bigraph-schema `core.check`/`resolve`).
 
-### B2. The refactor
+### B2. The refactor — `${name}` *is* a site
 
-- Add `CompositeSpec.to_template(core) -> template_document`: compile the spec's
-  `schema`/`state` + `parameters` into a bigraph-schema **template** — value
-  params → value slots at their `${name}` positions; declared model/process params
-  → process slots with an interface sort; scalar counts → cardinality slots.
+- Add `CompositeSpec.to_template(core)`: replace each **full**-placeholder `${name}`
+  occurrence with `Site(_sort=<declared param type>)` **keyed by the parameter name**
+  — so value and structural filling are literally the *same* call and the
+  "two-mechanism seam" never exists. `_cast`/`normalize_type` (`composite_spec.py:34,47`)
+  become the site's sort (`core.check`).
 - Re-express `to_document(overrides, core)` as
-  `core.bind(self.to_template(core), self._merged_params(overrides))` — same
-  signature, same return, substitution engine gone.
+  `core.fill_sites(self.to_template(core), self._merged_params(overrides))` then
+  `core.fill(defaults)` — same signature, same return. **Delete
+  `substitute_parameters`/`_resolve_value`/`_cast` (`composite_spec.py:47-95`).**
+  (Register is `core.fill_sites`, not `core.bind` — the latter already exists.)
+- **Stated limitation:** *inline* interpolation (`"pre_${n}_post"`,
+  `_INLINE_PLACEHOLDER`, `composite_spec.py:44`) is string concatenation, not
+  substitution, and does **not** lower to a site. The golden corpus (B3/§4) must
+  first report how many on-disk specs use it; then either keep a one-function
+  string-interp pass for that case (and say so) or restrict authoring to
+  full-placeholder form.
 - Keep `@composite_spec` / `from_file` / registry / the shim **unchanged on the
   surface** — only the *resolution* mechanism swaps underneath.
 
@@ -180,9 +204,12 @@ coercion (bigraph-schema `core.check`/`resolve`).
 - Extend `tests/test_composite_spec.py`: emitter installed via `to_composite`
   (A1); analyses/visualizations validated + surfaced on the document (A2); single
   discovery source + legacy-fallback deprecation warning (A3).
-- New golden-corpus test (B3): for every `*.composite.{yaml,json}` fixture and the
-  v2ecoli generators, assert `bind(to_template(spec), params)` == legacy
-  `to_document(spec, params)`.
+- **Golden corpus is a precondition, not a guard (C4).** Build it — every
+  `*.composite.{yaml,json}` fixture + the 13 v2ecoli generators, rendered to
+  documents and frozen against *today's* code — and land it as its own commit
+  **before** touching resolution. Part B is not started until the corpus is green.
+  Then assert `fill_sites(to_template(spec), params)` == legacy
+  `to_document(spec, params)` for every entry (byte-identity for `spec`-kind).
 - Template mapping unit tests (B): a `${name}` value → value slot; a process
   parameter → process slot rejecting a non-conforming filler; a count → cardinality
   expansion (reuse the Layer-1 conformance/cardinality tests as the substrate).
@@ -220,12 +247,16 @@ coercion (bigraph-schema `core.check`/`resolve`).
 
 ## 7. Sequencing
 
-1. **A1** (emitter install) — the real bug; ship first, no dependencies.
-2. **A3** (discovery consolidation) + **A2** (validate/surface analyses).
-3. **A4** (fold `GeneratorEntry`) — optional, cross-repo, lowest priority.
-4. **Land Layer 1** (`template`/`slot` in bigraph-schema).
-5. **B** — `to_template` + re-express `to_document` on `bind`, guarded by the
-   golden corpus.
+1. **A0** (`Composite.__init__` enforces `is_ground`) — cheap; makes the contract a
+   guarantee and gating-by-groundness safe.
+2. **A1** (emitter install, reusing `emitter_from_wires`/`add_emitter_to_composite`)
+   — the real bug.
+3. **A3** (discovery consolidation) + **A2** (validate/surface analyses).
+4. **A4** (fold `GeneratorEntry`) — optional, cross-repo, lowest priority.
+5. **Land Layer 1** (`fill` + `is_ground` in bigraph-schema) + build the **golden
+   corpus** commit.
+6. **B** — `to_template` (`${name}` → `Site`) + re-express `to_document` on
+   `fill_sites`; delete the substitution engine; guarded by the corpus.
 
 ---
 
