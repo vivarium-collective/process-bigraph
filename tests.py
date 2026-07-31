@@ -3640,3 +3640,134 @@ def test_a_filled_template_constructs():
     assert list(sim.process_paths) == [('proc',)]
     sim.run(2.0)
     assert sim.state['global_time'] == 2.0
+
+
+# ==========================================
+# A1 — declared emitters are actually installed
+# ==========================================
+
+def _emitting_spec(emitters):
+    from process_bigraph.composite_spec import CompositeSpec
+    return CompositeSpec(
+        id='emitting', name='emitting',
+        emitters=emitters,
+        state={
+            'proc': {
+                '_type': 'process',
+                'address': 'local:IncreaseProcess',
+                'config': {'rate': 0.1},
+                'inputs': {'level': ['level']},
+                'outputs': {'level': ['level']},
+                'interval': 1.0},
+            'level': 1.0})
+
+
+def test_declared_emitter_is_installed_and_gathers():
+    """`CompositeSpec.emitters` is a first-class field, but `to_composite`
+    never installed it — a composite built through the pure process-bigraph
+    API had no observation sink at all."""
+    spec = _emitting_spec([{'address': 'local:RAMEmitter', 'paths': ['level']}])
+
+    sim = spec.to_composite()
+    assert list(sim.step_paths) == [('emitter',)]
+
+    sim.run(3.0)
+    results = gather_emitter_results(sim)
+    rows = results[('emitter',)]
+
+    assert len(rows) > 1
+    assert 'level' in rows[0] and 'global_time' in rows[0]
+
+
+def test_emit_false_returns_the_bare_document():
+    spec = _emitting_spec([{'address': 'local:RAMEmitter', 'paths': ['level']}])
+
+    assert 'emitter' in spec.to_document()['state']
+    assert 'emitter' not in spec.to_document(emit=False)['state']
+
+
+def test_a_spec_with_no_emitters_installs_none():
+    spec = _emitting_spec([])
+    assert spec.to_document()['state'].keys() == {'proc', 'level'}
+    assert list(_emitting_spec([]).to_composite().step_paths) == []
+
+
+def test_installing_emitters_twice_yields_one_sink():
+    """The shim and the dashboard also install; fixed keys mean a second
+    install rewrites the same slot instead of adding a second sink."""
+    from process_bigraph.emitter import install_emitters
+
+    declarations = [{'address': 'local:RAMEmitter', 'paths': ['level']}]
+    state = _emitting_spec(declarations).to_document()['state']
+
+    once = install_emitters(state, declarations)
+    twice = install_emitters(once, declarations)
+
+    assert sorted(k for k in twice if k.startswith('emitter')) == ['emitter']
+    assert twice['emitter'] == once['emitter']
+
+    sim = Composite({'state': twice}, core=allocate_core())
+    assert list(sim.step_paths) == [('emitter',)]
+
+
+def test_multiple_declared_emitters_get_distinct_slots():
+    from process_bigraph.emitter import install_emitters
+
+    state = install_emitters({'level': 1.0}, [
+        {'address': 'local:RAMEmitter', 'paths': ['level']},
+        {'address': 'local:ConsoleEmitter', 'paths': ['level']}])
+
+    assert sorted(k for k in state if k.startswith('emitter')) == [
+        'emitter', 'emitter_1']
+
+
+def test_declaration_paths_become_wires():
+    """A declaration names what to observe; the wiring is computed. Slash-
+    and dot-joined paths both address a nested store."""
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    node = emitter_node_from_declaration(
+        {'address': 'local:RAMEmitter', 'paths': ['cell/mass', 'cell.volume']})
+
+    assert node['inputs']['cell_mass'] == ['cell', 'mass']
+    assert node['inputs']['cell_volume'] == ['cell', 'volume']
+    # global_time is always emitted so trajectories carry a time axis.
+    assert node['inputs']['global_time'] == ['global_time']
+    assert node['config']['emit']['cell_mass'] == 'node'
+
+
+def test_declaration_uses_the_one_emitter_constructor():
+    """A declared sink and a generated one are the same node shape, because
+    both come from `emitter_from_wires`."""
+    from process_bigraph.emitter import (
+        emitter_node_from_declaration, emitter_from_wires)
+
+    declared = emitter_node_from_declaration(
+        {'address': 'local:RAMEmitter', 'paths': ['level']})
+    generated = emitter_from_wires(
+        {'level': ['level'], 'global_time': ['global_time']},
+        address='local:RAMEmitter')
+
+    assert declared == generated
+
+
+def test_unregistered_emitter_address_degrades_to_ram():
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    node = emitter_node_from_declaration(
+        {'address': 'local:NoSuchEmitter', 'paths': ['level']},
+        core=allocate_core())
+
+    assert node['address'] == 'local:RAMEmitter'
+
+
+def test_declared_emitter_config_is_preserved():
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    node = emitter_node_from_declaration({
+        'address': 'local:RAMEmitter',
+        'config': {'subsample': 5},
+        'paths': ['level']})
+
+    assert node['config']['subsample'] == 5
+    assert 'emit' in node['config']

@@ -204,24 +204,54 @@ class CompositeSpec:
         merged.update(overrides)
         return merged
 
-    def to_document(self, overrides=None, core=None) -> dict:
+    def to_document(self, overrides=None, core=None, emit=True) -> dict:
+        """Build the composite document.
+
+        ``emitters`` is a first-class field of a spec, so the document it
+        produces carries the declared sinks — otherwise a composite built
+        through this API observes nothing. Pass ``emit=False`` for the bare
+        document (e.g. to inspect or re-emit it under different sinks).
+        """
         # Validate overrides for both static and generator specs
         self._merged_params(overrides)
         if self.kind == "spec":
-            return {
+            doc = {
                 "schema": substitute_parameters(self.schema, self.parameters, overrides),
                 "state": substitute_parameters(self.state, self.parameters, overrides),
             }
-        fn = _resolve_builder(self.builder, self.module)
-        return fn(core=core, **self._merged_params(overrides))
+        else:
+            fn = _resolve_builder(self.builder, self.module)
+            doc = fn(core=core, **self._merged_params(overrides))
 
-    def to_composite(self, overrides=None, core=None):
+        return self._with_emitters(doc, core) if emit else doc
+
+    def _with_emitters(self, doc, core=None):
+        """Install this spec's declared emitters into a built document.
+
+        Installing is idempotent — the sinks land at fixed ``emitter`` /
+        ``emitter_<i>`` keys — so a caller that also installs (the
+        ``viva_superpowers`` shim, the dashboard's observable injection)
+        rewrites the same slots rather than giving the composite two sinks.
+        """
+        from process_bigraph.emitter import install_emitters
+
+        if not self.emitters or not isinstance(doc, dict):
+            return doc
+
+        if "state" in doc:
+            return {**doc, "state": install_emitters(
+                doc["state"] or {}, self.emitters, core=core)}
+
+        # A builder that returned a bare state tree.
+        return install_emitters(doc, self.emitters, core=core)
+
+    def to_composite(self, overrides=None, core=None, emit=True):
         from process_bigraph import Composite, allocate_core
         if core is None:
             core = allocate_core()
         for ext in self.core_extensions:
             ext(core)
-        doc = self.to_document(overrides, core=core)
+        doc = self.to_document(overrides, core=core, emit=emit)
         return Composite(doc, core=core)
 
     def default_state(self, base_dir=None) -> "dict | None":

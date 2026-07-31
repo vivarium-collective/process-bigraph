@@ -81,8 +81,10 @@ def generate_emitter_state(composite, emitter_mode='all', address='local:ram-emi
         - "all": observe all valid inputs
         - "none": observe nothing
         - {"paths": [...]}: custom paths to observe
+
+    The node comes from :func:`emitter_from_wires` so a generated sink and a
+    declared one are built by the same constructor.
     '''
-    config = {}
     input_ports = {}
 
     if emitter_mode == 'all':
@@ -101,15 +103,84 @@ def generate_emitter_state(composite, emitter_mode='all', address='local:ram-emi
     if 'global_time' not in input_ports:
         input_ports['global_time'] = ['global_time']
 
-    if 'emit' not in config:
-        config['emit'] = {port: 'node' for port in input_ports}
+    return emitter_from_wires(input_ports, address=address)
 
-    return {
-        '_type': 'step',
-        'address': address,
-        'config': config,
-        'inputs': input_ports
-    }
+
+def emitter_node_from_declaration(
+        decl,
+        run_id=None,
+        out_dir=None,
+        core=None,
+        fallback='local:RAMEmitter'):
+    '''Materialize one declared emitter (``{address, config?, paths?}``) into
+    a step node.
+
+    A declaration names *what to observe*; the emit schema and topology depend
+    on the composite's shape, so they are computed here. Each ``paths`` entry
+    (slash- or dot-joined) becomes one wired column; ``global_time`` is always
+    emitted so trajectories have a time axis and the step re-fires every tick.
+
+    The node itself comes from :func:`emitter_from_wires` — the one emitter
+    constructor — so a declared sink and a generated one are the same shape.
+    An address the core does not know degrades to ``fallback`` so the
+    composite still builds.
+    '''
+    address = decl.get('address') or fallback
+    name = address.split(':', 1)[-1]
+    registered = getattr(core, 'link_registry', None) if core is not None else None
+    if registered is not None and name not in registered:
+        address = fallback
+        name = address.split(':', 1)[-1]
+
+    wires = {}
+    for path in decl.get('paths') or []:
+        parts = [part for part in str(path).replace('.', '/').split('/') if part]
+        if not parts:
+            continue
+        wires['_'.join(parts)] = parts
+    wires.setdefault('global_time', ['global_time'])
+
+    node = emitter_from_wires(wires, address=address)
+
+    # Declared config layers *under* the computed emit schema.
+    declared_config = dict(decl.get('config') or {})
+    node['config'] = {**declared_config, **node['config']}
+
+    # Run-specific partitioning for hive-partitioned parquet sinks; other
+    # sinks keep their declared config untouched.
+    if name.endswith('ParquetEmitter'):
+        if out_dir is not None:
+            node['config']['out_dir'] = str(out_dir)
+        if run_id is not None:
+            node['config'].setdefault('partitioning_keys', ['experiment_id'])
+            metadata = dict(node['config'].get('metadata') or {})
+            metadata.setdefault('experiment_id', run_id)
+            node['config']['metadata'] = metadata
+
+    return node
+
+
+def install_emitters(state, declarations, run_id=None, out_dir=None, core=None):
+    '''Return a copy of ``state`` with the declared emitter(s) installed.
+
+    Emitters land at the conventional ``emitter`` / ``emitter_<i>`` keys.
+    Because those keys are deterministic, installing twice rewrites the same
+    slots rather than adding a second sink — so a caller may invoke this
+    unconditionally without risking a composite that emits everything twice.
+
+    Returns ``state`` unchanged when nothing is declared.
+    '''
+    declarations = [decl for decl in (declarations or []) if isinstance(decl, dict)]
+    if not declarations:
+        return dict(state)
+
+    installed = dict(state)
+    for index, decl in enumerate(declarations):
+        key = 'emitter' if index == 0 else f'emitter_{index}'
+        installed[key] = emitter_node_from_declaration(
+            decl, run_id=run_id, out_dir=out_dir, core=core)
+
+    return installed
 
 def gather_emitter_results(composite, queries=None):
     '''Retrieve query results from all emitter steps in a composite.'''
