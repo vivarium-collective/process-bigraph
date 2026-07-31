@@ -3693,6 +3693,46 @@ def test_a_spec_with_no_emitters_installs_none():
     assert list(_emitting_spec([]).to_composite().step_paths) == []
 
 
+def test_builder_installed_emitter_is_not_duplicated():
+    """A builder that installs and configures its OWN emitter (possibly nested
+    inside a sub-composite) must keep it — ``to_document`` must not add a
+    second, differently-configured sink from the declaration on top.
+
+    Regression: a workspace generator (v2ecoli) nests a fully-built emitter
+    with a resolved ``out_dir`` under ``agents.<id>.emitter``; the bare
+    declaration reinstalled at the top level realized with an empty ``out_dir``
+    and failed. The declared emitter is a *default* — applied only when the
+    built document observes nothing."""
+    from process_bigraph.composite_spec import CompositeSpec
+    from process_bigraph.emitter import document_has_emitter
+
+    def builder(core=None):
+        # The builder places its own emitter, nested inside a sub-composite,
+        # with a config the declaration does not carry.
+        return {'state': {
+            'agents': {'0': {
+                'level': 1.0,
+                'emitter': {
+                    '_type': 'step',
+                    'address': 'local:RAMEmitter',
+                    'config': {'a_builder_only_key': 123,
+                               'emit': {'level': 'node'}},
+                    'inputs': {'level': ['level']}}}},
+            'global_time': 0.0}}
+
+    spec = CompositeSpec(
+        id='nested', name='nested', builder=builder, parameters={},
+        emitters=[{'address': 'local:RAMEmitter', 'paths': ['level']}])
+
+    state = spec.to_document()['state']
+    # The nested builder emitter is detected...
+    assert document_has_emitter(state, None)
+    # ...so no spurious top-level emitter is installed,
+    assert 'emitter' not in state
+    # and the builder's own configured node is untouched.
+    assert state['agents']['0']['emitter']['config']['a_builder_only_key'] == 123
+
+
 def test_installing_emitters_twice_yields_one_sink():
     """The shim and the dashboard also install; fixed keys mean a second
     install rewrites the same slot instead of adding a second sink."""

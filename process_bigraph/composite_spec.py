@@ -348,21 +348,36 @@ class CompositeSpec:
     def _with_emitters(self, doc, core=None):
         """Install this spec's declared emitters into a built document.
 
-        Installing is idempotent — the sinks land at fixed ``emitter`` /
-        ``emitter_<i>`` keys — so a caller that also installs (the
-        ``viva_superpowers`` shim, the dashboard's observable injection)
-        rewrites the same slots rather than giving the composite two sinks.
+        The declared ``emitters`` are a *default* observation sink, applied
+        only when the builder produced a document that observes nothing. A
+        builder that already installs and configures its own emitter — e.g. a
+        workspace generator that resolves a run-specific ``out_dir`` and nests
+        a fully-built emitter instance inside an agent sub-composite — keeps
+        it untouched: reinstalling the bare declaration on top would add a
+        second, differently-configured sink (which, for a ParquetEmitter,
+        realizes with an empty ``out_dir`` and fails). A composite built
+        through the pure API whose builder installs no sink still gets the
+        declared one, so the pure-API path is not left observing nothing.
+
+        Installing is idempotent — the declared sinks land at fixed
+        ``emitter`` / ``emitter_<i>`` keys — so a caller that installs the same
+        declaration again rewrites the same slots rather than adding a second
+        sink.
         """
-        from process_bigraph.emitter import install_emitters
+        from process_bigraph.emitter import install_emitters, document_has_emitter
 
         if not self.emitters or not isinstance(doc, dict):
             return doc
 
         if "state" in doc:
-            return {**doc, "state": install_emitters(
-                doc["state"] or {}, self.emitters, core=core)}
+            state = doc["state"] or {}
+            if document_has_emitter(state, core):
+                return doc
+            return {**doc, "state": install_emitters(state, self.emitters, core=core)}
 
         # A builder that returned a bare state tree.
+        if document_has_emitter(doc, core):
+            return doc
         return install_emitters(doc, self.emitters, core=core)
 
     def to_composite(self, overrides=None, core=None, emit=True):
