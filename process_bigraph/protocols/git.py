@@ -44,8 +44,9 @@ import shutil
 import hashlib
 import pathlib
 import subprocess
+import warnings
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, Optional, Callable
+from typing import Any, Dict, Optional, Callable, Tuple
 
 from bigraph_schema.schema import Protocol, String
 from bigraph_schema.methods import load_protocol
@@ -69,6 +70,13 @@ class AllowListError(GitProtocolError):
 class ConformanceError(GitProtocolError):
     """The resolved ``interface()`` does not admit the declared face
     (D5, contract 2)."""
+
+
+LOCKED = 'locked'
+"""Venv built from the repo's own ``uv.lock`` — dependencies are pinned."""
+
+RESOLVED = 'resolved'
+"""Venv built by re-resolving dependencies — **not** reproducible over time."""
 
 
 # ---------------------------------------------------------------------------
@@ -259,6 +267,13 @@ class Pin:
     ref: str
     sha: str
     resolved_at: float
+    #: The full 40-hex SHA the checkout actually landed on, filled in by
+    #: ``_checkout``. ``sha`` may be an abbreviated form the caller supplied
+    #: (``ls-remote`` cannot expand one without cloning), and an abbreviated
+    #: pin is not a reproducible pin: it aliases the per-SHA cache, so the
+    #: same commit fetched twice under two spellings gets two directories.
+    #: Defaulted so pins written before this field still load.
+    resolved_sha: str = ''
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -304,6 +319,9 @@ class Materialized:
     pin: Pin
     repo_dir: pathlib.Path
     venv_python: pathlib.Path
+    #: :data:`LOCKED` or :data:`RESOLVED` — how the venv's dependencies were
+    #: chosen. Record it in any manifest that claims this run is reproducible.
+    install_mode: str = RESOLVED
 
 
 def _uv() -> str:
@@ -315,23 +333,64 @@ def _uv() -> str:
     return uv
 
 
-def _checkout(address: GitAddress, pin: Pin, repo_dir: pathlib.Path) -> None:
+def _head_sha(repo_dir: pathlib.Path) -> str:
+    return _run_git(['rev-parse', 'HEAD'], cwd=str(repo_dir)).strip()
+
+
+def _checkout(address: GitAddress, pin: Pin, repo_dir: pathlib.Path) -> str:
+    """Check the pinned commit out, and return the full SHA it landed on.
+
+    A warm cache is **verified**, not assumed. The per-SHA directory existing
+    is not evidence that the code in it is the pinned commit: an interrupted
+    clone, a manual `git checkout` in the cache, or an abbreviated pin that
+    aliased two commits onto one directory all leave a `.git` behind at the
+    wrong revision. Silently running that is the worst failure this protocol
+    can have — the whole point of a SHA is that the code is known.
+    """
     if (repo_dir / '.git').exists():
-        return
+        head = _head_sha(repo_dir)
+        if not head.startswith(pin.sha):
+            raise GitProtocolError(
+                f'cached checkout of {address.repo_slug} at {repo_dir} is on '
+                f'{head}, not the pinned {pin.sha}. Refusing to run code that '
+                f'is not the pinned commit — delete that directory to '
+                f're-fetch.')
+        return head
+
     repo_dir.parent.mkdir(parents=True, exist_ok=True)
     # Full clone then checkout the pinned SHA — robust across servers that
     # don't allow fetching arbitrary SHAs directly. Repos are cached per-SHA
     # so this is paid once.
     _run_git(['clone', '--quiet', pin.url, str(repo_dir)])
     _run_git(['checkout', '--quiet', pin.sha], cwd=str(repo_dir))
+    return _head_sha(repo_dir)
 
 
-def _build_venv(repo_dir: pathlib.Path, venv_dir: pathlib.Path) -> pathlib.Path:
-    """``uv venv`` + install the repo into it. Returns the venv python path."""
+def _read_stamp(stamp: pathlib.Path) -> dict:
+    """The recorded build mode, tolerating the pre-provenance ``ok`` stamp."""
+    try:
+        record = json.loads(stamp.read_text())
+    except (OSError, ValueError):
+        return {'mode': RESOLVED, 'legacy': True}
+    return record if isinstance(record, dict) else {
+        'mode': RESOLVED, 'legacy': True}
+
+
+def _build_venv(repo_dir: pathlib.Path,
+                venv_dir: pathlib.Path) -> Tuple[pathlib.Path, str]:
+    """``uv venv`` + install the repo into it.
+
+    Returns ``(venv_python, mode)`` where mode is :data:`LOCKED` or
+    :data:`RESOLVED`. **The mode is part of the result, not a detail.** A venv
+    built from a lockfile and one built by re-resolving are different
+    environments, and a warm cache cannot tell them apart from the filesystem
+    alone — so the mode is recorded in the stamp and reported back, and a
+    caller that needs reproducibility can refuse a ``resolved`` one.
+    """
     python = venv_dir / 'bin' / 'python'
     stamp = venv_dir / '.pbg-installed'
     if stamp.exists() and python.exists():
-        return python
+        return python, _read_stamp(stamp).get('mode', RESOLVED)
 
     uv = _uv()
     if not python.exists():
@@ -354,10 +413,20 @@ def _build_venv(repo_dir: pathlib.Path, venv_dir: pathlib.Path) -> pathlib.Path:
             env={**os.environ, 'VIRTUAL_ENV': str(venv_dir)},
             stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
         if locked.returncode == 0:
-            stamp.write_text('ok')
-            return python
+            stamp.write_text(json.dumps({'mode': LOCKED}))
+            return python, LOCKED
         # A lockfile that will not sync is not fatal — fall through to a
-        # resolved install rather than refusing to run the repo at all.
+        # resolved install rather than refusing to run the repo at all. But
+        # say so: this is the exact silent degradation the lockfile exists to
+        # prevent, and it is about to be cached under a stamp that a warm run
+        # will never question.
+        warnings.warn(
+            f'{repo_dir.name}: `uv sync --frozen` failed, falling back to a '
+            f'RESOLVED install — this environment is not the one the repo '
+            f'pins, and results from it are a function of when the venv was '
+            f'built. uv said: {(locked.stderr or "").strip()[:400]}',
+            RuntimeWarning,
+            stacklevel=2)
     # Install the repo into its venv, **editable**. A wheel install ships only
     # what the repo declares as packages, which for a scientific repo is
     # routinely incomplete — CovertLab/vEcoli's wheel omits `ecoli.library`
@@ -373,8 +442,8 @@ def _build_venv(repo_dir: pathlib.Path, venv_dir: pathlib.Path) -> pathlib.Path:
         raise GitProtocolError(
             f'failed to install repo into venv (uv pip install .): '
             f'{result.stderr.strip()}')
-    stamp.write_text('ok')
-    return python
+    stamp.write_text(json.dumps({'mode': RESOLVED}))
+    return python, RESOLVED
 
 
 def materialize(address: GitAddress) -> Materialized:
@@ -383,13 +452,20 @@ def materialize(address: GitAddress) -> Materialized:
     sha_dir = _sha_dir(address, pin.sha)
     repo_dir = sha_dir / 'repo'
     venv_dir = sha_dir / 'venv'
-    _checkout(address, pin, repo_dir)
-    venv_python = _build_venv(repo_dir, venv_dir)
+    head = _checkout(address, pin, repo_dir)
+    if head and pin.resolved_sha != head:
+        # Only knowable after a checkout: `ls-remote` cannot expand an
+        # abbreviated SHA. Record the full one so a manifest names the commit
+        # unambiguously even when the address gave a short form.
+        pin.resolved_sha = head
+        (sha_dir / 'pin.json').write_text(json.dumps(pin.to_dict(), indent=2))
+    venv_python, install_mode = _build_venv(repo_dir, venv_dir)
     return Materialized(
         address=address,
         pin=pin,
         repo_dir=repo_dir,
-        venv_python=venv_python)
+        venv_python=venv_python,
+        install_mode=install_mode)
 
 
 # ---------------------------------------------------------------------------

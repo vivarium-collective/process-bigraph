@@ -329,3 +329,85 @@ def test_conformance_names_mismatch_direction(resolved_edge_factory):
     ok, reason = conforms(core, edge, declared)
     assert not ok
     assert 'input port' in reason and "'value'" in reason
+
+
+# ---------------------------------------------------------------------------
+# Environment provenance (D3) — a warm cache must be verifiable, not assumed
+# ---------------------------------------------------------------------------
+
+def test_materialize_reports_how_the_venv_was_built(
+        clean_registry, cache_dir, fixture_repo):
+    """`install_mode` is part of the result.
+
+    The fixture ships no `uv.lock`, so it must come back RESOLVED. A caller
+    that claims reproducibility has to be able to tell that apart from a
+    lockfile-frozen build, and the filesystem alone cannot say.
+    """
+    url, branch, sha = fixture_repo
+    gitproto.add_allowed_repo(SLUG)
+    gitproto.set_repo_url(SLUG, url)
+    addr = parse_git_address(f'{SLUG}@{branch}#pbgfixture:make_process')
+
+    materialized = gitproto.materialize(addr)
+    assert materialized.install_mode == gitproto.RESOLVED
+
+    # And it survives the warm-cache path, which is the case that matters:
+    # a second run must not forget how the first one built the environment.
+    assert gitproto.materialize(addr).install_mode == gitproto.RESOLVED
+
+
+def test_pin_records_the_full_sha(clean_registry, cache_dir, fixture_repo):
+    """An abbreviated address still yields an unambiguous recorded commit."""
+    url, branch, sha = fixture_repo
+    gitproto.add_allowed_repo(SLUG)
+    gitproto.set_repo_url(SLUG, url)
+    addr = parse_git_address(f'{SLUG}@{sha[:8]}#pbgfixture:make_process')
+
+    materialized = gitproto.materialize(addr)
+    assert materialized.pin.resolved_sha == sha
+    # ...and it is persisted, not just returned.
+    pin_file = cache_dir / 'pbgtest__fixture' / sha[:8] / 'pin.json'
+    assert json.loads(pin_file.read_text())['resolved_sha'] == sha
+
+
+def test_checkout_at_the_wrong_commit_is_refused(
+        clean_registry, cache_dir, fixture_repo):
+    """A cached checkout is verified against the pin, not trusted.
+
+    An interrupted clone or a stray `git checkout` in the cache leaves a
+    `.git` behind at the wrong revision. Running it would silently execute
+    code that is not the pinned commit — the one thing a SHA is supposed to
+    rule out.
+    """
+    url, branch, sha = fixture_repo
+    gitproto.add_allowed_repo(SLUG)
+    gitproto.set_repo_url(SLUG, url)
+    addr = parse_git_address(f'{SLUG}@{branch}#pbgfixture:make_process')
+    gitproto.materialize(addr)
+
+    # Add a commit in the cached checkout so HEAD no longer matches the pin.
+    repo_dir = cache_dir / 'pbgtest__fixture' / sha / 'repo'
+    (repo_dir / 'intruder.txt').write_text('not the pinned commit')
+    _git(['add', '.'], repo_dir)
+    _git(['commit', '--quiet', '-m', 'drift'], repo_dir)
+
+    with pytest.raises(GitProtocolError) as excinfo:
+        gitproto.materialize(addr)
+    assert 'not the pinned' in str(excinfo.value)
+
+
+def test_legacy_ok_stamp_still_loads(clean_registry, cache_dir, fixture_repo):
+    """Venvs stamped before provenance existed read back as RESOLVED.
+
+    They were built by whatever path was current then, so `resolved` is the
+    honest answer — the conservative one, never a false `locked`.
+    """
+    url, branch, sha = fixture_repo
+    gitproto.add_allowed_repo(SLUG)
+    gitproto.set_repo_url(SLUG, url)
+    addr = parse_git_address(f'{SLUG}@{branch}#pbgfixture:make_process')
+    gitproto.materialize(addr)
+
+    stamp = cache_dir / 'pbgtest__fixture' / sha / 'venv' / '.pbg-installed'
+    stamp.write_text('ok')  # the pre-provenance format
+    assert gitproto.materialize(addr).install_mode == gitproto.RESOLVED
