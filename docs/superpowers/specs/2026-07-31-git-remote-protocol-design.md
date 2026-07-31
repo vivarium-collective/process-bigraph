@@ -35,6 +35,24 @@ Running fetched code (vEcoli pulls a large scientific stack) must not pollute or
 
 *Recommendation: (a). The edge is a thin RPC proxy over a subprocess running in the repo's own venv; the `interface()` it advertises is the face.*
 
+> **AMENDMENT 2026-07-31 (venv build must be frozen).** D1's "per-SHA `uv venv`,
+> install the repo" step MUST build the environment **`uv sync --frozen` from the
+> fetched repo's own lockfile** (`uv.lock`), NOT a re-resolving install
+> (`uv pip install -e .`). A re-resolving install picks whatever dep versions
+> resolve at *build time*, which can differ from the versions the repo was tested
+> against — so the built artifact becomes a function of when it was built, not of
+> the SHA, defeating the reproducibility D1/D3 exist to provide. This is not
+> hypothetical: re-resolving vEcoli's env landed an untested SciPy that broke
+> `scipy._lib.array_api_compat` and produced `cannot pickle 'module'` failures in
+> ParCa (root-caused and fixed in pbg #168 by pinning to the frozen lockfile).
+> - **Build rule:** `uv sync --frozen` from the repo's lockfile. Fall back to a
+>   resolved install (`uv pip install -e .` / `uv sync` without `--frozen`) **only
+>   when the fetched repo ships no lockfile**, and record that the env was
+>   resolved (not frozen) so a non-reproducible build is visible, not silent.
+> - **Record the build env by `sys.prefix`**, not `$VIRTUAL_ENV`: `sys.prefix`
+>   reports the interpreter's actual prefix even for a subprocess launched without
+>   activation (where `$VIRTUAL_ENV` is unset or stale).
+
 ### D2. Trust & security — *running foreign code*
 `git:` executes code from a URL.
 - **Allow-list of orgs/repos** in `workspace.yaml` (default: `CovertLab/vEcoli` + explicitly added forks); a `git:` address outside the list is refused, not run.
@@ -45,6 +63,19 @@ Running fetched code (vEcoli pulls a large scientific stack) must not pollute or
 ### D3. Caching & reproducibility
 - Cache key = `(repo, commit-SHA)`; the built venv is cached too (keyed by SHA + a lockfile hash). A pinned SHA is reproducible; a comparison investigation records the SHA in its artifacts.
 - GC/eviction of old checkouts is a workspace maintenance concern (out of scope v1; just don't unbounded-grow silently — log sizes).
+
+> **AMENDMENT 2026-07-31 (pin deps, not just the SHA).** Pinning the repo SHA
+> without pinning its dependency versions makes the fetched artifact a function of
+> *build time*, not of the SHA — the same SHA rebuilt a week later can resolve
+> different deps and behave differently, which is exactly the failure D3 is meant
+> to rule out. The venv MUST therefore be built **`uv sync --frozen` from the
+> fetched repo's lockfile** (see the D1 amendment for the concrete vEcoli/ParCa
+> failure this prevents, pbg #168), falling back to a resolved install only when
+> the repo has no lockfile — and recording that fallback so the loss of
+> reproducibility is explicit. The venv cache key already includes a lockfile
+> hash; the frozen-build rule is what makes that key meaningful (a resolved build
+> under the same key is not reproducible). Record the resolved build env by
+> `sys.prefix` (not `$VIRTUAL_ENV`) alongside the SHA in the comparison artifacts.
 
 ### D4. The entrypoint contract
 How does `git:` know *what* in the repo to run?
