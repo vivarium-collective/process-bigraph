@@ -3285,31 +3285,7 @@ def test_gather_emitter_results_is_unchanged():
 # ordering fires them once, after the sim completes. No finalize marker, no
 # scheduler exclusion, no completion phase.
 
-SIM_TICKS = []
 FLUSH_FIRINGS = []
-
-
-class SimulationStep(Step):
-    """A whole simulation as ONE node of the outer step network.
-
-    Its `results` output is the emitter's handle, so a downstream flush step
-    depends on the simulation exactly the way one step depends on another.
-    """
-
-    config_schema = {'state': 'quote', 'runtime': 'float'}
-
-    def inputs(self):
-        return {}
-
-    def outputs(self):
-        return {'results': 'node'}
-
-    def update(self, state):
-        inner = Composite({'state': self.config['state']}, core=self.core)
-        inner.run(self.config['runtime'])
-        SIM_TICKS.append(inner.state['global_time'])
-        handles = inner.finalize()
-        return {'results': list(handles.values())[0]}
 
 
 class FlushStep(Step):
@@ -3345,8 +3321,9 @@ def _sim_state():
 
 
 def _study_core_2b():
+    # SimulationStep ships in process_bigraph.processes and auto-registers,
+    # so a study names it by address like any other node.
     core = allocate_core()
-    core.register_link('SimulationStep', SimulationStep)
     core.register_link('FlushStep', FlushStep)
     return core
 
@@ -3379,7 +3356,6 @@ def test_the_study_is_a_higher_order_dag():
 def test_a_flush_step_fires_exactly_once_after_the_simulation():
     """The proof: zero firings while the simulation steps internally, one
     firing after it completes — with the real handle."""
-    SIM_TICKS.clear()
     FLUSH_FIRINGS.clear()
 
     core = _study_core_2b()
@@ -3387,7 +3363,7 @@ def test_a_flush_step_fires_exactly_once_after_the_simulation():
     study.run(0.0)
 
     # the simulation really did step internally
-    assert SIM_TICKS == [4.0]
+    assert study.state['sim']['instance'].composite.state['global_time'] == 4.0
 
     # ...and the flush fired once, not once per inner tick
     assert FLUSH_FIRINGS == ['EmitterResults']
@@ -3410,14 +3386,14 @@ def test_a_longer_simulation_does_not_fire_the_flush_more():
     """The flush count is independent of how many ticks the simulation
     takes — that is what "the sim is one node" buys."""
     for runtime in (2.0, 8.0, 20.0):
-        SIM_TICKS.clear()
         FLUSH_FIRINGS.clear()
 
         core = _study_core_2b()
         study = Composite({'state': _study_state(runtime=runtime)}, core=core)
         study.run(0.0)
 
-        assert SIM_TICKS == [runtime]
+        inner = study.state['sim']['instance'].composite
+        assert inner.state['global_time'] == runtime
         assert FLUSH_FIRINGS == ['EmitterResults'], (
             f'runtime={runtime} fired {len(FLUSH_FIRINGS)} times')
 
@@ -3458,3 +3434,70 @@ def test_results_cross_a_composite_bridge():
     handle = node.read_bridge()['results']
     assert isinstance(handle, EmitterResults)
     assert len(handle.resolve()) == handle.count
+
+
+def test_simulation_step_names_the_emitter_when_ambiguous():
+    """With more than one emitter the node cannot guess which supplies
+    `results`, so it says so and lists them."""
+    core = _study_core_2b()
+    inner = _sim_state()
+    inner['second_results'] = {}
+    inner['second'] = {
+        '_type': 'step', 'address': 'local:RAMEmitter',
+        'config': {'emit': {'level': 'node'}},
+        'inputs': {'level': ['level']},
+        'outputs': {'results': ['second_results']}}
+
+    state = _study_state()
+    state['sim']['config']['state'] = inner
+    study = Composite({'state': state}, core=core)
+
+    with pytest.raises(ValueError, match='name the one') as raised:
+        study.run(0.0)
+    assert 'emitter' in str(raised.value) and 'second' in str(raised.value)
+
+
+def test_simulation_step_selects_a_named_emitter():
+    core = _study_core_2b()
+    inner = _sim_state()
+    inner['second_results'] = {}
+    inner['second'] = {
+        '_type': 'step', 'address': 'local:RAMEmitter',
+        'config': {'emit': {'global_time': 'node'}},
+        'inputs': {'global_time': ['global_time']},
+        'outputs': {'results': ['second_results']}}
+
+    state = _study_state()
+    state['sim']['config']['state'] = inner
+    state['sim']['config']['emitter'] = 'second'
+    study = Composite({'state': state}, core=core)
+    study.run(0.0)
+
+    handle = study.state['results']
+    assert handle.path == ('second',)
+    assert 'global_time' in handle.resolve()[0]
+
+
+def test_simulation_step_requires_a_wired_emitter():
+    """An inner composite with nothing to report is a configuration error,
+    reported by name rather than as an empty result."""
+    core = _study_core_2b()
+    inner = _sim_state()
+    del inner['emitter']
+
+    state = _study_state()
+    state['sim']['config']['state'] = inner
+    study = Composite({'state': state}, core=core)
+
+    with pytest.raises(ValueError, match='produced no results'):
+        study.run(0.0)
+
+
+def test_simulation_step_exposes_the_finished_composite():
+    core = _study_core_2b()
+    study = Composite({'state': _study_state(runtime=3.0)}, core=core)
+    study.run(0.0)
+
+    inner = study.state['sim']['instance'].composite
+    assert inner.state['global_time'] == 3.0
+    assert inner.state['level'] > 1.0
