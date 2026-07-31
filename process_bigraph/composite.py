@@ -1325,7 +1325,18 @@ class Composite(Process):
         Runtimes that only implement the older ``flush_pending`` hook (no
         ``tick_lifecycle``) keep going through the per-process loop —
         their batching of remote dispatch is unchanged.
+
+        Cached, and invalidated wherever the layer walk is: the answer is a
+        function of the process network's structure, which does not change
+        between ticks, but this ran a full ``get_path`` walk of every process
+        on every tick to rediscover it. The overwhelmingly common document
+        has no protocol runtime at all, so the common case is now a single
+        cached empty result rather than an O(processes) scan.
         """
+        cached = getattr(self, '_runtime_partition_cache', None)
+        if cached is not None:
+            return cached
+
         managed: set = set()
         groups: dict = {}
         for path in self.process_paths:
@@ -1339,7 +1350,10 @@ class Composite(Process):
             managed.add(path)
             entry = groups.setdefault(id(rt), (rt, []))
             entry[1].append((path, process))
-        return managed, list(groups.values())
+
+        partition = (managed, list(groups.values()))
+        self._runtime_partition_cache = partition
+        return partition
 
     def _run_tick_lifecycle(
             self,
@@ -1706,6 +1720,7 @@ class Composite(Process):
     def _invalidate_caches(self) -> None:
         """Invalidate precompiled link caches, forcing rebuild on next use."""
         self._compiled_links = {}
+        self._runtime_partition_cache = None
 
     def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:
         """View using precompiled link cache when available, falling back
@@ -2201,6 +2216,8 @@ class Composite(Process):
         self._layer_walk_cache = {}
         self._layer_walk_replay = None
         self._layer_walk_recording = None
+        # Same lifetime: both describe the shape of the process network.
+        self._runtime_partition_cache = None
 
     def _get_step_executor(self, n_needed: int):
         """Lazily build (or grow) the inner thread pool for layer parallelism.
