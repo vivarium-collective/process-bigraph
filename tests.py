@@ -4230,20 +4230,53 @@ def test_a_partially_filled_template_is_still_a_template():
 # ==========================================
 # Layer 3 (cont.) — the emitter and the flush entities are sites too
 # ==========================================
+#
+# The study is a higher-order DAG: the simulation is ONE node
+# (`local:SimulationStep`) and the flush entities are ordinary steps
+# downstream of its `results` handle. So a report card observes the
+# *resolved trajectory* of a finished run and fires exactly once — not an
+# instantaneous store value once per tick.
+#
+# The model and emitter sites live inside that node's inner state: filling
+# them configures the simulation the study runs.
 
 CARD_FACE = {
     '_type': 'link',
-    '_inputs': {'level': 'float'},
+    '_inputs': {'results': 'node'},
     '_outputs': {'verdict': 'string'}}
+
+CARD_FIRINGS = []
+
+
+class TrajectoryCard(Step):
+    """A report card over a finished run.
+
+    It consumes the emitter's handle, resolves it, and judges the run's
+    *final* level — something no per-tick step could do.
+    """
+
+    config_schema = {'threshold': 'float'}
+
+    def inputs(self):
+        return {'results': 'node'}
+
+    def outputs(self):
+        return {'verdict': 'string'}
+
+    def update(self, state):
+        rows = state['results'].resolve()
+        CARD_FIRINGS.append(len(rows))
+        return {'verdict': 'pass'
+                if rows[-1]['level'] >= self.config['threshold'] else 'fail'}
 
 
 def _admits_emitter(core, site, filler):
     """A sort for "any emitter".
 
     Emitters are interchangeable precisely because they share no
-    distinguishing face — `Emitter.outputs()` is `{}` — so face conformance
-    cannot express the constraint. A registered sort states it directly:
-    the address must name a registered `Emitter`.
+    distinguishing face — `Emitter.outputs()` declares only `results` — so
+    face conformance cannot pick them out. A registered sort states it
+    directly: the address must name a registered `Emitter`.
     """
     from bigraph_schema.schema import normalize_address
 
@@ -4257,31 +4290,51 @@ def _admits_emitter(core, site, filler):
 def _flush_core():
     core = _study_core()
     core.register_sort('emitter', _admits_emitter)
+    core.register_link('TrajectoryCard', TrajectoryCard)
     return core
 
 
-def _flush_template(core):
-    """A study whose model, emitter and report cards are ALL sites."""
-    return core.access({'study': {
+def _simulated_study(runtime=4.0):
+    """The simulation the study runs: a model site and an emitter address
+    site, wired so the emitter's `results` leaves the node."""
+    return {
         'level': 1.0,
-        'threshold': {'_type': 'site', '_sort': 'float'},
         'model': {'_type': 'site', '_sort': MODEL_FACE},
         'emitter': {
             '_type': 'step',
             'address': {'_type': 'site', '_sort': 'emitter'},
-            'config': {'emit': {'level': 'node'}},
-            'inputs': {'level': ['level']}},
+            'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+            'inputs': {'level': ['level'], 'global_time': ['global_time']},
+            'outputs': {'results': ['results']}}}
+
+
+def _flush_template(core, runtime=4.0):
+    """A study whose simulation, emitter and report cards are ALL sites."""
+    return core.access({'study': {
+        'threshold': {'_type': 'site', '_sort': 'float'},
+        'sim': {
+            '_type': 'step',
+            'address': 'local:SimulationStep',
+            'config': {'state': _simulated_study(), 'runtime': runtime},
+            'inputs': {},
+            'outputs': {'results': ['results']}},
         'report_cards': {
             '_control': 'replicate', '_count': 1,
             'verdict': 'string',
             'card': {'_type': 'site', '_sort': CARD_FACE}}}})
 
 
+MODEL_SITE = 'study/sim/config/state/model'
+EMITTER_SITE = 'study/sim/config/state/emitter/address'
+
+
 def _card(core, threshold):
+    """A report card, wired to the simulation's results rather than to a
+    store it would otherwise read mid-run."""
     return core.access({
-        '_type': 'step', 'address': 'local:ReportCard',
+        '_type': 'step', 'address': 'local:TrajectoryCard',
         'config': {'threshold': threshold},
-        'inputs': {'level': ['..', 'level']},
+        'inputs': {'results': ['..', 'results']},
         'outputs': {'verdict': ['verdict']}})
 
 
@@ -4293,9 +4346,9 @@ def test_the_flush_network_is_made_of_sites():
     template = _flush_template(core)
 
     assert sorted(open_sites(template)) == [
-        ('study', 'emitter', 'address'),
-        ('study', 'model'),
         ('study', 'report_cards', 'card'),
+        ('study', 'sim', 'config', 'state', 'emitter', 'address'),
+        ('study', 'sim', 'config', 'state', 'model'),
         ('study', 'threshold')]
 
     # the cardinality region expands into one site per instance
@@ -4307,34 +4360,57 @@ def test_the_flush_network_is_made_of_sites():
         ('study', 'report_cards_2', 'card')]
 
 
-def test_a_fully_filled_study_runs_and_emits():
-    """Fill the model, the emitter, a value site and N report cards → a
-    ground study that runs, emits, and produces one verdict per card."""
+def test_each_report_card_fires_once_on_the_resolved_trajectory():
+    """The point of wiring the cards to `results` rather than to a store:
+    each fires exactly ONCE, on the finished run, seeing every recorded row
+    — not once per tick on an instantaneous value."""
     from bigraph_schema.assembly import replicate
     from process_bigraph.templates import template_document
 
+    CARD_FIRINGS.clear()
     core = _flush_core()
     expanded = replicate(_flush_template(core), {'report_cards': 2})
 
     document = template_document(core, expanded, {
-        'study/model': _model(core),
+        MODEL_SITE: _model(core),
+        EMITTER_SITE: 'local:RAMEmitter',
         'study/threshold': 2.0,
-        'study/emitter/address': 'local:RAMEmitter',
         'study/report_cards_0/card': _card(core, 2.0),
         'study/report_cards_1/card': _card(core, 99.0)})
 
-    sim = Composite({'state': document}, core=core)
-    assert sorted('/'.join(p) for p in sim.step_paths) == [
-        'study/emitter', 'study/report_cards_0/card', 'study/report_cards_1/card']
+    study = Composite({'state': document}, core=core)
+    study.run(0.0)
 
-    sim.run(4.0)
+    # two cards, one firing each — and each saw the WHOLE trajectory
+    assert len(CARD_FIRINGS) == 2
+    assert len(set(CARD_FIRINGS)) == 1 and CARD_FIRINGS[0] > 1
 
-    assert sim.state['study']['threshold'] == 2.0       # value site survived
-    assert sim.state['study']['report_cards_0']['verdict'] == 'pass'
-    assert sim.state['study']['report_cards_1']['verdict'] == 'fail'
+    assert study.state['study']['threshold'] == 2.0      # value site survived
+    assert study.state['study']['report_cards_0']['verdict'] == 'pass'
+    assert study.state['study']['report_cards_1']['verdict'] == 'fail'
 
-    rows = gather_emitter_results(sim)[('study', 'emitter')]
-    assert len(rows) > 1 and 'level' in rows[0]
+
+def test_the_card_count_is_independent_of_simulation_length():
+    """A longer simulation does not fire the cards more — that is what
+    "the simulation is one node" buys."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    for runtime in (2.0, 8.0):
+        CARD_FIRINGS.clear()
+        core = _flush_core()
+        expanded = replicate(
+            _flush_template(core, runtime=runtime), {'report_cards': 1})
+
+        document = template_document(core, expanded, {
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: 'local:RAMEmitter',
+            'study/threshold': 2.0,
+            'study/report_cards_0/card': _card(core, 2.0)})
+
+        Composite({'state': document}, core=core).run(0.0)
+        assert len(CARD_FIRINGS) == 1, (
+            f'runtime={runtime} fired {len(CARD_FIRINGS)} times')
 
 
 def test_the_emitter_site_is_interchangeable():
@@ -4345,12 +4421,13 @@ def test_the_emitter_site_is_interchangeable():
         core = _flush_core()
         expanded = replicate(_flush_template(core), {'report_cards': 0})
         document = template_document(core, expanded, {
-            'study/model': _model(core),
-            'study/threshold': 2.0,
-            'study/emitter/address': address})
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: address,
+            'study/threshold': 2.0})
 
-        sim = Composite({'state': document}, core=core)
-        assert list(sim.step_paths) == [('study', 'emitter')]
+        study = Composite({'state': document}, core=core)
+        assert list(study.step_paths) == [('study', 'sim')]
+        study.run(0.0)
 
 
 def test_the_emitter_site_refuses_a_non_emitter():
@@ -4360,15 +4437,15 @@ def test_the_emitter_site_refuses_a_non_emitter():
     core = _flush_core()
     expanded = replicate(_flush_template(core), {'report_cards': 0})
 
-    with pytest.raises(ValueError, match="site 'study/emitter/address'"):
+    with pytest.raises(ValueError, match=f"site '{EMITTER_SITE}'"):
         template_document(core, expanded, {
-            'study/model': _model(core),
-            'study/threshold': 2.0,
-            'study/emitter/address': 'local:IncreaseProcess'})
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: 'local:IncreaseProcess',
+            'study/threshold': 2.0})
 
 
 def test_a_report_card_site_refuses_a_non_report_card():
-    """The card site is face-sorted, so only something that turns a level
+    """The card site is face-sorted, so only something that turns results
     into a verdict fits."""
     from bigraph_schema.assembly import replicate
     from process_bigraph.templates import template_document
@@ -4379,12 +4456,12 @@ def test_a_report_card_site_refuses_a_non_report_card():
     with pytest.raises(ValueError,
                        match="site 'study/report_cards_0/card'") as raised:
         template_document(core, expanded, {
-            'study/model': _model(core),
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: 'local:RAMEmitter',
             'study/threshold': 2.0,
-            'study/emitter/address': 'local:RAMEmitter',
             'study/report_cards_0/card': _model(core)})   # a model, not a card
 
-    assert 'verdict' in str(raised.value)
+    assert 'results' in str(raised.value)
 
 
 def test_zero_flush_entities_is_a_valid_study():
@@ -4397,14 +4474,15 @@ def test_zero_flush_entities_is_a_valid_study():
     expanded = replicate(_flush_template(core), {'report_cards': 0})
 
     document = template_document(core, expanded, {
-        'study/model': _model(core),
-        'study/threshold': 2.0,
-        'study/emitter/address': 'local:RAMEmitter'})
+        MODEL_SITE: _model(core),
+        EMITTER_SITE: 'local:RAMEmitter',
+        'study/threshold': 2.0})
 
     assert not [k for k in document['study'] if k.startswith('report_cards')]
-    sim = Composite({'state': document}, core=core)
-    sim.run(4.0)
-    assert sim.state['study']['level'] > 1.0
+    study = Composite({'state': document}, core=core)
+    study.run(0.0)
+    # the simulation still ran inside its node
+    assert study.state['study']['sim']['instance'].composite.state['level'] > 1.0
 
 
 # ==========================================
