@@ -42,23 +42,39 @@ is the runnable predicate; a partially-filled template is still a template.
 
 ---
 
-## 3. A study is a template with a model site
+## 3. A study is a template — model, emitter, AND flush entities are all sites
 
-A **study template** fixes the analysis-flush sub-network (viz / analyses / report
-cards, wired to the emitter's `results` port — umbrella Layer 1) and leaves the
-**model** as a site:
+Everything configurable about a study is a **site**; only the *wiring* (each flush
+edge reads the emitter's `results` port — umbrella Layer 1) is fixed. A study
+template's holes:
 
 ```
 study.template:
-  model:        <site: face = the study's expected model interface>   # fill with a composite
-  n_seeds:      <site: int>                                           # cardinality
-  media:        <site: enum[...]>                                     # value
-  flush:        [ viz_* , analysis_* , report_card_* ]               # fixed
-  emitter:      <declared, results port>                             # fixed
+  model:          <site: face = the study's expected model interface>   # fill with a composite
+  # config (value / cardinality sites)
+  n_seeds:        <site: int>                                           # cardinality
+  media:          <site: enum[...]>                                     # value
+  # the sink — an interchangeable-face site
+  emitter:        <site: face = Emitter(results)>                       # RAM | Parquet | XArray-zarr
+  # the flush entities — CARDINALITY REGIONS of face-sorted sites (0+ each),
+  # every one wired to `results`:
+  visualizations: [ <site: face = Visualization(results→figure)> … ]
+  analyses:       [ <site: face = Analysis(results→analysis)>     … ]
+  report_cards:   [ <site: face = ReportCard(results→verdict)>    … ]
 ```
 
-`fill({model: ecoli_baseline, n_seeds: 8, media: minimal})` → a ground, runnable study
-document. Any conforming registered composite drops into `model`.
+- **Emitter site.** Filling it chooses the sink (RAM / Parquet / XArray-zarr) —
+  interchangeable because they share the `results` face; `admits` checks conformance.
+- **Flush-entity site-regions.** `visualizations`/`analyses`/`report_cards` are
+  cardinality regions (Layer-1 §4.5): fill with 0+ conforming Steps, each auto-wired
+  to `results`. A report-card site accepts only a Step whose face reads `results` and
+  writes a verdict — so you can't wire a viz where a card belongs.
+
+`fill({model: ecoli_baseline, emitter: XArrayEmitter, media: minimal, n_seeds: 8,
+visualizations: [mass_trace, growth_curve], analyses: [doubling_time],
+report_cards: [mass_conservation, division_timing]})` → a **fully-specified, ground,
+runnable study**, no code. Every knob — the model, the sink, and *which* figures /
+analyses / verdicts run — is a `fill`.
 
 ## 4. An investigation is a template with a site per study; gating = filling
 
