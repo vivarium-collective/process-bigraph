@@ -39,15 +39,57 @@ ARTIFACT_ROOT = '.pbg/artifacts'
 
 
 def _stable(o):
+    """json's ``default=`` hook: the last word on a value json cannot encode.
+
+    It also narrows a whole-valued float, but that is a **backstop, not the
+    mechanism** — see :func:`narrow_whole_floats`. ``default=`` is consulted
+    only for types json cannot serialize, and a float is serializable, so this
+    never sees one. The narrowing has to happen before the encoder runs.
+    """
     if isinstance(o, float) and o.is_integer():
         return int(o)
     raise TypeError(type(o))
 
 
+def narrow_whole_floats(value):
+    """Recursively replace whole-valued floats with the equal int.
+
+    ``1.0`` and ``1`` are the same number and must be the same content
+    address. They were not: a config carrying ``seed: 1`` from YAML and the
+    same config after a float-typed parameter pass produced two different
+    addresses for the same study — a silent cache miss and a duplicate
+    recompute, on the exact path content-addressing exists to prevent.
+
+    This has to be a **pre-walk**. The obvious place to put it is json's
+    ``default=`` hook, which is where it lived and never ran: ``default=`` is
+    consulted only for types the encoder cannot handle, and a float is not
+    one of them.
+
+    ``bool`` is deliberately untouched: it is an ``int`` subclass, so
+    narrowing would erase the difference between ``True`` and ``1`` — a
+    widening the address should not perform. ``NaN`` and the infinities are
+    not whole, so ``is_integer()`` already leaves them alone.
+    """
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, float):
+        return int(value) if value.is_integer() else value
+    if isinstance(value, dict):
+        return {key: narrow_whole_floats(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple)):
+        return [narrow_whole_floats(item) for item in value]
+    return value
+
+
 def canonical(config: dict) -> str:
-    """The canonical JSON encoding a content address is computed over."""
+    """The canonical JSON encoding a content address is computed over.
+
+    Sorted keys, no whitespace, and whole floats narrowed to ints so that a
+    value's *spelling* never changes where its artifact lives.
+    """
     return json.dumps(
-        config or {}, sort_keys=True, separators=(",", ":"), default=_stable)
+        narrow_whole_floats(config or {}),
+        sort_keys=True, separators=(",", ":"), default=_stable)
 
 
 def artifact_id(*, composite_id: str, config: dict,
@@ -58,9 +100,43 @@ def artifact_id(*, composite_id: str, config: dict,
     filesystem path, so two worktrees at the same commit resolve the same
     address and share a cache with no symlink between them.
     """
-    payload = "\n".join([composite_id, canonical(config),
+    return _address(composite_id, canonical(config), input_ids, commit)
+
+
+def _address(composite_id, encoded_config, input_ids, commit) -> str:
+    payload = "\n".join([composite_id, encoded_config,
                          "\n".join(sorted(input_ids or [])), commit or ""])
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
+
+
+# ── the pre-narrowing formula, for migration only ───────────────────
+#
+# Whole-float narrowing changed where an artifact lives, but only for a
+# config that actually *spells* a whole number as a float. The relation is
+# exact and worth stating, because it is what makes the migration a rename
+# rather than a recompute:
+#
+#     artifact_id(config) == legacy_artifact_id(narrow_whole_floats(config))
+#
+# So a float-spelled config's artifact moves onto the address its
+# int-spelled twin already had — the two spellings converge on the one that
+# was always correct, and no third address is invented. Every config with no
+# whole-valued float keeps its address unchanged.
+
+def legacy_canonical(config: dict) -> str:
+    """``canonical`` as it behaved before whole-float narrowing worked."""
+    return json.dumps(
+        config or {}, sort_keys=True, separators=(",", ":"), default=_stable)
+
+
+def legacy_artifact_id(*, composite_id: str, config: dict,
+                       input_ids: list, commit: str) -> str:
+    """Where this artifact *used to* live. Only migrations should call this.
+
+    Everything else wants :func:`artifact_id`.
+    """
+    return _address(
+        composite_id, legacy_canonical(config), input_ids, commit)
 
 
 def artifact_store(address: str, root: str = ARTIFACT_ROOT) -> str:
