@@ -5381,3 +5381,85 @@ def test_a_loaded_investigation_prunes_an_unfilled_member(tmp_path):
     sim.run(4.0)
     assert 'study_B' not in sim.state['investigation']
     assert sim.state['investigation']['study_A']['verdict'] == 'pass'
+
+
+# ==========================================
+# A Step's `map`-typed output port and whole-dict updates
+# ==========================================
+#
+# CONTRACT (characterization, not a to-be-fixed bug):
+#
+# A `map` / `map[<value>]` port is a *typed collection whose membership is
+# managed by structural sentinels* (`_add` / `_remove` / `_divide`). Those
+# sentinels are the ONLY signal that reaches the composite's structural
+# machinery (the reconcile sink flips `has_structural`, which drives
+# realize()/build_step_network so a new `map[process]` entry is instantiated
+# as a live Edge). A *bare* dict update is therefore a per-key VALUE update
+# against existing keys only — `apply(Map)` in bigraph-schema deliberately
+# skips keys not already present (commit 67108cb, "don't add keys into
+# state"). Auto-adding them would silently bypass structural detection, a
+# worse bug than the drop.
+#
+# Consequence for a Step that emits a whole opaque dict each tick:
+#   * type the port `map[...]` and return `{'_add': {...}}` for typed,
+#     structurally-tracked entries, OR
+#   * type the port `quote` to carry the dict opaquely (overwrite-wholesale).
+# Returning a bare dict on a `map` port updates only pre-existing keys; new
+# keys are dropped. These asserts lock all three behaviors so a future change
+# to Map semantics is caught here.
+
+
+def _run_map_port_step(out_type, ret, initial=None):
+    """One-tick Composite: a Step writes `ret` through a single output port
+    typed `out_type`, wired to a top-level store `result`. Returns the final
+    value at that store."""
+
+    class _MapPortStep(Step):
+        config_schema = {}
+
+        def inputs(self):
+            return {}
+
+        def outputs(self):
+            return {'result': out_type}
+
+        def update(self, state):
+            return {'result': ret}
+
+    core = allocate_core()
+    core.register_link('_MapPortStep', _MapPortStep)
+    composite = Composite({
+        'state': {
+            'result': {} if initial is None else initial,
+            'my_step': {
+                '_type': 'step', 'address': 'local:_MapPortStep',
+                'config': {}, 'inputs': {}, 'outputs': {'result': ['result']}},
+        }}, core=core)
+    composite.run(0.0)
+    return composite.state['result']
+
+
+def test_map_port_bare_dict_updates_only_existing_keys():
+    """A bare dict into an empty `map` drops NEW keys (by design — membership
+    goes through `_add`). Pre-existing keys ARE updated."""
+    # empty map + bare dict of new keys → nothing lands
+    assert _run_map_port_step('map[float]', {'a': 1.0, 'b': 2.0}) == {}
+    # pre-existing key present → its value updates through the value type's
+    # own apply (float apply is additive: 1.0 + 5.0 = 6.0); the unknown key
+    # still drops.
+    assert _run_map_port_step(
+        'map[float]', {'a': 5.0, 'new': 9.0}, initial={'a': 1.0}) == {'a': 6.0}
+
+
+def test_map_port_add_sentinel_lands_new_keys():
+    """The supported way to introduce new `map` entries: the `_add` sentinel,
+    which also flags a structural change to the scheduler."""
+    assert _run_map_port_step(
+        'map[float]', {'_add': {'a': 1.0, 'b': 2.0}}) == {'a': 1.0, 'b': 2.0}
+
+
+def test_quote_port_carries_an_opaque_whole_dict():
+    """For a Step that emits a whole opaque dict, `quote` is the correct port
+    type — the dict is set wholesale, no key-wise interpretation."""
+    payload = {'a': 1.0, 'b': 2.0, 'c': 3.0}
+    assert _run_map_port_step('quote', payload) == payload
