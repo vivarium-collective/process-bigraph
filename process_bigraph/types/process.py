@@ -16,6 +16,8 @@ from dataclasses import dataclass, is_dataclass, field
 from bigraph_schema import capture_object_state, restore_object_value
 from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema, is_schema_field
 from bigraph_schema.methods import resolve, realize, realize_link, default, default_link, render, wrap_default
+from bigraph_schema.methods import reify_schema
+from bigraph_schema.methods.handle_parameters import reify_schema_link
 from bigraph_schema.methods import serialize, divide, bundle, apply
 from bigraph_schema.methods.bundle import BundleContext
 
@@ -92,6 +94,28 @@ def default(schema: StepLink):
     link['priority'] = default(schema.priority)
 
     return link
+
+
+@reify_schema.dispatch
+def reify_schema(core, schema: ProcessLink, parameters):
+    """Compile a process declaration, keeping its declared ``interval``.
+
+    ``reify_schema_link`` knows only the base ``Link`` fields, so a declared
+    ``interval`` was silently dropped — an accessed process kept the schema
+    default and the authored value was gone. Carry it on the ``Float``'s
+    ``_default``, the way every other declared value rides its schema node.
+
+    Only a number is carried: re-accessing a document whose ``interval`` was
+    rendered as the bare type ``'float'`` leaves the default in place rather
+    than stamping a string that would later realize to 0.
+    """
+    schema = reify_schema_link(core, schema, parameters)
+
+    declared = parameters.get('interval')
+    if isinstance(declared, (int, float)) and not isinstance(declared, bool):
+        schema.interval = Float(_default=declared)
+
+    return schema
 
 
 @default.dispatch
@@ -173,6 +197,15 @@ def render(schema: ProcessLink, defaults=False):
             continue
         value = getattr(schema, field_name)
         result[field_name] = render(value, defaults=defaults)
+
+    # ``interval`` is a *value*, not a type. Rendering the Float node emits
+    # the bare type name ``'float'``, which loses the interval — and the
+    # re-accessed document then realizes with interval 0, a process that
+    # cannot advance time.
+    carried = getattr(schema.interval, '_default', None)
+    if carried is not None:
+        result['interval'] = carried
+
     return wrap_default(schema, result) if defaults else result
 
 

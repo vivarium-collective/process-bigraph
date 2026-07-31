@@ -2962,3 +2962,150 @@ def test_tick_lifecycle_dispatches_managed_processes(core):
     # Updates applied: a += 1 each tick, b += 10 each tick.
     assert sim.state['counters']['a'] == 3
     assert sim.state['counters']['b'] == 30
+
+
+# ==========================================
+# A Process must advance time (no run() hang)
+# ==========================================
+
+def _increaser(interval=None, rate=0.1):
+    """An `IncreaseProcess` node, optionally with an explicit interval."""
+    node = {
+        '_type': 'process',
+        'address': 'local:IncreaseProcess',
+        'config': {'rate': rate},
+        'inputs': {'level': ['level']},
+        'outputs': {'level': ['level']},
+    }
+    if interval is not None:
+        node['interval'] = interval
+    return {'proc': node, 'level': 1.0}
+
+
+@pytest.mark.parametrize('interval', [0, 0.0, -1.0])
+def test_non_advancing_interval_raises_instead_of_hanging(interval):
+    """A non-positive interval used to spin `run()` forever.
+
+    The scheduler advances `global_time` by the smallest process interval, so
+    a zero or negative one leaves time unchanged and the run loop never
+    reaches `end_time`. It must fail loudly instead.
+    """
+    core = allocate_core()
+    sim = Composite({'state': _increaser(interval)}, core=core)
+
+    with pytest.raises(ValueError, match='non-advancing interval') as raised:
+        sim.run(3.0)
+
+    message = str(raised.value)
+    assert "'proc'" in message              # names the offending process
+    assert 'must advance time' in message
+
+
+def test_non_advancing_interval_raises_in_the_parallel_path():
+    """The parallel scheduler shares the hazard, so it shares the guard."""
+    core = allocate_core()
+    good = _increaser(1.0)['proc']
+    bad = _increaser(0.0, rate=0.2)['proc']
+    state = {'a': good, 'b': bad, 'level': 1.0}
+
+    sim = Composite(
+        {'state': state, 'parallel_processes': True}, core=core)
+    assert sim._parallel_processes and len(sim.process_paths) > 1
+
+    with pytest.raises(ValueError, match='non-advancing interval') as raised:
+        sim.run(3.0)
+
+    assert "'b'" in str(raised.value)       # the bad one, not its neighbour
+
+
+def test_calculate_timestep_returning_zero_raises():
+    """The guard sits after `calculate_timestep`, so a process that computes
+    a non-advancing step is caught too — not only a declared one."""
+    core = allocate_core()
+
+    class StalledProcess(Process):
+        config_schema = {}
+
+        def inputs(self):
+            return {'level': 'float'}
+
+        def outputs(self):
+            return {'level': 'float'}
+
+        def calculate_timestep(self, interval, state):
+            return 0.0
+
+        def update(self, state, interval):
+            return {'level': 1.0}
+
+    core.register_link('StalledProcess', StalledProcess)
+    state = {
+        'proc': {
+            '_type': 'process',
+            'address': 'local:StalledProcess',
+            'inputs': {'level': ['level']},
+            'outputs': {'level': ['level']},
+            'interval': 1.0},
+        'level': 1.0}
+
+    sim = Composite({'state': state}, core=core)
+    with pytest.raises(ValueError, match='non-advancing interval'):
+        sim.run(3.0)
+
+
+def test_omitted_interval_takes_the_schema_default():
+    """An omitted interval is not an error — it takes the `process` schema
+    default of 1.0 and runs."""
+    core = allocate_core()
+    sim = Composite({'state': _increaser()}, core=core)
+
+    assert sim.state['proc']['interval'] == 1.0
+    sim.run(3.0)
+    assert sim.state['global_time'] == 3.0
+
+
+def test_positive_interval_still_runs():
+    core = allocate_core()
+    sim = Composite({'state': _increaser(0.5)}, core=core)
+
+    sim.run(2.0)
+    assert sim.state['global_time'] == 2.0
+    assert sim.state['level'] > 1.0
+
+
+# ==========================================
+# A declared interval survives access/render
+# ==========================================
+
+@pytest.mark.parametrize('declared,expected', [(1.0, 1.0), (0.5, 0.5), (None, 1.0)])
+def test_declared_interval_survives_access_and_render(declared, expected):
+    """`access` used to drop a declared `interval` (keeping the schema
+    default) and `render` emitted the bare type `'float'`, so a document that
+    round-tripped through the schema layer came back with interval 0 — a
+    process that could not advance time.
+    """
+    core = allocate_core()
+    node = {'_type': 'process', 'address': 'local:IncreaseProcess'}
+    if declared is not None:
+        node['interval'] = declared
+
+    schema = core.access(node)
+    assert schema.interval._default == expected
+
+    rendered = core.render(schema)
+    assert rendered['interval'] == expected
+    assert core.access(rendered).interval._default == expected
+
+
+def test_round_tripped_document_still_runs():
+    """The end-to-end form: a document that goes through `access`/`render`
+    must still advance time when handed back to a Composite."""
+    core = allocate_core()
+    document = _increaser(1.0)
+
+    rendered = core.render(core.access(document))
+    assert rendered['proc']['interval'] == 1.0
+
+    sim = Composite({'state': rendered}, core=allocate_core())
+    sim.run(2.0)
+    assert sim.state['global_time'] == 2.0
