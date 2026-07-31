@@ -338,10 +338,15 @@ def _build_venv(repo_dir: pathlib.Path, venv_dir: pathlib.Path) -> pathlib.Path:
         subprocess.run([uv, 'venv', '--quiet', str(venv_dir)],
                        check=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    # Install the repo into its venv. ``uv pip install .`` builds the repo's
-    # own dependency closure inside the venv — never touching the host env.
+    # Install the repo into its venv, **editable**. A wheel install ships only
+    # what the repo declares as packages, which for a scientific repo is
+    # routinely incomplete — CovertLab/vEcoli's wheel omits `ecoli.library`
+    # and every `.tsv`/`.json` data file its reconstruction reads. The worker
+    # cannot fall back to the source tree either: it is launched as
+    # `python _git_worker.py`, so `sys.path[0]` is the *worker's* directory,
+    # not `cwd`. Editable makes the checkout itself importable, data and all.
     result = subprocess.run(
-        [uv, 'pip', 'install', '--python', str(python), '--quiet', '.'],
+        [uv, 'pip', 'install', '--python', str(python), '--quiet', '-e', '.'],
         cwd=str(repo_dir),
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     if result.returncode != 0:
