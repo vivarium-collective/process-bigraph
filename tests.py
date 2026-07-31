@@ -4405,3 +4405,194 @@ def test_zero_flush_entities_is_a_valid_study():
     sim = Composite({'state': document}, core=core)
     sim.run(4.0)
     assert sim.state['study']['level'] > 1.0
+
+
+# ==========================================
+# Layer 3 (cont.) — the comparison-harness template (local stand-ins)
+# ==========================================
+
+class Compare(Step):
+    """The harness's verdict: do two models agree within a tolerance?"""
+
+    config_schema = {'tolerance': 'float'}
+
+    def inputs(self):
+        return {'a': 'float', 'b': 'float'}
+
+    def outputs(self):
+        return {'verdict': 'string', 'difference': 'float'}
+
+    def update(self, state):
+        difference = abs(state['a'] - state['b'])
+        return {
+            'difference': difference,
+            'verdict': 'agree' if difference <= self.config['tolerance']
+            else 'diverge'}
+
+
+WHOLE_CELL_FACE = {
+    '_type': 'link',
+    '_inputs': {'level': 'float'},
+    '_outputs': {'level': 'float'}}
+
+
+def _harness_core():
+    """The harness's registry: two *local* stand-ins for the compared models.
+
+    `reference` stands in for an out-of-tree implementation that a `git:`
+    address would name once that protocol exists; nothing here fetches or
+    executes foreign code.
+    """
+    core = _study_core()
+    core.register_link('Compare', Compare)
+    core.register_link('ReferenceModel', IncreaseProcess)
+    return core
+
+
+def _harness_template(core):
+    """The §5 comparison-harness structure, with local stand-ins.
+
+    - `compared/*` — value sites, the configs a sweep varies
+    - `candidate`  — a model site: the in-tree model
+    - `reference`  — an **address site**: fixed face, open implementation
+    - `compare`    — fixed
+    """
+    return core.access({'comparison': {
+        'compared': {
+            'tolerance': {'_type': 'site', '_sort': 'float'},
+            'duration': {'_type': 'site', '_sort': 'float'}},
+        'level_a': 1.0,
+        'level_b': 1.0,
+        'verdict': 'string',
+        'difference': 0.0,
+        'candidate': {'_type': 'site', '_sort': WHOLE_CELL_FACE},
+        'reference': {
+            '_type': 'process',
+            'address': {'_type': 'site', '_sort': WHOLE_CELL_FACE},
+            'config': {'rate': 0.5},
+            'interval': 1.0,
+            'inputs': {'level': ['level_b']},
+            'outputs': {'level': ['level_b']}},
+        'compare': {
+            '_type': 'step', 'address': 'local:Compare',
+            'config': {'tolerance': 0.001},
+            'inputs': {'a': ['level_a'], 'b': ['level_b']},
+            'outputs': {'verdict': ['verdict'],
+                        'difference': ['difference']}}}})
+
+
+def _candidate(core, rate):
+    return core.access({
+        '_type': 'process', 'address': 'local:IncreaseProcess',
+        'config': {'rate': rate}, 'interval': 1.0,
+        'inputs': {'level': ['level_a']}, 'outputs': {'level': ['level_a']}})
+
+
+def test_the_comparison_harness_is_a_template():
+    from process_bigraph.templates import open_sites
+
+    core = _harness_core()
+    assert sorted(open_sites(_harness_template(core))) == [
+        ('comparison', 'candidate'),
+        ('comparison', 'compared', 'duration'),
+        ('comparison', 'compared', 'tolerance'),
+        ('comparison', 'reference', 'address')]
+
+
+def test_the_harness_builds_and_runs_with_both_models_filled():
+    """Fill the in-tree model, inject the reference implementation by
+    address, set the compared configs → one document that runs both models
+    side by side and compares them."""
+    from process_bigraph.templates import template_document
+
+    core = _harness_core()
+    document = template_document(core, _harness_template(core), {
+        'comparison/candidate': _candidate(core, rate=0.5),
+        'comparison/reference/address': 'local:ReferenceModel',
+        'comparison/compared/tolerance': 0.001,
+        'comparison/compared/duration': 4.0})
+
+    sim = Composite({'state': document}, core=core)
+    assert sorted('/'.join(p) for p in sim.process_paths) == [
+        'comparison/candidate', 'comparison/reference']
+
+    sim.run(4.0)
+
+    # identical models, so they agree
+    assert sim.state['comparison']['verdict'] == 'agree'
+    assert sim.state['comparison']['difference'] < 0.001
+    assert sim.state['comparison']['compared']['tolerance'] == 0.001
+
+
+def test_the_harness_detects_a_divergent_candidate():
+    """The same template, a different candidate — the harness is reusable
+    because the models are sites."""
+    from process_bigraph.templates import template_document
+
+    core = _harness_core()
+    document = template_document(core, _harness_template(core), {
+        'comparison/candidate': _candidate(core, rate=0.9),
+        'comparison/reference/address': 'local:ReferenceModel',
+        'comparison/compared/tolerance': 0.001,
+        'comparison/compared/duration': 4.0})
+
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+
+    assert sim.state['comparison']['verdict'] == 'diverge'
+    assert sim.state['comparison']['difference'] > 0.001
+
+
+def test_the_reference_address_site_refuses_a_non_conforming_implementation():
+    """The address site pins the face, so only an implementation with the
+    whole-cell interface can be injected — the check that a `git:` address
+    would run against a fetched repo."""
+    from process_bigraph.templates import template_document
+
+    core = _harness_core()
+    core.register_link('WrongShape', ReportCard)
+
+    with pytest.raises(ValueError,
+                       match="site 'comparison/reference/address'"):
+        template_document(core, _harness_template(core), {
+            'comparison/candidate': _candidate(core, rate=0.5),
+            'comparison/reference/address': 'local:WrongShape',
+            'comparison/compared/tolerance': 0.001,
+            'comparison/compared/duration': 4.0})
+
+
+def test_the_harness_gates_a_downstream_member():
+    """The harness as an investigation member: a downstream study runs only
+    when the comparison agrees — gating by filling, staged."""
+    from process_bigraph.templates import (
+        template_document, investigation_document)
+
+    def run(candidate_rate):
+        core = _harness_core()
+
+        harness = Composite(
+            {'state': template_document(core, _harness_template(core), {
+                'comparison/candidate': _candidate(core, rate=candidate_rate),
+                'comparison/reference/address': 'local:ReferenceModel',
+                'comparison/compared/tolerance': 0.001,
+                'comparison/compared/duration': 4.0})},
+            core=core)
+        harness.run(4.0)
+        verdict = harness.state['comparison']['verdict']
+
+        followup = core.access({'investigation': {
+            'downstream': _study_region(threshold=2.0)}})
+        bindings = {}
+        if verdict == 'agree':
+            bindings['investigation/downstream/model'] = _model(core)
+
+        document, blocked = investigation_document(
+            core, followup, bindings, member_depth=2)
+        members = document.get('investigation')
+        # pruning every member leaves an empty region, which renders as the
+        # bare type `'node'` rather than `{}`
+        members = sorted(members) if isinstance(members, dict) else []
+        return verdict, blocked, members
+
+    assert run(0.5) == ('agree', [], ['downstream'])
+    assert run(0.9) == ('diverge', ['investigation/downstream'], [])
