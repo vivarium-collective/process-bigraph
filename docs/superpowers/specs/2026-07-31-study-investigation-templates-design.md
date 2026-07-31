@@ -37,8 +37,18 @@ A template is **a document that is not ground** (has open sites). Its site kinds
 - **cardinality site** — an `int` driving a `ReactionRule` replication (Layer-1 §4.5),
   e.g. `n_seeds`.
 
-`fill(template, bindings)` → `build` returns a ground `(schema, state)`; `is_ground`
-is the runnable predicate; a partially-filled template is still a template.
+`fill(template, bindings)` → a ground document; `is_ground` is the runnable
+predicate; a partially-filled template is still a template.
+
+> **Use `fill_sites → render → Composite`, not `assembly.build`.** The PoC found
+> `build()` finishes with `core.fill`, which realizes every edge and **crashes on a
+> process's `config`** (`default(0.5)` — a raw value where `default` expects a
+> schema; `default_link` still does `default(schema.config)`). This is the same
+> materialization gap 1.4.4 closed for `address`/`inputs`/`outputs` but **not**
+> `config`, so `build()` is unusable for any realistic pbg document. `Composite`
+> realizes the document itself, so the native path skips the broken step. **A
+> one-line bigraph-schema fix to `default_link` should make `build()` usable** — a
+> worthwhile upstream follow-up.
 
 ---
 
@@ -76,13 +86,34 @@ report_cards: [mass_conservation, division_timing]})` → a **fully-specified, g
 runnable study**, no code. Every knob — the model, the sink, and *which* figures /
 analyses / verdicts run — is a `fill`.
 
-## 4. An investigation is a template with a site per study; gating = filling
+## 4. An investigation is a template with a site per study; gating = *staged* filling
 
-An **investigation template** has one **study site per member**, plus value/address
-sites for what's configurable, and **gate edges** that fill downstream sites at
-runtime (umbrella Layer 2 — gating is conditional filling): a gate emits `study_B`'s
-filler on the upstream `pass`, leaves the site open on `fail`; an open site ⇒
-non-ground ⇒ never built.
+An **investigation template** has one **study site per member** + value/address
+sites. Gating is **conditional filling, staged** (validated in the PoC, `f908bae`):
+a gate is a **real edge** (a report-card step) whose verdict decides the **bindings
+of the next stage** — on `pass` it emits the downstream study's filler; on `fail` it
+does not. An unfilled member is then **pruned** (`prune_open_regions`) and is
+**absent** from the constructed document — the strongest form of "never run": the
+engine never *decides* not to run something, because what wasn't filled isn't there.
+
+| upstream verdict | blocked | built & run |
+|---|---|---|
+| `pass` | — | `study_A`, `study_B` |
+| `fail` | `study_B` | `study_A` |
+
+**Why staged, not single-run (a real finding, not a compromise).** A site is a hole
+in a *schema*, and schemas are consumed at **construction**; the step network runs
+**after**. And an open site is **not local** — A0 rejects the *whole* document if any
+required site is open (`'investigation/study_B/model' unfilled` → nothing builds). So
+a gate edge *cannot* fill a site inside a composite that could never be constructed.
+The gate therefore runs **between builds** (verdict → next-stage bindings → build the
+now-ground remainder), and unfilled members are pruned before construction. This
+preserves contract #4 exactly, with **one** filling mechanism.
+
+*Literal single-run gating (insert a subtree mid-`run()`) is a different operation —
+process-bigraph's runtime **structural updates** (`_add`/`_remove`/`_divide`, used for
+cell division), not sites. If ever wanted, spec it as that; do **not** conflate it
+with filling (the same trap the `${name}`-lowering attempt fell into).*
 
 ## 5. Flagship — the comparison-harness investigation template
 
