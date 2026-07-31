@@ -88,6 +88,10 @@ rendered to HTML and published automatically on GitHub Pages.
   *Defining mathematical relationships, signal pipelines, and events using `MathExpressionStep`*  
   https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_3.html
 
+- **Tutorial 4 — Composing a Biological Model**  
+  *The central dogma from four small processes: composition over shared molecular state, biological units in the port types, and adding regulation by adding a wire*  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_4.html
+
 More tutorials are added continuously and appear automatically in the index.
 
 ### Architecture
