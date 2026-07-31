@@ -4674,3 +4674,90 @@ def test_the_harness_gates_a_downstream_member():
 
     assert run(0.5) == ('agree', [], ['downstream'])
     assert run(0.9) == ('diverge', ['investigation/downstream'], [])
+
+
+def test_finalize_survives_an_emitter_that_redefines_finalize():
+    """A durable emitter already uses `finalize` for something else.
+
+    The vivarium lineage (`pbg_emitters.BufferedEmitter`) defines
+    `finalize(*, success: bool) -> None`: it flushes buffers, closes the
+    store, and raises if called twice. Asking *that* for a results handle
+    silently produced none — and consumed the buffer close on the way — so a
+    composite writing zarr or parquet finalized to nothing. `results()` is
+    the handle contract and no emitter overrides it.
+    """
+    core = allocate_core()
+    closed = []
+
+    class BufferedRAMEmitter(RAMEmitter):
+        """Stands in for a durable emitter with the legacy finalize."""
+
+        def finalize(self, *, success: bool = False):
+            if closed:
+                raise RuntimeError('finalize() was already called')
+            closed.append(success)
+            return None
+
+    core.register_link('BufferedRAMEmitter', BufferedRAMEmitter)
+
+    doc = {
+        'level': 1.0, 'results': {},
+        'model': {
+            '_type': 'process', 'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.5}, 'interval': 1.0,
+            'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
+        'emitter': {
+            '_type': 'step', 'address': 'local:BufferedRAMEmitter',
+            'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+            'inputs': {'level': ['level'], 'global_time': ['global_time']},
+            'outputs': {'results': ['results']}}}
+
+    sim = Composite({'state': doc}, core=core)
+    sim.run(3.0)
+
+    handles = sim.finalize()
+
+    handle = handles[('emitter',)]
+    assert isinstance(handle, EmitterResults)
+    assert len(handle.resolve()) > 1
+    assert isinstance(sim.state['results'], EmitterResults)
+
+    # the emitter's own finalize was left alone — not consumed for a handle
+    assert closed == []
+
+
+def test_resolving_a_handle_twice_is_idempotent_and_cheap():
+    """A handle refers to a run that has completed, so resolving twice must
+    give the same answer — and must not pay twice. Several flush entities
+    resolve the same handle, and a durable emitter's `query()` can be
+    expensive *and* side-effecting (`XArrayEmitter` flushes buffered rows on
+    read, which without memoization appends them again every time)."""
+    core = allocate_core()
+    calls = []
+
+    class CountingEmitter(RAMEmitter):
+        def query(self, paths=None, schema=None, query=None):
+            calls.append(paths)
+            return super().query(paths, schema, query)
+
+    core.register_link('CountingEmitter', CountingEmitter)
+    doc = {
+        'level': 1.0,
+        'model': {
+            '_type': 'process', 'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.5}, 'interval': 1.0,
+            'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
+        'emitter': {
+            '_type': 'step', 'address': 'local:CountingEmitter',
+            'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+            'inputs': {'level': ['level'], 'global_time': ['global_time']}}}
+
+    sim = Composite({'state': doc}, core=core)
+    sim.run(3.0)
+    handle = sim.finalize()[('emitter',)]
+
+    first = handle.resolve()
+    second = handle.resolve()
+
+    assert first == second
+    assert len(calls) == 1, f'query() called {len(calls)} times'

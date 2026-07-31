@@ -2829,19 +2829,29 @@ class Composite(Process):
 
         for path, step in self.step_paths.items():
             instance = step.get('instance') if isinstance(step, dict) else None
-            produce = getattr(instance, 'finalize', None)
-            if not callable(produce):
-                continue
 
-            try:
-                update = produce(path=path) or {}
-            except TypeError:
-                update = produce() or {}
-            if not update:
-                continue
+            # Prefer `results()` — the handle contract itself. `finalize` is a
+            # name durable emitters already used for "flush buffers and close"
+            # (the vivarium lineage: `BufferedEmitter.finalize(*, success)`
+            # returns None and may only be called once). Calling that here
+            # silently produced no handle *and* consumed the buffer close, so
+            # a composite with a zarr/parquet sink finalized to nothing.
+            produce_handle = getattr(instance, 'results', None)
+            if callable(produce_handle):
+                handles[path] = produce_handle(path=path)
+            else:
+                produce = getattr(instance, 'finalize', None)
+                if not callable(produce):
+                    continue
+                try:
+                    update = produce(path=path) or {}
+                except TypeError:
+                    update = produce() or {}
+                if not update:
+                    continue
+                handles[path] = update.get('results')
 
-            handle = update.get('results')
-            handles[path] = handle
+            handle = handles[path]
 
             wire = (step.get('outputs') or {}).get('results')
             if not wire:
