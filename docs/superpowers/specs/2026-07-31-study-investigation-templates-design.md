@@ -163,6 +163,34 @@ before a run, not at document build). This is the one genuinely new capability.
 - The workbench's ProcessCard viewer already renders open sites as the "unbound"
   state (presentation side) — a template study/investigation renders for free.
 
+### 6.1 The Layer-4 authoring & fill loop (workbench)
+
+A template is authored and run entirely through the ProcessCard viewer — no code —
+because a template *is* a document and the viewer already renders documents:
+
+1. **Author** a study/investigation template: drop a composite into the study's
+   **model** face-site, mark the emitter / viz / analysis / report-card holes as
+   **sites** (the viewer's config/inputs/outputs regions gain an "open site" affordance
+   — a hole with its sort/contract shown, not a value). Saved as `*.template.yaml`
+   (sites round-trip via Layer 1).
+2. **Fill** it: the viewer's config panel binds each site — a **value** site is a
+   typed field; a **face** site (model / viz / report-card) offers the *conforming*
+   registry entries (`admits` filters the picker); an **address** site (the vEcoli
+   repo) is a text/ref field the `git:` protocol resolves; a **cardinality** site is
+   a count. **Apply** = `fill_sites` + re-render (the same Apply already in the card).
+3. **Run** it: a fully-filled (ground) template's Run is live; an unfilled required
+   site keeps the card in the **unbound** state and disables Run — the *same*
+   `is_ground` predicate that gates the engine gates the button. One predicate, one
+   picture (viewer handoff §D4).
+4. **A gated investigation** renders its blocked members as *pruned/absent* (staged
+   filling, §4) — the DAG the viewer draws is the ground remainder, so "what didn't
+   fill isn't shown" matches "what didn't fill didn't run."
+
+So the viewer's four regions (config · inputs · contract · outputs) + the pull-down
+loom render a *template* as naturally as a composite: a site is just a region whose
+value is a **hole with a contract** instead of a value. No new UI concept — the
+"unbound" state + `admits`-filtered pickers are the whole Layer-4 surface.
+
 ---
 
 ## 7. Contracts
