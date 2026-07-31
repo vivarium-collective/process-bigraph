@@ -228,3 +228,46 @@ def test_top_level_exports():
     assert hasattr(pbg, "CompositeSpec")
     assert hasattr(pbg, "composite_spec")      # the decorator
     assert hasattr(pbg, "discover_specs")
+
+
+# ---------------------------------------------------------------------------
+# Typed parameter validation: "unknown type" and "broken checker" are not
+# the same answer
+# ---------------------------------------------------------------------------
+
+def test_unknown_declared_type_passes_through_unvalidated():
+    """A workspace type this core does not define is not ours to judge."""
+    from process_bigraph.composite_spec import _coerce
+
+    assert _coerce({'a': 1}, 'some_workspace_type', name='p') == {'a': 1}
+
+
+def test_known_declared_type_is_still_enforced():
+    from process_bigraph.composite_spec import _coerce
+
+    assert _coerce('2.5', 'float', name='rate') == 2.5
+    with pytest.raises(Exception):
+        _coerce('not-a-number', 'float', name='rate')
+
+
+def test_a_broken_type_checker_is_not_read_as_permission():
+    """The regression this guards.
+
+    `_coerce` used to wrap the final `core.check` in a blanket
+    `except Exception: return coerced`. That made "this core doesn't know
+    that type" and "the type checker itself broke" the same outcome — the
+    value passed through unvalidated either way — so a genuine bug in
+    `check` would silently disable parameter validation for every spec
+    while every test still passed.
+    """
+    from process_bigraph.composite_spec import _coerce, _validation_core
+
+    class BrokenCore:
+        def access(self, declared):
+            return _validation_core(None).access(declared)
+
+        def check(self, declared, value):
+            raise RuntimeError('the type checker is broken')
+
+    with pytest.raises(RuntimeError, match='type checker is broken'):
+        _coerce(1.0, 'float', name='rate', core=BrokenCore())
