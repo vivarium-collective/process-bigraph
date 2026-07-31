@@ -1,5 +1,21 @@
 from bigraph_schema import allocate_core  # noqa: F401
 
+# The installed distribution's version, exposed so a run manifest can record
+# *which* engine produced an artifact. Read from installed metadata rather
+# than hardcoded, so the two can never disagree — and note the trap that
+# makes it worth a test: an editable install freezes this at install time, so
+# every later commit reports the version that was in `pyproject.toml` when
+# `pip install -e` ran. `tests.py::test_version_matches_pyproject` fails
+# loudly when they drift instead of letting a manifest lie.
+try:
+    from importlib.metadata import PackageNotFoundError, version as _version
+    try:
+        __version__ = _version('process-bigraph')
+    except PackageNotFoundError:      # not installed (running from a tree)
+        __version__ = '0+unknown'
+except ImportError:                   # pragma: no cover — py<3.8
+    __version__ = '0+unknown'
+
 from process_bigraph.composite import (  # noqa: F401
     Process, Step, Composite, TimingSummary, interval_time_precision, wire_step_layers,
 )

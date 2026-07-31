@@ -5463,3 +5463,227 @@ def test_quote_port_carries_an_opaque_whole_dict():
     type — the dict is set wholesale, no key-wise interpretation."""
     payload = {'a': 1.0, 'b': 2.0, 'c': 3.0}
     assert _run_map_port_step('quote', payload) == payload
+
+
+# ==========================================
+# Reproducibility guards
+# ==========================================
+#
+# The content address is a *wire format*. Every artifact already in every
+# store was placed by the current formula, so a change to it is not a
+# refactor — it silently orphans every cached result and every lookup misses.
+# And the formula is duplicated: process-bigraph cannot import the workbench
+# (the dependency runs the other way), so
+# `vivarium_workbench/lib/artifacts/hashing.py` is a hand-port of this one.
+#
+# Golden vectors are what make that duplication safe. The workbench asserts
+# the SAME constants against ITS copy, so the two cannot drift apart without
+# a suite going red — including the case where a same-shape edit is applied
+# to both sides and would otherwise hide.
+
+GOLDEN_ADDRESSES = [
+    # (composite_id, config, input_ids, commit) -> address
+    (('study', {}, [], ''), '78ae3a35a0fe5f89'),
+    (('study', {'seed': 0}, [], 'abc123'), '5c4c0be0af218633'),
+    # input order must not matter: input_ids are sorted before hashing
+    (('study', {'seed': 0}, ['bbb', 'aaa'], 'abc123'), '365bd943a78cd82f'),
+    (('study', {'seed': 0}, ['aaa', 'bbb'], 'abc123'), '365bd943a78cd82f'),
+    # key order must not matter: canonical() sorts keys
+    (('study', {'b': 2, 'a': 1}, [], ''), 'a70c18c5c80eb729'),
+    (('study', {'a': 1, 'b': 2}, [], ''), 'a70c18c5c80eb729'),
+]
+
+
+def test_artifact_id_golden_vectors():
+    """Pin the address wire format against fixed constants.
+
+    Changing the formula orphans every artifact in every store. If this test
+    fails, that is the question to answer — not a number to update.
+    """
+    from process_bigraph.artifacts import artifact_id
+
+    for (composite_id, config, input_ids, commit), expected in (
+            GOLDEN_ADDRESSES):
+        assert artifact_id(
+            composite_id=composite_id, config=config,
+            input_ids=input_ids, commit=commit) == expected, (
+            f'address formula changed for {composite_id!r}/{config!r}')
+
+
+def test_canonical_json_is_stable():
+    """The encoding the address is computed over: sorted keys, no
+    whitespace."""
+    from process_bigraph.artifacts import canonical
+
+    assert canonical({'b': 2, 'a': 1}) == '{"a":1,"b":2}'
+    assert canonical({}) == '{}'
+    assert canonical(None) == '{}'
+    assert canonical({'rate': 0.5}) == '{"rate":0.5}'
+
+
+def test_int_and_whole_float_are_DIFFERENT_addresses():
+    """A known hazard, pinned so it stays visible.
+
+    `canonical` passes `_stable` as json's `default=` hook, which reads as
+    "narrow whole floats to ints so 1 and 1.0 address the same". It does not
+    do that: `default=` is consulted only for types json *cannot* serialize,
+    and a float is serializable, so `_stable` never sees one. The narrowing
+    has never happened.
+
+    The consequence is real: a config carrying `seed: 1` from YAML and
+    `seed: 1.0` after a float-typed parameter pass addresses two different
+    artifacts for the same study — a silent cache miss and a duplicate
+    recompute, in both this copy and the workbench's.
+
+    This test asserts the CURRENT behaviour on purpose. Fixing it is a wire
+    format change that orphans every stored artifact, so it needs a
+    migration, not a patch.
+    """
+    from process_bigraph.artifacts import artifact_id, canonical
+
+    assert canonical({'seed': 1.0}) != canonical({'seed': 1})
+    assert (artifact_id(composite_id='s', config={'seed': 1.0},
+                        input_ids=[], commit='')
+            != artifact_id(composite_id='s', config={'seed': 1},
+                           input_ids=[], commit=''))
+
+
+def test_artifact_id_is_sensitive_to_every_input():
+    """Each component of the address actually participates in it."""
+    from process_bigraph.artifacts import artifact_id
+
+    base = dict(composite_id='s', config={'seed': 0}, input_ids=['x'],
+                commit='c0')
+    addresses = {
+        artifact_id(**base),
+        artifact_id(**{**base, 'composite_id': 't'}),
+        artifact_id(**{**base, 'config': {'seed': 1}}),
+        artifact_id(**{**base, 'input_ids': ['y']}),
+        artifact_id(**{**base, 'commit': 'c1'})}
+    assert len(addresses) == 5, 'an input does not affect the address'
+
+
+def test_version_matches_pyproject():
+    """`__version__` must be the version the package actually declares.
+
+    This is the guard for the trap that every commit reports the same
+    version: an editable install freezes the metadata at install time, so a
+    `pyproject.toml` bump is invisible to `importlib.metadata` until someone
+    reinstalls — and a manifest recording "produced by pbg X" then lies.
+    Failing here means reinstall, not edit the test.
+    """
+    import re
+    from pathlib import Path
+
+    import process_bigraph
+
+    pyproject = Path(process_bigraph.__file__).parent.parent / 'pyproject.toml'
+    if not pyproject.is_file():
+        pytest.skip('not running from a source checkout')
+
+    declared = re.search(
+        r'^version\s*=\s*["\']([^"\']+)["\']',
+        pyproject.read_text(), re.MULTILINE)
+    assert declared, 'no version in pyproject.toml'
+    assert process_bigraph.__version__ == declared.group(1), (
+        f'process_bigraph.__version__ is {process_bigraph.__version__!r} but '
+        f'pyproject.toml declares {declared.group(1)!r} — reinstall the '
+        f'package (`uv pip install -e .`) so the recorded version is real.')
+
+
+def _pull_document():
+    """A two-member investigation: `down` consumes `up`."""
+    return {
+        'up': {'_study': {'id': 'up', 'config': {}, 'inputs': [],
+                          'kind': 'sim_data'},
+               'sim': {}, 'results': {}},
+        'down': {'_study': {'id': 'down', 'config': {},
+                            'inputs': [{'artifact': 'a', 'from': 'up'}],
+                            'kind': 'trajectory'},
+                 'sim': {}, 'results': {}}}
+
+
+def test_a_pulled_artifact_carries_its_fingerprint(tmp_path):
+    """`trigger` must load the stored fingerprint onto the ref it binds.
+
+    Without this the determinism check is inert on the exact path it exists
+    for: `check_fingerprint` compares against `ref.fingerprint`, and a pulled
+    ref whose fingerprint is blank always reports 'ok'.
+    """
+    from process_bigraph.artifacts import (
+        ArtifactResults, artifact_store, check_fingerprint, fingerprint_of,
+        write_fingerprint)
+    from process_bigraph.templates import study_address, trigger
+
+    document = _pull_document()
+    root = str(tmp_path / 'store')
+    address = study_address(document, 'up')
+    os.makedirs(artifact_store(address, root), exist_ok=True)
+    stored = fingerprint_of({'mass': 10.0})
+    write_fingerprint(address, stored, root)
+
+    built, report = trigger(document, 'down', root=root)
+    assert report['pulled'] == ['up']
+
+    ref = built['up']['sim']['config']['artifact_ref']
+    assert ref['fingerprint'] == stored
+
+    # ...and it is live: a divergent recompute is now catchable
+    handle = ArtifactResults(ref)
+    assert check_fingerprint(handle, stored) == 'ok'
+    assert check_fingerprint(
+        handle, fingerprint_of({'mass': 99.0})) == 'nondeterministic'
+    assert handle.provenance_status == 'nondeterministic'
+
+
+def test_missing_fingerprint_is_no_claim_not_a_failure(tmp_path):
+    """Artifacts stored before fingerprinting must still pull, unchecked."""
+    from process_bigraph.artifacts import artifact_store, read_fingerprint
+    from process_bigraph.templates import study_address, trigger
+
+    document = _pull_document()
+    root = str(tmp_path / 'store')
+    address = study_address(document, 'up')
+    os.makedirs(artifact_store(address, root), exist_ok=True)
+
+    assert read_fingerprint(address, root) == ''
+    built, report = trigger(document, 'down', root=root)
+    assert report['pulled'] == ['up']
+    assert built['up']['sim']['config']['artifact_ref']['fingerprint'] == ''
+
+
+def test_fingerprint_round_trips_through_the_store(tmp_path):
+    from process_bigraph.artifacts import (
+        fingerprint_of, read_fingerprint, write_fingerprint)
+
+    root = str(tmp_path / 'store')
+    value = fingerprint_of({'mass': 3.0})
+    write_fingerprint('deadbeefdeadbeef', value, root)
+    assert read_fingerprint('deadbeefdeadbeef', root) == value
+    assert read_fingerprint('0000000000000000', root) == ''
+
+
+def test_cyclic_study_inputs_are_named_not_recursed():
+    """A content address is only defined on a DAG. A cycle used to bottom out
+    in a RecursionError that named none of the studies in the loop."""
+    from process_bigraph.templates import study_address
+
+    document = {
+        'a': {'_study': {'id': 'a', 'config': {},
+                         'inputs': [{'artifact': 'r', 'from': 'b'}],
+                         'kind': 'trajectory'}},
+        'b': {'_study': {'id': 'b', 'config': {},
+                         'inputs': [{'artifact': 'r', 'from': 'a'}],
+                         'kind': 'trajectory'}}}
+
+    with pytest.raises(ValueError) as excinfo:
+        study_address(document, 'a')
+    message = str(excinfo.value)
+    assert 'cyclic' in message and 'a -> b -> a' in message
+
+
+def test_study_address_names_an_unknown_member():
+    from process_bigraph.templates import study_address
+
+    with pytest.raises(KeyError):
+        study_address(_pull_document(), 'nope')

@@ -73,6 +73,41 @@ def artifact_exists(address: str, root: str = ARTIFACT_ROOT) -> bool:
     return os.path.isdir(artifact_store(address, root))
 
 
+FINGERPRINT_FILE = 'fingerprint'
+"""Where a stored artifact records what it produced, next to the payload."""
+
+
+def write_fingerprint(address: str, value: str,
+                      root: str = ARTIFACT_ROOT) -> str:
+    """Record an artifact's fingerprint in its store entry.
+
+    Producers call this after writing the payload. Without it the address is
+    the *only* thing a cache hit is checked against — and an address is a hash
+    of inputs, which says what *should* come out, never what did.
+    """
+    store = artifact_store(address, root)
+    os.makedirs(store, exist_ok=True)
+    path = os.path.join(store, FINGERPRINT_FILE)
+    with open(path, 'w', encoding='utf-8') as handle:
+        handle.write(value)
+    return path
+
+
+def read_fingerprint(address: str, root: str = ARTIFACT_ROOT) -> str:
+    """The recorded fingerprint, or '' when the producer wrote none.
+
+    Absent is not a failure: artifacts stored before fingerprinting, and
+    producers that opt out, simply cannot be checked — and
+    :func:`check_fingerprint` treats an empty stored value as "no claim".
+    """
+    try:
+        with open(os.path.join(artifact_store(address, root),
+                               FINGERPRINT_FILE), encoding='utf-8') as handle:
+            return handle.read().strip()
+    except OSError:
+        return ''
+
+
 # ── typed references ────────────────────────────────────────────────
 
 TRAJECTORY = 'trajectory'
@@ -245,10 +280,7 @@ def check_fingerprint(results, observed: str) -> str:
     """
     stored = getattr(getattr(results, 'ref', None), 'fingerprint', '')
     status = 'ok' if (not stored or stored == observed) else 'nondeterministic'
-    try:
-        results.provenance_status = status
-    except AttributeError:
-        pass
+    results.provenance_status = status
     return status
 
 

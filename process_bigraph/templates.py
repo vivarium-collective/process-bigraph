@@ -250,20 +250,36 @@ def study_ancestors(document, target):
     return order
 
 
-def study_address(document, name, *, commit=''):
+def study_address(document, name, *, commit='', _visiting=None):
     """The content address of a member's artifact.
 
     A function of the member's id, its config, its inputs' addresses and the
     workspace commit — so it is worktree-independent and an upstream change
     invalidates everything downstream of it.
+
+    A cyclic ``inputs`` graph is named, not recursed into: an address is only
+    well-defined on a DAG, and without this the recursion bottoms out in a
+    ``RecursionError`` that says nothing about which studies form the loop.
     """
     from process_bigraph.artifacts import artifact_id
 
     members = study_members(document)
+    if name not in members:
+        raise KeyError(
+            f'no study {name!r} in the document — members are '
+            f'{sorted(members)}')
     region = members[name]
 
+    visiting = _visiting or ()
+    if name in visiting:
+        loop = ' -> '.join([*visiting[visiting.index(name):], name])
+        raise ValueError(
+            f'cyclic study inputs: {loop}. A content address is only defined '
+            f'on a DAG — a study cannot be an input to itself.')
+
     input_ids = [
-        study_address(document, edge['from'], commit=commit)
+        study_address(document, edge['from'], commit=commit,
+                      _visiting=(*visiting, name))
         for edge in (_meta(region, 'inputs', []) or [])
         if edge.get('from') in members]
 
@@ -305,7 +321,8 @@ def trigger(document, target, *, on_missing='error', commit='',
     ``{'target', 'pulled', 'computed', 'pruned'}``.
     """
     from process_bigraph.artifacts import (
-        ARTIFACT_ROOT, ArtifactRef, artifact_exists, artifact_store)
+        ARTIFACT_ROOT, ArtifactRef, artifact_exists, artifact_store,
+        read_fingerprint)
 
     if on_missing not in ('error', 'compute'):
         raise ValueError(
@@ -322,11 +339,16 @@ def trigger(document, target, *, on_missing='error', commit='',
     for name in ancestors:
         address = study_address(document, name, commit=commit)
         if artifact_exists(address, root):
+            # Carry the recorded fingerprint onto the ref. Without it
+            # `check_fingerprint` has nothing to compare against and the
+            # determinism check is inert on the one path it exists for —
+            # a pulled artifact being served in place of a recompute.
             ref = ArtifactRef(
                 kind=_meta(members[name], 'kind', 'trajectory'),
                 hash=address,
                 store=artifact_store(address, root),
-                context={'study': name})
+                context={'study': name},
+                fingerprint=read_fingerprint(address, root))
             built[name][sim_key] = cached_node(ref.to_dict())
             pulled.append(name)
         elif on_missing == 'compute':
