@@ -338,6 +338,26 @@ def _build_venv(repo_dir: pathlib.Path, venv_dir: pathlib.Path) -> pathlib.Path:
         subprocess.run([uv, 'venv', '--quiet', str(venv_dir)],
                        check=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+    # Honour the repo's own lockfile when it ships one. Re-resolving puts
+    # fetched code in an environment its authors never tested: for
+    # CovertLab/vEcoli that means scipy 1.18 where its lock pins 1.15.3 — and
+    # under 1.18 its ParCa cannot pickle the calibration object it just spent
+    # nine minutes fitting (`TypeError: cannot pickle 'module' object`). A
+    # pinned repo deserves its pinned dependencies; otherwise a fetched
+    # artifact is a function of *when* the venv was built, which is the
+    # opposite of what pinning a SHA is for.
+    if (repo_dir / 'uv.lock').is_file():
+        locked = subprocess.run(
+            [uv, 'sync', '--frozen', '--inexact', '--active'],
+            cwd=str(repo_dir),
+            env={**os.environ, 'VIRTUAL_ENV': str(venv_dir)},
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        if locked.returncode == 0:
+            stamp.write_text('ok')
+            return python
+        # A lockfile that will not sync is not fatal — fall through to a
+        # resolved install rather than refusing to run the repo at all.
     # Install the repo into its venv, **editable**. A wheel install ships only
     # what the repo declares as packages, which for a scientific repo is
     # routinely incomplete — CovertLab/vEcoli's wheel omits `ecoli.library`
