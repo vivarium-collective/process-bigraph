@@ -132,6 +132,17 @@ comparison investigation (composite):
 
 **⚠ Decision for the build — per-study vs global compare config.** Per-study config today is minimal (`condition`, `comparison.{seeds,generations,max_steps_per_gen}`, `from_vecoli_config`, `cards`). **Media is derived from `condition`; tolerances + observables are GLOBAL constants** (`comparison_report_card.py: TOL=0.05, TOL2=0.10, OBSERVABLES`). If per-study tolerances/observables are wanted (e.g. looser bands for succinate), the comparison-study template must lift them from global constants to **per-study value sites**; otherwise they stay global. **User decision at build time** — default: keep global (matches today), lift only if asked.
 
+### 7.1 ParCa roots are pull-*or-compute* — and vEcoli's ParCa computes in vEcoli's own venv
+
+§4's `CachedResults` is only the *pull* half. For ParCa to be **deterministically available within the investigation** (user requirement, 2026-07-31), each ParCa root must be **pull-or-compute**: cache-hit → pull the handle; miss (or a stale/incompatible artifact) → **compute it, then cache** — the ordinary open-vs-filled site distinction of §2, applied to a root that has a *compute* recipe.
+
+- **`parca_v2`** computes via v2ecoli's own ParCa (a `SimulationStep`-style compute node running `parca_run.py --mode full`), content-addressed by `(parca_config, V2PARCA_N_SEEDS, workspace_commit)` — note `V2PARCA_N_SEEDS` **must** be in the address (it silently changes the fit and is in no manifest).
+- **`parca_vecoli`** computes **inside the fetched vEcoli `git:` venv** — a second `git:` entrypoint (e.g. `#vecoli_parca:build_sim_data` running `runscripts/parca.py`) that writes `simData.cPickle` and returns its artifact reference. Content-addressed by `(vEcoli_commit, parca_config)` — and, critically, the artifact is **valid only for that resolved env**.
+
+**Why compute-in-venv is load-bearing, not incidental.** The proven blocker to a full live comparison tick was **not** the protocol — it was a **cross-version pickle incompatibility**: the on-disk `vecoli_parca/simData.cPickle` (built 2026-07-21) unpickles with `ModuleNotFoundError: scipy._lib.array_api_compat` in the freshly-resolved vEcoli venv (newer scipy). Regenerating vEcoli's ParCa **inside the same per-SHA venv that will read it** makes the pickle written by the exact scipy that reads it — the incompatibility **cannot arise by construction**. Content-addressing over `(vEcoli_commit)` means a repo/env change invalidates the artifact → recompute in the current venv → always compatible. This is the structural cure for the `#431`-class stale-pickle failures, not a scipy-pin workaround.
+
+**Mechanism note.** A `git:` "compute" entrypoint generalizes the adapter: the same subprocess+per-SHA-venv boundary that resolves `interface()` and ticks a process can also **run a build step and return an artifact reference** (the store path is the boundary — the bulk `simData.cPickle` stays in the venv's checkout, the handle crosses the RPC). `admits`/conformance is unchanged (checked before the run); the compute is gated by the content-address exactly like any pull-or-compute node.
+
 ## 8. What runs today vs what this adds
 
 | Piece | State |
