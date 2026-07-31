@@ -84,8 +84,13 @@ SLUG = 'pbgtest/fixture'
 
 
 def _git(args, cwd):
+    # Inject an identity on every call: some commits happen in a *fetched*
+    # checkout (not the fixture repo), which carries no user.name/user.email —
+    # locally git falls back to the dev's global config, but CI has none, so a
+    # bare `git commit` there fails with exit 128 ("please tell me who you are").
     subprocess.run(
-        ['git', *args], cwd=cwd, check=True,
+        ['git', '-c', 'user.email=test@example.com', '-c', 'user.name=pbg test',
+         *args], cwd=cwd, check=True,
         stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
