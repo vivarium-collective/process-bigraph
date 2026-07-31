@@ -23,8 +23,8 @@ from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
 )
 from process_bigraph.emitter import (
-    EmitterResults, RAMEmitter, emitter_from_wires, gather_emitter_results,
-    add_emitter_to_composite,
+    Emitter, EmitterResults, RAMEmitter, emitter_from_wires,
+    gather_emitter_results, add_emitter_to_composite,
 )
 
 # SQLiteEmitter + friends now live in the focused pbg-emitters library and
@@ -3957,3 +3957,720 @@ def test_to_document_stays_a_pure_dict_walk():
     document = spec.to_document(emit=False)
     assert document['state']['proc']['config']['tick'] == 2.0
     assert 'instance' not in document['state']['proc']
+
+
+# ==========================================
+# Layer 3 — studies and investigations ARE templates
+# ==========================================
+
+MODEL_FACE = {
+    '_type': 'link',
+    '_inputs': {'level': 'float'},
+    '_outputs': {'level': 'float'}}
+
+
+class ReportCard(Step):
+    """A trivial downstream flush: turns the model's final level into a
+    verdict, the way a study's report card turns a run into pass/fail."""
+
+    config_schema = {'threshold': 'float'}
+
+    def inputs(self):
+        return {'level': 'float'}
+
+    def outputs(self):
+        return {'verdict': 'string'}
+
+    def update(self, state):
+        return {'verdict': 'pass' if state['level'] >= self.config['threshold']
+                else 'fail'}
+
+
+def _study_core():
+    core = allocate_core()
+    core.register_link('ReportCard', ReportCard)
+    return core
+
+
+def _study_region(threshold=2.0):
+    """A study: a model **site**, a fixed report step wired to it, stores."""
+    return {
+        'level': 1.0,
+        'verdict': 'string',
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'report': {
+            '_type': 'step', 'address': 'local:ReportCard',
+            'config': {'threshold': threshold},
+            'inputs': {'level': ['level']},
+            'outputs': {'verdict': ['verdict']}}}
+
+
+def _model(core, rate=0.5):
+    return core.access({
+        '_type': 'process', 'address': 'local:IncreaseProcess',
+        'config': {'rate': rate}, 'interval': 1.0,
+        'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}})
+
+
+def _nonconforming(core):
+    """Right kind of thing, wrong face — outputs `mass`, not `level`."""
+    return core.access({
+        '_type': 'link', '_inputs': {'level': 'float'},
+        '_outputs': {'mass': 'float'}})
+
+
+def test_a_study_template_is_not_ground():
+    from process_bigraph.templates import is_ground_document, open_sites
+
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    assert not is_ground_document(template)
+    assert open_sites(template) == [('study', 'model')]
+
+
+def test_filling_the_model_site_yields_a_running_study():
+    """The whole point: drop a conforming composite into the model site and
+    the study builds, constructs and runs — no code."""
+    from process_bigraph.templates import template_document, is_ground_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region(threshold=2.0)})
+
+    document = template_document(core, template, {'study/model': _model(core)})
+
+    sim = Composite({'state': document}, core=core)
+    assert list(sim.process_paths) == [('study', 'model')]
+    assert list(sim.step_paths) == [('study', 'report')]
+
+    sim.run(4.0)
+    assert sim.state['study']['level'] > 2.0
+    assert sim.state['study']['verdict'] == 'pass'
+
+
+def test_the_same_template_takes_a_different_model():
+    """A template is reusable: the site accepts any conforming model, and the
+    study's verdict follows the model that was dropped in."""
+    from process_bigraph.templates import template_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region(threshold=2.0)})
+
+    slow = Composite(
+        {'state': template_document(
+            core, template, {'study/model': _model(core, rate=0.01)})},
+        core=core)
+    slow.run(4.0)
+
+    assert slow.state['study']['verdict'] == 'fail'
+
+
+def test_a_non_conforming_model_is_refused():
+    """The site is face-sorted, so only a model with the study's expected
+    interface fits — the error names the site and the missing port."""
+    from process_bigraph.templates import template_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    with pytest.raises(ValueError, match="site 'study/model'") as raised:
+        template_document(core, template, {'study/model': _nonconforming(core)})
+
+    assert 'level' in str(raised.value)
+
+
+def test_an_unfilled_study_site_is_refused_before_construction():
+    from process_bigraph.templates import template_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        template_document(core, template, {})
+    assert "'study/model'" in str(raised.value)
+
+
+def test_an_unfilled_study_site_is_refused_by_the_composite_too():
+    """Belt and braces: even handed straight to `Composite`, an open site is
+    rejected at construction (Part A's A0)."""
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    with pytest.raises(ValueError, match='not ground'):
+        Composite({'state': core.render(template)}, core=core)
+
+
+# ---- investigations: gating as filling --------------------------------
+
+def _investigation_template(core, threshold=2.0):
+    return core.access({'investigation': {
+        'study_A': _study_region(threshold),
+        'study_B': _study_region(threshold)}})
+
+
+def test_an_investigation_template_has_a_site_per_member():
+    from process_bigraph.templates import open_sites
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    assert sorted(open_sites(template)) == [
+        ('investigation', 'study_A', 'model'),
+        ('investigation', 'study_B', 'model')]
+
+
+def test_filling_admits_a_member_and_leaving_open_blocks_it():
+    """Gating expressed as filling: the member whose site was filled is built
+    and runs; the one left open is absent from the document entirely, so the
+    engine never has to decide not to run it."""
+    from process_bigraph.templates import investigation_document
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    document, blocked = investigation_document(
+        core, template,
+        {'investigation/study_A/model': _model(core)},
+        member_depth=2)
+
+    assert blocked == ['investigation/study_B']
+    assert sorted(document['investigation']) == ['study_A']
+
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+    assert 'study_B' not in sim.state['investigation']
+    assert sim.state['investigation']['study_A']['verdict'] == 'pass'
+
+
+def test_filling_every_site_builds_the_whole_investigation():
+    from process_bigraph.templates import investigation_document
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    document, blocked = investigation_document(
+        core, template,
+        {'investigation/study_A/model': _model(core),
+         'investigation/study_B/model': _model(core)},
+        member_depth=2)
+
+    assert blocked == []
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+    assert sorted(sim.state['investigation']) == ['study_A', 'study_B']
+
+
+def test_a_gate_edge_decides_the_downstream_filler():
+    """The end-to-end gate: an upstream study runs, its report card is a real
+    edge in the composite, and its verdict decides whether the downstream
+    study's site gets filled.
+
+    The gate runs *between* builds, not inside one: an open site is a
+    construction-time condition, so the downstream document is assembled once
+    the upstream verdict exists. Filling remains the mechanism — a `fail`
+    simply never produces the filler.
+    """
+    from process_bigraph.templates import (
+        template_document, investigation_document)
+
+    def run_gated(rate):
+        core = _study_core()
+
+        # -- stage 1: the upstream study, with its gate edge (the report card)
+        upstream = core.access({'study': _study_region(threshold=2.0)})
+        stage_one = Composite(
+            {'state': template_document(
+                core, upstream, {'study/model': _model(core, rate=rate)})},
+            core=core)
+        stage_one.run(4.0)
+        verdict = stage_one.state['study']['verdict']
+
+        # -- gating IS filling: a pass emits the downstream filler, a fail
+        #    emits nothing, so the site stays open.
+        template = _investigation_template(core)
+        bindings = {'investigation/study_A/model': _model(core, rate=rate)}
+        if verdict == 'pass':
+            bindings['investigation/study_B/model'] = _model(core, rate=rate)
+
+        document, blocked = investigation_document(
+            core, template, bindings, member_depth=2)
+        downstream = Composite({'state': document}, core=core)
+        downstream.run(4.0)
+        return verdict, blocked, sorted(downstream.state['investigation'])
+
+    verdict, blocked, members = run_gated(rate=0.5)
+    assert verdict == 'pass'
+    assert blocked == []
+    assert members == ['study_A', 'study_B']
+
+    verdict, blocked, members = run_gated(rate=0.01)
+    assert verdict == 'fail'
+    assert blocked == ['investigation/study_B']
+    assert members == ['study_A']
+
+
+def test_a_partially_filled_template_is_still_a_template():
+    """Filling is incremental — a template with one of two sites filled is a
+    smaller template, not an error."""
+    from process_bigraph.templates import fill_template, open_sites
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    partial = fill_template(
+        core, template, {'investigation/study_A/model': _model(core)})
+
+    assert open_sites(partial) == [('investigation', 'study_B', 'model')]
+
+    whole = fill_template(
+        core, partial, {'investigation/study_B/model': _model(core)})
+    assert open_sites(whole) == []
+
+
+# ==========================================
+# Layer 3 (cont.) — the emitter and the flush entities are sites too
+# ==========================================
+#
+# The study is a higher-order DAG: the simulation is ONE node
+# (`local:SimulationStep`) and the flush entities are ordinary steps
+# downstream of its `results` handle. So a report card observes the
+# *resolved trajectory* of a finished run and fires exactly once — not an
+# instantaneous store value once per tick.
+#
+# The model and emitter sites live inside that node's inner state: filling
+# them configures the simulation the study runs.
+
+CARD_FACE = {
+    '_type': 'link',
+    '_inputs': {'results': 'node'},
+    '_outputs': {'verdict': 'string'}}
+
+CARD_FIRINGS = []
+
+
+class TrajectoryCard(Step):
+    """A report card over a finished run.
+
+    It consumes the emitter's handle, resolves it, and judges the run's
+    *final* level — something no per-tick step could do.
+    """
+
+    config_schema = {'threshold': 'float'}
+
+    def inputs(self):
+        return {'results': 'node'}
+
+    def outputs(self):
+        return {'verdict': 'string'}
+
+    def update(self, state):
+        rows = state['results'].resolve()
+        CARD_FIRINGS.append(len(rows))
+        return {'verdict': 'pass'
+                if rows[-1]['level'] >= self.config['threshold'] else 'fail'}
+
+
+def _admits_emitter(core, site, filler):
+    """A sort for "any emitter".
+
+    Emitters are interchangeable precisely because they share no
+    distinguishing face — `Emitter.outputs()` declares only `results` — so
+    face conformance cannot pick them out. A registered sort states it
+    directly: the address must name a registered `Emitter`.
+    """
+    from bigraph_schema.schema import normalize_address
+
+    canonical = normalize_address(filler)
+    if not isinstance(canonical, dict):
+        return False
+    edge_class = core.link_registry.get(canonical.get('data'))
+    return isinstance(edge_class, type) and issubclass(edge_class, Emitter)
+
+
+def _flush_core():
+    core = _study_core()
+    core.register_sort('emitter', _admits_emitter)
+    core.register_link('TrajectoryCard', TrajectoryCard)
+    return core
+
+
+def _simulated_study(runtime=4.0):
+    """The simulation the study runs: a model site and an emitter address
+    site, wired so the emitter's `results` leaves the node."""
+    return {
+        'level': 1.0,
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'emitter': {
+            '_type': 'step',
+            'address': {'_type': 'site', '_sort': 'emitter'},
+            'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+            'inputs': {'level': ['level'], 'global_time': ['global_time']},
+            'outputs': {'results': ['results']}}}
+
+
+def _flush_template(core, runtime=4.0):
+    """A study whose simulation, emitter and report cards are ALL sites."""
+    return core.access({'study': {
+        'threshold': {'_type': 'site', '_sort': 'float'},
+        'sim': {
+            '_type': 'step',
+            'address': 'local:SimulationStep',
+            'config': {'state': _simulated_study(), 'runtime': runtime},
+            'inputs': {},
+            'outputs': {'results': ['results']}},
+        'report_cards': {
+            '_control': 'replicate', '_count': 1,
+            'verdict': 'string',
+            'card': {'_type': 'site', '_sort': CARD_FACE}}}})
+
+
+MODEL_SITE = 'study/sim/config/state/model'
+EMITTER_SITE = 'study/sim/config/state/emitter/address'
+
+
+def _card(core, threshold):
+    """A report card, wired to the simulation's results rather than to a
+    store it would otherwise read mid-run."""
+    return core.access({
+        '_type': 'step', 'address': 'local:TrajectoryCard',
+        'config': {'threshold': threshold},
+        'inputs': {'results': ['..', 'results']},
+        'outputs': {'verdict': ['verdict']}})
+
+
+def test_the_flush_network_is_made_of_sites():
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import open_sites
+
+    core = _flush_core()
+    template = _flush_template(core)
+
+    assert sorted(open_sites(template)) == [
+        ('study', 'report_cards', 'card'),
+        ('study', 'sim', 'config', 'state', 'emitter', 'address'),
+        ('study', 'sim', 'config', 'state', 'model'),
+        ('study', 'threshold')]
+
+    # the cardinality region expands into one site per instance
+    expanded = replicate(template, {'report_cards': 3})
+    assert sorted(
+        p for p in open_sites(expanded) if p[1].startswith('report_cards')) == [
+        ('study', 'report_cards_0', 'card'),
+        ('study', 'report_cards_1', 'card'),
+        ('study', 'report_cards_2', 'card')]
+
+
+def test_each_report_card_fires_once_on_the_resolved_trajectory():
+    """The point of wiring the cards to `results` rather than to a store:
+    each fires exactly ONCE, on the finished run, seeing every recorded row
+    — not once per tick on an instantaneous value."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    CARD_FIRINGS.clear()
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 2})
+
+    document = template_document(core, expanded, {
+        MODEL_SITE: _model(core),
+        EMITTER_SITE: 'local:RAMEmitter',
+        'study/threshold': 2.0,
+        'study/report_cards_0/card': _card(core, 2.0),
+        'study/report_cards_1/card': _card(core, 99.0)})
+
+    study = Composite({'state': document}, core=core)
+    study.run(0.0)
+
+    # two cards, one firing each — and each saw the WHOLE trajectory
+    assert len(CARD_FIRINGS) == 2
+    assert len(set(CARD_FIRINGS)) == 1 and CARD_FIRINGS[0] > 1
+
+    assert study.state['study']['threshold'] == 2.0      # value site survived
+    assert study.state['study']['report_cards_0']['verdict'] == 'pass'
+    assert study.state['study']['report_cards_1']['verdict'] == 'fail'
+
+
+def test_the_card_count_is_independent_of_simulation_length():
+    """A longer simulation does not fire the cards more — that is what
+    "the simulation is one node" buys."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    for runtime in (2.0, 8.0):
+        CARD_FIRINGS.clear()
+        core = _flush_core()
+        expanded = replicate(
+            _flush_template(core, runtime=runtime), {'report_cards': 1})
+
+        document = template_document(core, expanded, {
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: 'local:RAMEmitter',
+            'study/threshold': 2.0,
+            'study/report_cards_0/card': _card(core, 2.0)})
+
+        Composite({'state': document}, core=core).run(0.0)
+        assert len(CARD_FIRINGS) == 1, (
+            f'runtime={runtime} fired {len(CARD_FIRINGS)} times')
+
+
+def test_the_emitter_site_is_interchangeable():
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    for address in ('local:RAMEmitter', 'local:ConsoleEmitter'):
+        core = _flush_core()
+        expanded = replicate(_flush_template(core), {'report_cards': 0})
+        document = template_document(core, expanded, {
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: address,
+            'study/threshold': 2.0})
+
+        study = Composite({'state': document}, core=core)
+        assert list(study.step_paths) == [('study', 'sim')]
+        study.run(0.0)
+
+
+def test_the_emitter_site_refuses_a_non_emitter():
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 0})
+
+    with pytest.raises(ValueError, match=f"site '{EMITTER_SITE}'"):
+        template_document(core, expanded, {
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: 'local:IncreaseProcess',
+            'study/threshold': 2.0})
+
+
+def test_a_report_card_site_refuses_a_non_report_card():
+    """The card site is face-sorted, so only something that turns results
+    into a verdict fits."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 1})
+
+    with pytest.raises(ValueError,
+                       match="site 'study/report_cards_0/card'") as raised:
+        template_document(core, expanded, {
+            MODEL_SITE: _model(core),
+            EMITTER_SITE: 'local:RAMEmitter',
+            'study/threshold': 2.0,
+            'study/report_cards_0/card': _model(core)})   # a model, not a card
+
+    assert 'results' in str(raised.value)
+
+
+def test_zero_flush_entities_is_a_valid_study():
+    """A study that reports nothing is still a study — the cardinality
+    region simply expands to nothing."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 0})
+
+    document = template_document(core, expanded, {
+        MODEL_SITE: _model(core),
+        EMITTER_SITE: 'local:RAMEmitter',
+        'study/threshold': 2.0})
+
+    assert not [k for k in document['study'] if k.startswith('report_cards')]
+    study = Composite({'state': document}, core=core)
+    study.run(0.0)
+    # the simulation still ran inside its node
+    assert study.state['study']['sim']['instance'].composite.state['level'] > 1.0
+
+
+# ==========================================
+# Layer 3 (cont.) — the comparison-harness template (local stand-ins)
+# ==========================================
+
+class Compare(Step):
+    """The harness's verdict: do two models agree within a tolerance?"""
+
+    config_schema = {'tolerance': 'float'}
+
+    def inputs(self):
+        return {'a': 'float', 'b': 'float'}
+
+    def outputs(self):
+        return {'verdict': 'string', 'difference': 'float'}
+
+    def update(self, state):
+        difference = abs(state['a'] - state['b'])
+        return {
+            'difference': difference,
+            'verdict': 'agree' if difference <= self.config['tolerance']
+            else 'diverge'}
+
+
+WHOLE_CELL_FACE = {
+    '_type': 'link',
+    '_inputs': {'level': 'float'},
+    '_outputs': {'level': 'float'}}
+
+
+def _harness_core():
+    """The harness's registry: two *local* stand-ins for the compared models.
+
+    `reference` stands in for an out-of-tree implementation that a `git:`
+    address would name once that protocol exists; nothing here fetches or
+    executes foreign code.
+    """
+    core = _study_core()
+    core.register_link('Compare', Compare)
+    core.register_link('ReferenceModel', IncreaseProcess)
+    return core
+
+
+def _harness_template(core):
+    """The §5 comparison-harness structure, with local stand-ins.
+
+    - `compared/*` — value sites, the configs a sweep varies
+    - `candidate`  — a model site: the in-tree model
+    - `reference`  — an **address site**: fixed face, open implementation
+    - `compare`    — fixed
+    """
+    return core.access({'comparison': {
+        'compared': {
+            'tolerance': {'_type': 'site', '_sort': 'float'},
+            'duration': {'_type': 'site', '_sort': 'float'}},
+        'level_a': 1.0,
+        'level_b': 1.0,
+        'verdict': 'string',
+        'difference': 0.0,
+        'candidate': {'_type': 'site', '_sort': WHOLE_CELL_FACE},
+        'reference': {
+            '_type': 'process',
+            'address': {'_type': 'site', '_sort': WHOLE_CELL_FACE},
+            'config': {'rate': 0.5},
+            'interval': 1.0,
+            'inputs': {'level': ['level_b']},
+            'outputs': {'level': ['level_b']}},
+        'compare': {
+            '_type': 'step', 'address': 'local:Compare',
+            'config': {'tolerance': 0.001},
+            'inputs': {'a': ['level_a'], 'b': ['level_b']},
+            'outputs': {'verdict': ['verdict'],
+                        'difference': ['difference']}}}})
+
+
+def _candidate(core, rate):
+    return core.access({
+        '_type': 'process', 'address': 'local:IncreaseProcess',
+        'config': {'rate': rate}, 'interval': 1.0,
+        'inputs': {'level': ['level_a']}, 'outputs': {'level': ['level_a']}})
+
+
+def test_the_comparison_harness_is_a_template():
+    from process_bigraph.templates import open_sites
+
+    core = _harness_core()
+    assert sorted(open_sites(_harness_template(core))) == [
+        ('comparison', 'candidate'),
+        ('comparison', 'compared', 'duration'),
+        ('comparison', 'compared', 'tolerance'),
+        ('comparison', 'reference', 'address')]
+
+
+def test_the_harness_builds_and_runs_with_both_models_filled():
+    """Fill the in-tree model, inject the reference implementation by
+    address, set the compared configs → one document that runs both models
+    side by side and compares them."""
+    from process_bigraph.templates import template_document
+
+    core = _harness_core()
+    document = template_document(core, _harness_template(core), {
+        'comparison/candidate': _candidate(core, rate=0.5),
+        'comparison/reference/address': 'local:ReferenceModel',
+        'comparison/compared/tolerance': 0.001,
+        'comparison/compared/duration': 4.0})
+
+    sim = Composite({'state': document}, core=core)
+    assert sorted('/'.join(p) for p in sim.process_paths) == [
+        'comparison/candidate', 'comparison/reference']
+
+    sim.run(4.0)
+
+    # identical models, so they agree
+    assert sim.state['comparison']['verdict'] == 'agree'
+    assert sim.state['comparison']['difference'] < 0.001
+    assert sim.state['comparison']['compared']['tolerance'] == 0.001
+
+
+def test_the_harness_detects_a_divergent_candidate():
+    """The same template, a different candidate — the harness is reusable
+    because the models are sites."""
+    from process_bigraph.templates import template_document
+
+    core = _harness_core()
+    document = template_document(core, _harness_template(core), {
+        'comparison/candidate': _candidate(core, rate=0.9),
+        'comparison/reference/address': 'local:ReferenceModel',
+        'comparison/compared/tolerance': 0.001,
+        'comparison/compared/duration': 4.0})
+
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+
+    assert sim.state['comparison']['verdict'] == 'diverge'
+    assert sim.state['comparison']['difference'] > 0.001
+
+
+def test_the_reference_address_site_refuses_a_non_conforming_implementation():
+    """The address site pins the face, so only an implementation with the
+    whole-cell interface can be injected — the check that a `git:` address
+    would run against a fetched repo."""
+    from process_bigraph.templates import template_document
+
+    core = _harness_core()
+    core.register_link('WrongShape', ReportCard)
+
+    with pytest.raises(ValueError,
+                       match="site 'comparison/reference/address'"):
+        template_document(core, _harness_template(core), {
+            'comparison/candidate': _candidate(core, rate=0.5),
+            'comparison/reference/address': 'local:WrongShape',
+            'comparison/compared/tolerance': 0.001,
+            'comparison/compared/duration': 4.0})
+
+
+def test_the_harness_gates_a_downstream_member():
+    """The harness as an investigation member: a downstream study runs only
+    when the comparison agrees — gating by filling, staged."""
+    from process_bigraph.templates import (
+        template_document, investigation_document)
+
+    def run(candidate_rate):
+        core = _harness_core()
+
+        harness = Composite(
+            {'state': template_document(core, _harness_template(core), {
+                'comparison/candidate': _candidate(core, rate=candidate_rate),
+                'comparison/reference/address': 'local:ReferenceModel',
+                'comparison/compared/tolerance': 0.001,
+                'comparison/compared/duration': 4.0})},
+            core=core)
+        harness.run(4.0)
+        verdict = harness.state['comparison']['verdict']
+
+        followup = core.access({'investigation': {
+            'downstream': _study_region(threshold=2.0)}})
+        bindings = {}
+        if verdict == 'agree':
+            bindings['investigation/downstream/model'] = _model(core)
+
+        document, blocked = investigation_document(
+            core, followup, bindings, member_depth=2)
+        members = document.get('investigation')
+        # pruning every member leaves an empty region, which renders as the
+        # bare type `'node'` rather than `{}`
+        members = sorted(members) if isinstance(members, dict) else []
+        return verdict, blocked, members
+
+    assert run(0.5) == ('agree', [], ['downstream'])
+    assert run(0.9) == ('diverge', ['investigation/downstream'], [])

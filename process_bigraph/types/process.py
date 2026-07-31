@@ -15,7 +15,7 @@ from dataclasses import dataclass, is_dataclass, field
 
 from bigraph_schema import capture_object_state, restore_object_value
 from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema, is_schema_field
-from bigraph_schema.methods import resolve, realize, realize_link, default, default_link, render, wrap_default
+from bigraph_schema.methods import resolve, realize, realize_link, default, default_link, render, render_config, wrap_default
 from bigraph_schema.methods import reify_schema
 from bigraph_schema.methods.handle_parameters import reify_schema_link
 from bigraph_schema.methods import serialize, divide, bundle, apply
@@ -206,14 +206,37 @@ def realize(core, schema: StepLink, state, path=()):
     return link_schema, link_state, merges
 
 
+_LINK_TYPE_DEFAULTS = {}
+
+
+def _link_type_defaults(link_type):
+    """The value each field of ``link_type`` carries when nothing was declared.
+
+    A field left at its default must not be rendered: an empty ``_outputs``
+    renders as the bare type ``'node'`` and comes back from ``access`` as a
+    ``Node`` rather than a dict, which then breaks ``default_wires``. This
+    mirrors what ``bigraph_schema``'s own ``render(Link)`` does.
+    """
+    if link_type not in _LINK_TYPE_DEFAULTS:
+        blank = link_type()
+        _LINK_TYPE_DEFAULTS[link_type] = {
+            name: getattr(blank, name) for name in blank.__dataclass_fields__}
+    return _LINK_TYPE_DEFAULTS[link_type]
+
+
 @render.dispatch
 def render(schema: StepLink, defaults=False):
     result = {'_type': 'step'}
+    blank = _link_type_defaults(type(schema))
     for field_name in schema.__dataclass_fields__:
         if field_name == '_default':
             continue
         value = getattr(schema, field_name)
-        result[field_name] = render(value, defaults=defaults)
+        if field_name in blank and value == blank[field_name]:
+            continue
+        result[field_name] = (
+            render_config(value, defaults=defaults) if field_name == 'config'
+            else render(value, defaults=defaults))
 
     # ``priority`` and ``_triggers`` are *values*, not types. Rendering their
     # schema nodes emits ``'float'`` / ``'node'`` and loses them, so the
@@ -232,11 +255,16 @@ def render(schema: StepLink, defaults=False):
 @render.dispatch
 def render(schema: ProcessLink, defaults=False):
     result = {'_type': 'process'}
+    blank = _link_type_defaults(type(schema))
     for field_name in schema.__dataclass_fields__:
         if field_name == '_default':
             continue
         value = getattr(schema, field_name)
-        result[field_name] = render(value, defaults=defaults)
+        if field_name in blank and value == blank[field_name]:
+            continue
+        result[field_name] = (
+            render_config(value, defaults=defaults) if field_name == 'config'
+            else render(value, defaults=defaults))
 
     # ``interval`` is a *value*, not a type. Rendering the Float node emits
     # the bare type name ``'float'``, which loses the interval — and the
