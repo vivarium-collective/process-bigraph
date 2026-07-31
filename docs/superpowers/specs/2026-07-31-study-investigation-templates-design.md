@@ -54,31 +54,61 @@ predicate; a partially-filled template is still a template.
 
 ## 3. A study is a template — model, emitter, AND flush entities are all sites
 
-Everything configurable about a study is a **site**; only the *wiring* (each flush
-edge reads the emitter's `results` port — umbrella Layer 1) is fixed. A study
-template's holes:
+A study is a **higher-order DAG**. The simulation is *one node*
+(`local:SimulationStep`, process-bigraph ≥ the #160 merge) and the flush entities are
+ordinary steps downstream of that node's **`results`** output — the emitter's durable
+handle (`EmitterResults`: a reference, resolved on demand, never the bulk).
+
+That shape is what makes a flush entity fire **exactly once**. Its `results` input is
+unsatisfied until the simulation node's update returns, and the simulation's per-tick
+stepping happens *inside* the node rather than beside it — so the flush steps are
+never siblings of the simulation's own steps. Ordinary producer/consumer ordering does
+all of it: no completion phase, no marker, no scheduler special case.
+
+Everything configurable is a **site**; only the wiring is fixed. A study template's
+holes:
 
 ```
 study.template:
-  model:          <site: face = the study's expected model interface>   # fill with a composite
-  # config (value / cardinality sites)
-  n_seeds:        <site: int>                                           # cardinality
-  media:          <site: enum[...]>                                     # value
-  # the sink — an interchangeable-face site
-  emitter:        <site: face = Emitter(results)>                       # RAM | Parquet | XArray-zarr
+  threshold/media/n_seeds: <value & cardinality sites>     # study-level config
+  sim:                                                     # the simulation, ONE node
+    _type: step
+    address: local:SimulationStep
+    config:
+      runtime: <float>
+      state:                                               # the simulation it runs
+        model:   <site: face = the study's expected model interface>
+        emitter:                                           # the sink
+          address: <site: sort = "an emitter">             # RAM | Parquet | XArray-zarr
+          outputs: {results: [results]}                    # fixed — the handle leaves here
+    outputs: {results: [results]}                          # fixed — and leaves the node
   # the flush entities — CARDINALITY REGIONS of face-sorted sites (0+ each),
-  # every one wired to `results`:
+  # every one wired to `results` via an ascending wire:
   visualizations: [ <site: face = Visualization(results→figure)> … ]
   analyses:       [ <site: face = Analysis(results→analysis)>     … ]
   report_cards:   [ <site: face = ReportCard(results→verdict)>    … ]
 ```
 
-- **Emitter site.** Filling it chooses the sink (RAM / Parquet / XArray-zarr) —
-  interchangeable because they share the `results` face; `admits` checks conformance.
+- **Model & emitter sites live inside the simulation node's inner state.** Filling
+  them configures *the simulation the study runs*. Sites nested in a node's `config`
+  are discoverable and fillable like any other (addressed by path, e.g.
+  `study/sim/config/state/model`).
+- **Emitter site.** Filling it chooses the sink. Interchangeability is expressed by a
+  **registered sort** (`core.register_sort`), not by face conformance: every emitter
+  exposes the same `results` port and nothing else, so a face check cannot tell an
+  emitter from anything else that happens to expose `results`. The sort states the
+  constraint directly — *the address must name a registered `Emitter`* — and refuses
+  e.g. `local:IncreaseProcess`.
 - **Flush-entity site-regions.** `visualizations`/`analyses`/`report_cards` are
-  cardinality regions (Layer-1 §4.5): fill with 0+ conforming Steps, each auto-wired
-  to `results`. A report-card site accepts only a Step whose face reads `results` and
-  writes a verdict — so you can't wire a viz where a card belongs.
+  cardinality regions (Layer-1 §4.5): fill with 0+ conforming Steps. Each sits inside
+  its own instance region, so it reaches the shared handle with an **ascending wire**
+  (`['..', 'results']`). A report-card site accepts only a Step whose face reads
+  `results` and writes a verdict — so you can't wire a viz where a card belongs. Zero
+  entities is valid: a study that reports nothing is still a study.
+- **What a flush entity observes.** The *resolved trajectory* of a finished run, not
+  an instantaneous store value. A report card wired to `results` judges the run's
+  final state — something no per-tick step could do — and its firing count is
+  independent of how long the simulation ran.
 
 `fill({model: ecoli_baseline, emitter: XArrayEmitter, media: minimal, n_seeds: 8,
 visualizations: [mass_trace, growth_curve], analyses: [doubling_time],
