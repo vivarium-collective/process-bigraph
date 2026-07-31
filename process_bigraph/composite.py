@@ -1121,6 +1121,8 @@ class Composite(Process):
         except Exception:
             pass
 
+        self._require_ground_document()
+
         # Load the bridge configuration, which defines how inputs/outputs connect to the world.
         self.bridge = self.config.get('bridge', {})
 
@@ -2487,6 +2489,38 @@ class Composite(Process):
             framework_time=self.framework_time,
             per_process=dict(self._per_process_time),
         )
+
+    def _require_ground_document(self) -> None:
+        """Reject a document that still has unfilled template holes.
+
+        A composite is runnable only once every required site is filled: an
+        open site is a hole where a process or a value should be, and nothing
+        downstream — wiring, scheduling, emitters — can be built over it.
+        Checking here turns what would be a confusing failure deep in the run
+        into a clear one at construction.
+
+        Deliberately checked over **sites**, not ``is_ground``: any composite
+        containing a process has unwired ports by construction, so
+        ``is_ground`` is never true for a real composite and would reject
+        everything. A site carrying a ``_default`` is optional — it can supply
+        its own filler — so it does not block.
+        """
+        from bigraph_schema.assembly import collect_sites
+
+        # ``collect_sites`` addresses each site twice (bare key and path);
+        # collapse to unique paths.
+        unfilled = sorted({
+            tuple(path)
+            for path, site in collect_sites(self.schema).values()
+            if getattr(site, '_default', None) is None})
+
+        if unfilled:
+            named = ', '.join(repr('/'.join(path)) for path in unfilled)
+            raise ValueError(
+                f'composite document is not ground — required site(s) left '
+                f'unfilled: {named}. An open site is a hole where a process '
+                f'or value should be; fill it before constructing the '
+                f'composite (bigraph_schema `fill_sites` / `build`).')
 
     def _require_advancing_interval(
             self,

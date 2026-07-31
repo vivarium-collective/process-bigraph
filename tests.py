@@ -3542,3 +3542,309 @@ def test_a_nested_flush_step_waits_for_the_simulation():
 
     assert FLUSH_FIRINGS == ['EmitterResults']
     assert study.state['cards_0']['rows'] > 1
+
+
+# ==========================================
+# A0 — groundness at the Composite boundary
+# ==========================================
+
+MODEL_FACE = {
+    '_type': 'link',
+    '_inputs': {'level': 'float'},
+    '_outputs': {'level': 'float'}}
+
+
+def test_unfilled_required_site_is_rejected():
+    """A document with an open template hole is not runnable.
+
+    Nothing downstream — wiring, scheduling, emitters — can be built over a
+    site, so the composite must say so at construction rather than fail
+    obscurely mid-run.
+    """
+    core = allocate_core()
+    document = {'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'level': 1.0}}
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        Composite({'state': document}, core=core)
+
+    assert "'study/model'" in str(raised.value)
+
+
+def test_every_unfilled_site_is_named():
+    core = allocate_core()
+    document = {'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'reference': {'_type': 'site', '_sort': MODEL_FACE}}}
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        Composite({'state': document}, core=core)
+
+    message = str(raised.value)
+    assert "'study/model'" in message
+    assert "'study/reference'" in message
+
+
+def test_optional_site_does_not_block_construction():
+    """A site carrying a `_default` can supply its own filler, so it is not
+    a required hole."""
+    core = allocate_core()
+    document = {'study': {
+        'rate': {'_type': 'site', '_sort': 'float', '_default': 0.5},
+        'level': 1.0}}
+
+    sim = Composite({'state': document}, core=core)
+    assert sim.state['study']['level'] == 1.0
+
+
+def test_a_normal_composite_is_still_ground():
+    """The check is over *sites*, not `is_ground`: a composite containing a
+    process has unwired ports by construction, so `is_ground` would reject
+    every real composite. It must not."""
+    core = allocate_core()
+    document = {
+        'proc': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.1},
+            'inputs': {'level': ['level']},
+            'outputs': {'level': ['level']},
+            'interval': 1.0},
+        'level': 1.0}
+
+    sim = Composite({'state': document}, core=core)
+    sim.run(2.0)
+    assert sim.state['global_time'] == 2.0
+
+
+def test_a_filled_template_constructs():
+    """The end-to-end shape: fill the hole, then the composite builds."""
+    from bigraph_schema.assembly import fill_sites
+
+    core = allocate_core()
+    template = core.access({
+        'proc': {'_type': 'site', '_sort': MODEL_FACE},
+        'level': 'float'})
+    filler = core.access({
+        '_type': 'process',
+        'address': 'local:IncreaseProcess',
+        'config': {'rate': 0.1},
+        'inputs': {'level': ['level']},
+        'outputs': {'level': ['level']},
+        'interval': 1.0})
+
+    filled = fill_sites(core, template, {'proc': filler})
+
+    sim = Composite({'state': core.render(filled)}, core=allocate_core())
+    assert list(sim.process_paths) == [('proc',)]
+    sim.run(2.0)
+    assert sim.state['global_time'] == 2.0
+
+
+# ==========================================
+# A1 — declared emitters are actually installed
+# ==========================================
+
+def _emitting_spec(emitters):
+    from process_bigraph.composite_spec import CompositeSpec
+    return CompositeSpec(
+        id='emitting', name='emitting',
+        emitters=emitters,
+        state={
+            'proc': {
+                '_type': 'process',
+                'address': 'local:IncreaseProcess',
+                'config': {'rate': 0.1},
+                'inputs': {'level': ['level']},
+                'outputs': {'level': ['level']},
+                'interval': 1.0},
+            'level': 1.0})
+
+
+def test_declared_emitter_is_installed_and_gathers():
+    """`CompositeSpec.emitters` is a first-class field, but `to_composite`
+    never installed it — a composite built through the pure process-bigraph
+    API had no observation sink at all."""
+    spec = _emitting_spec([{'address': 'local:RAMEmitter', 'paths': ['level']}])
+
+    sim = spec.to_composite()
+    assert list(sim.step_paths) == [('emitter',)]
+
+    sim.run(3.0)
+    results = gather_emitter_results(sim)
+    rows = results[('emitter',)]
+
+    assert len(rows) > 1
+    assert 'level' in rows[0] and 'global_time' in rows[0]
+
+
+def test_emit_false_returns_the_bare_document():
+    spec = _emitting_spec([{'address': 'local:RAMEmitter', 'paths': ['level']}])
+
+    assert 'emitter' in spec.to_document()['state']
+    assert 'emitter' not in spec.to_document(emit=False)['state']
+
+
+def test_a_spec_with_no_emitters_installs_none():
+    spec = _emitting_spec([])
+    assert spec.to_document()['state'].keys() == {'proc', 'level'}
+    assert list(_emitting_spec([]).to_composite().step_paths) == []
+
+
+def test_installing_emitters_twice_yields_one_sink():
+    """The shim and the dashboard also install; fixed keys mean a second
+    install rewrites the same slot instead of adding a second sink."""
+    from process_bigraph.emitter import install_emitters
+
+    declarations = [{'address': 'local:RAMEmitter', 'paths': ['level']}]
+    state = _emitting_spec(declarations).to_document()['state']
+
+    once = install_emitters(state, declarations)
+    twice = install_emitters(once, declarations)
+
+    assert sorted(k for k in twice if k.startswith('emitter')) == ['emitter']
+    assert twice['emitter'] == once['emitter']
+
+    sim = Composite({'state': twice}, core=allocate_core())
+    assert list(sim.step_paths) == [('emitter',)]
+
+
+def test_multiple_declared_emitters_get_distinct_slots():
+    from process_bigraph.emitter import install_emitters
+
+    state = install_emitters({'level': 1.0}, [
+        {'address': 'local:RAMEmitter', 'paths': ['level']},
+        {'address': 'local:ConsoleEmitter', 'paths': ['level']}])
+
+    assert sorted(k for k in state if k.startswith('emitter')) == [
+        'emitter', 'emitter_1']
+
+
+def test_declaration_paths_become_wires():
+    """A declaration names what to observe; the wiring is computed. Slash-
+    and dot-joined paths both address a nested store."""
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    node = emitter_node_from_declaration(
+        {'address': 'local:RAMEmitter', 'paths': ['cell/mass', 'cell.volume']})
+
+    assert node['inputs']['cell_mass'] == ['cell', 'mass']
+    assert node['inputs']['cell_volume'] == ['cell', 'volume']
+    # global_time is always emitted so trajectories carry a time axis.
+    assert node['inputs']['global_time'] == ['global_time']
+    assert node['config']['emit']['cell_mass'] == 'node'
+
+
+def test_declaration_uses_the_one_emitter_constructor():
+    """A declared sink and a generated one are the same node shape, because
+    both come from `emitter_from_wires`."""
+    from process_bigraph.emitter import (
+        emitter_node_from_declaration, emitter_from_wires)
+
+    declared = emitter_node_from_declaration(
+        {'address': 'local:RAMEmitter', 'paths': ['level']})
+    generated = emitter_from_wires(
+        {'level': ['level'], 'global_time': ['global_time']},
+        address='local:RAMEmitter')
+
+    assert declared == generated
+
+
+def test_unregistered_emitter_address_degrades_to_ram():
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    node = emitter_node_from_declaration(
+        {'address': 'local:NoSuchEmitter', 'paths': ['level']},
+        core=allocate_core())
+
+    assert node['address'] == 'local:RAMEmitter'
+
+
+def test_declared_emitter_config_is_preserved():
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    node = emitter_node_from_declaration({
+        'address': 'local:RAMEmitter',
+        'config': {'subsample': 5},
+        'paths': ['level']})
+
+    assert node['config']['subsample'] == 5
+    assert 'emit' in node['config']
+
+
+# ==========================================
+# StepLink.priority survives access/render
+# ==========================================
+
+@pytest.mark.parametrize('declared,expected', [(5.0, 5.0), (2.5, 2.5), (None, 0.0)])
+def test_declared_step_priority_survives_access_and_render(declared, expected):
+    """`reify_schema_link` knows only the base `Link` fields, so a declared
+    step `priority` was dropped exactly the way a process `interval` was: the
+    schema kept its default and `render` emitted the bare type `'float'`, so
+    a round-tripped step forgot its scheduling order.
+    """
+    core = allocate_core()
+    node = {'_type': 'step', 'address': 'local:Collect'}
+    if declared is not None:
+        node['priority'] = declared
+
+    schema = core.access(node)
+    assert schema.priority._default == expected
+
+    rendered = core.render(schema)
+    assert rendered['priority'] == expected
+    assert core.access(rendered).priority._default == expected
+
+
+def test_declared_step_triggers_survive_access_and_render():
+    core = allocate_core()
+    schema = core.access({
+        '_type': 'step',
+        'address': 'local:Collect',
+        '_triggers': {'a': ['a']}})
+
+    assert schema._triggers == {'a': ['a']}
+    assert core.render(schema)['_triggers'] == {'a': ['a']}
+
+
+def test_the_scheduler_sees_a_round_tripped_priority():
+    """The payoff: priority decides which step runs first when the network
+    has a cycle, so it must survive the schema layer."""
+    core = allocate_core()
+
+    class Marker(Step):
+        config_schema = {'name': 'string'}
+
+        def inputs(self):
+            return {'seen': 'list'}
+
+        def outputs(self):
+            return {'seen': 'list'}
+
+        def update(self, state):
+            return {'seen': state['seen'] + [self.config['name']]}
+
+    core.register_link('Marker', Marker)
+
+    document = {
+        'low': {
+            '_type': 'step', 'address': 'local:Marker',
+            'config': {'name': 'low'}, 'priority': 1.0,
+            'inputs': {'seen': ['seen']}, 'outputs': {'seen': ['seen']}},
+        'high': {
+            '_type': 'step', 'address': 'local:Marker',
+            'config': {'name': 'high'}, 'priority': 9.0,
+            'inputs': {'seen': ['seen']}, 'outputs': {'seen': ['seen']}},
+        'seen': []}
+
+    round_tripped = core.render(core.access(document))
+    assert round_tripped['low']['priority'] == 1.0
+    assert round_tripped['high']['priority'] == 9.0
+
+    sim = Composite({'state': round_tripped}, core=core)
+    priorities = {
+        path[-1]: meta['priority']
+        for path, meta in sim.step_dependencies.items()}
+    assert priorities['high'] == 9.0
+    assert priorities['low'] == 1.0

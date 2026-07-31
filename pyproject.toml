@@ -9,10 +9,13 @@ description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-    # >=1.4.2 required: the bundle Parquet writer (_save_array_parquet) moved
-    # into bigraph-schema in 1.4.2 (layer inversion); process-bigraph no longer
-    # ships it, so save_bundle needs a schema that owns it.
-    "bigraph-schema>=1.4.2",
+    # >=1.4.3 required: `assembly.collect_sites` (the site/fill primitive)
+    # backs the groundness check in `Composite.__init__` — a document with
+    # unfilled template holes must be rejected at construction.
+    # 1.4.2 first moved the bundle Parquet writer (_save_array_parquet) into
+    # bigraph-schema (layer inversion); process-bigraph no longer ships it,
+    # so save_bundle needs a schema that owns it.
+    "bigraph-schema>=1.4.4",
     "matplotlib",
     "pint>=0.24.4",
     "scipy>=1.8",
