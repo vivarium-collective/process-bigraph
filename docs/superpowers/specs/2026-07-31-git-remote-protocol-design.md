@@ -22,6 +22,11 @@ Filling the site is one call; the *heavy* work (fetch/install) is cached and hap
 
 ## 2. The decisions (each needs a call — recommendation given)
 
+> **RESOLVED 2026-07-31 (user).** **D1 = (a)** subprocess + per-SHA `uv venv`. **D2 = allow-list
+> + mandatory SHA-pinning**, sandboxing beyond venv/subprocess out of scope v1. Build proceeds on
+> these. Container isolation (D1(b)) deferred; the allow-list defaults to `CovertLab/vEcoli` plus
+> explicitly-added forks, refusing any `git:` address outside it.
+
 ### D1. Environment isolation — *the load-bearing decision*
 Running fetched code (vEcoli pulls a large scientific stack) must not pollute or break the host env.
 - **(a) Subprocess + per-SHA venv** — `uv venv` per commit SHA, install the repo, run the entrypoint out-of-process, talk over a small RPC/stdio boundary. Portable, no daemon, matches process-bigraph's existing detached-run model. **Recommended.**
