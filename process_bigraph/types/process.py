@@ -97,6 +97,34 @@ def default(schema: StepLink):
 
 
 @reify_schema.dispatch
+def reify_schema(core, schema: StepLink, parameters):
+    """Compile a step declaration, keeping its declared ``priority``.
+
+    The same gap the process ``interval`` had: ``reify_schema_link`` knows
+    only the base ``Link`` fields, so a declared ``priority`` (and the
+    ``_triggers`` port set) was silently dropped. A document round-tripped
+    through access/render came back with the schema defaults — a step that
+    lost its scheduling order, which decides which step runs first when the
+    network has a cycle.
+
+    Only a number is carried, so re-accessing a document whose ``priority``
+    was rendered as the bare type ``'float'`` keeps the default rather than
+    stamping a string.
+    """
+    schema = reify_schema_link(core, schema, parameters)
+
+    declared = parameters.get('priority')
+    if isinstance(declared, (int, float)) and not isinstance(declared, bool):
+        schema.priority = Float(_default=declared)
+
+    triggers = parameters.get('_triggers')
+    if isinstance(triggers, dict) and triggers:
+        schema._triggers = dict(triggers)
+
+    return schema
+
+
+@reify_schema.dispatch
 def reify_schema(core, schema: ProcessLink, parameters):
     """Compile a process declaration, keeping its declared ``interval``.
 
@@ -186,6 +214,18 @@ def render(schema: StepLink, defaults=False):
             continue
         value = getattr(schema, field_name)
         result[field_name] = render(value, defaults=defaults)
+
+    # ``priority`` and ``_triggers`` are *values*, not types. Rendering their
+    # schema nodes emits ``'float'`` / ``'node'`` and loses them, so the
+    # re-accessed step falls back to the defaults and forgets its scheduling
+    # order.
+    carried = getattr(schema.priority, '_default', None)
+    if carried is not None:
+        result['priority'] = carried
+
+    if schema._triggers:
+        result['_triggers'] = dict(schema._triggers)
+
     return wrap_default(schema, result) if defaults else result
 
 

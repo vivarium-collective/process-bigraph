@@ -3771,3 +3771,80 @@ def test_declared_emitter_config_is_preserved():
 
     assert node['config']['subsample'] == 5
     assert 'emit' in node['config']
+
+
+# ==========================================
+# StepLink.priority survives access/render
+# ==========================================
+
+@pytest.mark.parametrize('declared,expected', [(5.0, 5.0), (2.5, 2.5), (None, 0.0)])
+def test_declared_step_priority_survives_access_and_render(declared, expected):
+    """`reify_schema_link` knows only the base `Link` fields, so a declared
+    step `priority` was dropped exactly the way a process `interval` was: the
+    schema kept its default and `render` emitted the bare type `'float'`, so
+    a round-tripped step forgot its scheduling order.
+    """
+    core = allocate_core()
+    node = {'_type': 'step', 'address': 'local:Collect'}
+    if declared is not None:
+        node['priority'] = declared
+
+    schema = core.access(node)
+    assert schema.priority._default == expected
+
+    rendered = core.render(schema)
+    assert rendered['priority'] == expected
+    assert core.access(rendered).priority._default == expected
+
+
+def test_declared_step_triggers_survive_access_and_render():
+    core = allocate_core()
+    schema = core.access({
+        '_type': 'step',
+        'address': 'local:Collect',
+        '_triggers': {'a': ['a']}})
+
+    assert schema._triggers == {'a': ['a']}
+    assert core.render(schema)['_triggers'] == {'a': ['a']}
+
+
+def test_the_scheduler_sees_a_round_tripped_priority():
+    """The payoff: priority decides which step runs first when the network
+    has a cycle, so it must survive the schema layer."""
+    core = allocate_core()
+
+    class Marker(Step):
+        config_schema = {'name': 'string'}
+
+        def inputs(self):
+            return {'seen': 'list'}
+
+        def outputs(self):
+            return {'seen': 'list'}
+
+        def update(self, state):
+            return {'seen': state['seen'] + [self.config['name']]}
+
+    core.register_link('Marker', Marker)
+
+    document = {
+        'low': {
+            '_type': 'step', 'address': 'local:Marker',
+            'config': {'name': 'low'}, 'priority': 1.0,
+            'inputs': {'seen': ['seen']}, 'outputs': {'seen': ['seen']}},
+        'high': {
+            '_type': 'step', 'address': 'local:Marker',
+            'config': {'name': 'high'}, 'priority': 9.0,
+            'inputs': {'seen': ['seen']}, 'outputs': {'seen': ['seen']}},
+        'seen': []}
+
+    round_tripped = core.render(core.access(document))
+    assert round_tripped['low']['priority'] == 1.0
+    assert round_tripped['high']['priority'] == 9.0
+
+    sim = Composite({'state': round_tripped}, core=core)
+    priorities = {
+        path[-1]: meta['priority']
+        for path, meta in sim.step_dependencies.items()}
+    assert priorities['high'] == 9.0
+    assert priorities['low'] == 1.0
