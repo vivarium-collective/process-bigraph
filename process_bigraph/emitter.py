@@ -224,13 +224,14 @@ class EmitterResults:
     reaching for the imperative ``gather_emitter_results`` pull.
     """
 
-    __slots__ = ('emitter', 'address', 'path', 'context')
+    __slots__ = ('emitter', 'address', 'path', 'context', '_resolved')
 
     def __init__(self, emitter, address=None, path=None, context=None):
         self.emitter = emitter
         self.address = address
         self.path = tuple(path) if path else ()
         self.context = context or {}
+        self._resolved = {}
 
     @property
     def count(self):
@@ -240,8 +241,19 @@ class EmitterResults:
 
     def resolve(self, paths=None):
         """Pull the accumulated data. The handle stays a reference; this is
-        the only place the bulk is materialized."""
-        return self.emitter.query(paths)
+        the only place the bulk is materialized.
+
+        Memoized per ``paths``: a handle refers to a run that has *completed*,
+        so resolving it twice must give the same answer. It also must not cost
+        twice — several flush entities resolve the same handle, and a durable
+        emitter's ``query()`` can be far from free (``XArrayEmitter`` re-reads
+        its zarr store, and flushes buffered rows on the way, which without
+        this appends them again on every read).
+        """
+        key = tuple(paths) if isinstance(paths, list) else paths
+        if key not in self._resolved:
+            self._resolved[key] = self.emitter.query(paths)
+        return self._resolved[key]
 
     def to_dict(self):
         """A JSON-safe summary — the reference, never the data."""

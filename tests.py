@@ -4724,3 +4724,40 @@ def test_finalize_survives_an_emitter_that_redefines_finalize():
 
     # the emitter's own finalize was left alone — not consumed for a handle
     assert closed == []
+
+
+def test_resolving_a_handle_twice_is_idempotent_and_cheap():
+    """A handle refers to a run that has completed, so resolving twice must
+    give the same answer — and must not pay twice. Several flush entities
+    resolve the same handle, and a durable emitter's `query()` can be
+    expensive *and* side-effecting (`XArrayEmitter` flushes buffered rows on
+    read, which without memoization appends them again every time)."""
+    core = allocate_core()
+    calls = []
+
+    class CountingEmitter(RAMEmitter):
+        def query(self, paths=None, schema=None, query=None):
+            calls.append(paths)
+            return super().query(paths, schema, query)
+
+    core.register_link('CountingEmitter', CountingEmitter)
+    doc = {
+        'level': 1.0,
+        'model': {
+            '_type': 'process', 'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.5}, 'interval': 1.0,
+            'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
+        'emitter': {
+            '_type': 'step', 'address': 'local:CountingEmitter',
+            'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+            'inputs': {'level': ['level'], 'global_time': ['global_time']}}}
+
+    sim = Composite({'state': doc}, core=core)
+    sim.run(3.0)
+    handle = sim.finalize()[('emitter',)]
+
+    first = handle.resolve()
+    second = handle.resolve()
+
+    assert first == second
+    assert len(calls) == 1, f'query() called {len(calls)} times'
