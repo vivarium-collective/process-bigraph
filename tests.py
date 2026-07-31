@@ -23,7 +23,8 @@ from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
 )
 from process_bigraph.emitter import (
-    emitter_from_wires, gather_emitter_results, add_emitter_to_composite,
+    EmitterResults, RAMEmitter, emitter_from_wires, gather_emitter_results,
+    add_emitter_to_composite,
 )
 
 # SQLiteEmitter + friends now live in the focused pbg-emitters library and
@@ -3109,3 +3110,165 @@ def test_round_tripped_document_still_runs():
     sim = Composite({'state': rendered}, core=allocate_core())
     sim.run(2.0)
     assert sim.state['global_time'] == 2.0
+
+
+# ==========================================
+# Layer 2b — the emitter's `results` port
+# ==========================================
+
+def _emitting_run(core, emitter_node=None):
+    node = emitter_node or {
+        '_type': 'step', 'address': 'local:RAMEmitter',
+        'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+        'inputs': {'level': ['level'], 'global_time': ['global_time']},
+        'outputs': {'results': ['results']}}
+    doc = {
+        'level': 1.0, 'results': {},
+        'model': {
+            '_type': 'process', 'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.5}, 'interval': 1.0,
+            'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
+        'emitter': node}
+    sim = Composite({'state': doc}, core=core)
+    sim.run(3.0)
+    return sim
+
+
+def test_an_emitter_declares_a_results_port():
+    core = allocate_core()
+    emitter = RAMEmitter({'emit': {'level': 'node'}}, core)
+    assert emitter.outputs() == {'results': 'node'}
+
+
+def test_a_downstream_step_can_depend_on_the_emitter():
+    """The point of the port: the emitter becomes an ordinary producer, so a
+    flush step is wired to it as a normal producer/consumer edge instead of
+    reaching for the imperative pull."""
+    core = allocate_core()
+
+    class Flush(Step):
+        config_schema = {}
+
+        def inputs(self):
+            return {'results': 'node'}
+
+        def outputs(self):
+            return {'rows': 'integer'}
+
+        def update(self, state):
+            return {'rows': 0}
+
+    core.register_link('Flush', Flush)
+    doc = {
+        'level': 1.0, 'results': {}, 'rows': 0,
+        'emitter': {
+            '_type': 'step', 'address': 'local:RAMEmitter',
+            'config': {'emit': {'level': 'node'}},
+            'inputs': {'level': ['level']},
+            'outputs': {'results': ['results']}},
+        'flush': {
+            '_type': 'step', 'address': 'local:Flush',
+            'inputs': {'results': ['results']},
+            'outputs': {'rows': ['rows']}}}
+
+    sim = Composite({'state': doc}, core=core)
+
+    # the emitter now *produces* a path, and the flush consumes it
+    assert sim.step_dependencies[('emitter',)]['output_paths'] == [('results',)]
+    assert sim.step_dependencies[('flush',)]['input_paths'] == [('results',)]
+
+
+def test_the_results_handle_is_a_reference_not_the_data():
+    core = allocate_core()
+    sim = _emitting_run(core)
+
+    handle = sim.finalize()[('emitter',)]
+
+    assert isinstance(handle, EmitterResults)
+    assert handle.count == len(gather_emitter_results(sim)[('emitter',)])
+    # the summary carries no bulk
+    summary = handle.to_dict()
+    assert set(summary) == {'address', 'path', 'count', 'context'}
+    assert summary['path'] == ['emitter']
+
+
+def test_the_handle_resolves_to_the_accumulated_data():
+    core = allocate_core()
+    sim = _emitting_run(core)
+
+    handle = sim.finalize()[('emitter',)]
+    rows = handle.resolve()
+
+    assert len(rows) > 1
+    assert 'level' in rows[0] and 'global_time' in rows[0]
+    assert rows == gather_emitter_results(sim)[('emitter',)]
+
+
+def test_finalize_writes_the_handle_to_the_wired_store():
+    core = allocate_core()
+    sim = _emitting_run(core)
+
+    assert sim.state['results'] == {}        # nothing during the run
+    sim.finalize()
+
+    handle = sim.state['results']
+    assert isinstance(handle, EmitterResults)
+    assert len(handle.resolve()) == handle.count
+
+
+def test_results_are_not_written_per_tick():
+    """`results` is a completion-time value. Writing it from `update` would
+    fire every downstream consumer on every tick, which is exactly the
+    behaviour the port exists to avoid."""
+    core = allocate_core()
+    sim = _emitting_run(core)
+
+    assert sim.state['results'] == {}
+    assert RAMEmitter({'emit': {}}, core).update({}) == {}
+
+
+def test_finalize_skips_edges_without_results():
+    """Additive: an ordinary step contributes nothing to finalize."""
+    core = allocate_core()
+
+    class Plain(Step):
+        config_schema = {}
+
+        def inputs(self):
+            return {'level': 'float'}
+
+        def outputs(self):
+            return {'seen': 'integer'}
+
+        def update(self, state):
+            return {'seen': 1}
+
+    core.register_link('Plain', Plain)
+    doc = {
+        'level': 1.0, 'seen': 0,
+        'plain': {
+            '_type': 'step', 'address': 'local:Plain',
+            'inputs': {'level': ['level']}, 'outputs': {'seen': ['seen']}}}
+
+    sim = Composite({'state': doc}, core=core)
+    sim.run(0.0)
+    assert sim.finalize() == {}
+
+
+def test_gather_emitter_results_is_unchanged():
+    """Back-compat: the imperative pull keeps working exactly as before, with
+    or without a wired results port."""
+    core = allocate_core()
+
+    unwired = {
+        '_type': 'step', 'address': 'local:RAMEmitter',
+        'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+        'inputs': {'level': ['level'], 'global_time': ['global_time']}}
+
+    sim = _emitting_run(core, emitter_node=unwired)
+    rows = gather_emitter_results(sim)[('emitter',)]
+
+    assert len(rows) > 1
+    assert rows[0]['level'] == 1.0
+    # an emitter with no results wire finalizes harmlessly
+    assert isinstance(sim.finalize()[('emitter',)], EmitterResults)

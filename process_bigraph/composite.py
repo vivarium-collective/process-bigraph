@@ -2774,6 +2774,60 @@ class Composite(Process):
         # Return a deferred object that will project the update when requested
         return Defer(update, defer_project, (self.schema, self.state, path))
 
+    def finalize(self) -> Dict[Tuple[str, ...], Any]:
+        """Ask every edge that has results for its completion-time output.
+
+        An emitter accumulates per tick but its ``results`` — a durable
+        handle to what it gathered — is meaningful **once, at the end**.
+        Writing it from ``update`` would fire every downstream consumer on
+        every tick, so emitters produce it here instead, through the same
+        ``results`` port a flush step depends on.
+
+        Each handle is written to wherever the edge's ``outputs['results']``
+        wire points, and the steps watching that store are triggered. Returns
+        ``{edge_path: handle}``.
+
+        Additive: an edge with no ``finalize`` is skipped, and
+        ``gather_emitter_results`` keeps working untouched.
+        """
+        handles: Dict[Tuple[str, ...], Any] = {}
+        update_paths: List[Tuple[str, ...]] = []
+
+        for path, step in self.step_paths.items():
+            instance = step.get('instance') if isinstance(step, dict) else None
+            produce = getattr(instance, 'finalize', None)
+            if not callable(produce):
+                continue
+
+            try:
+                update = produce(path=path) or {}
+            except TypeError:
+                update = produce() or {}
+            if not update:
+                continue
+
+            handle = update.get('results')
+            handles[path] = handle
+
+            wire = (step.get('outputs') or {}).get('results')
+            if not wire:
+                continue
+
+            target = tuple(path[:-1]) + tuple(wire)
+            self.state = set_path(self.state, list(target), handle)
+            update_paths.append(target)
+
+        # NOTE: this deliberately does not re-run the step network. Steps are
+        # scheduled as a per-tick DAG — ``determine_steps`` runs *every*
+        # remaining step once a cycle starts, and by the end of a run
+        # ``steps_remaining`` is empty — so there is no way to fire a
+        # consumer exactly once at completion from here. A step wired to
+        # ``results`` therefore reads the handle on the *next* run, or the
+        # caller resolves it directly from the returned mapping. Making
+        # completion-time consumers fire once needs a scheduler change; see
+        # the design note in ``docs``.
+        return handles
+
     def apply_updates(self, updates: List["Defer"]) -> List[Union[str, Tuple[str, ...]]]:
         """
         Apply a series of deferred updates and record the resulting bridge outputs.
