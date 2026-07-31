@@ -5117,3 +5117,227 @@ def test_a_divergent_recompute_is_flagged_not_served(tmp_path):
     assert check_fingerprint(
         handle, fingerprint_of({'mass': 10.5})) == 'nondeterministic'
     assert handle.provenance_status == 'nondeterministic'
+
+
+# ==========================================
+# Layer 3 (cont.) — templates authored on disk (`*.template.{yaml,json}`)
+# ==========================================
+#
+# A template is a document with sites, so it is authorable as a file. Loading
+# is `core.access` on the parsed mapping — sites survive because bigraph-schema
+# 1.4.4 round-trips `_sort`. A study template and an investigation template are
+# the same on-disk shape; one loader reads both.
+
+# A study template with a *model* site (a face), a *value* site with a default
+# (`rate`), and a fixed report step wired to the model. Authored as literal
+# text so the test exercises hand-authored files, not machine-rendered ones.
+_STUDY_TEMPLATE_YAML = """\
+study:
+  level: 1.0
+  verdict: string
+  rate:
+    _type: site
+    _sort: float
+    _default: 0.5
+  model:
+    _type: site
+    _sort:
+      _type: link
+      _inputs: {level: float}
+      _outputs: {level: float}
+  report:
+    _type: step
+    address: local:ReportCard
+    config: {threshold: 2.0}
+    inputs: {level: [level]}
+    outputs: {verdict: [verdict]}
+"""
+
+
+def _write(path, text):
+    path.write_text(text, encoding='utf-8')
+    return path
+
+
+def test_a_study_template_loads_from_disk(tmp_path):
+    """The file's declared holes are exactly the loaded template's open sites:
+    a required face site (`model`) and a defaulted value site (`rate`)."""
+    from process_bigraph.templates import (
+        load_template, open_sites, required_open_sites, is_ground_document)
+
+    core = _study_core()
+    path = _write(tmp_path / 'growth.template.yaml', _STUDY_TEMPLATE_YAML)
+
+    template = load_template(path, core)
+
+    assert sorted(open_sites(template)) == [('study', 'model'), ('study', 'rate')]
+    # `rate` has a `_default`, so only `model` blocks the build
+    assert required_open_sites(template) == [('study', 'model')]
+    assert not is_ground_document(template)
+
+
+def test_a_loaded_study_template_fills_to_a_runnable_composite(tmp_path):
+    """Load from disk, fill the sites, and `template_document` yields a ground
+    document that constructs and runs — no code, the file is the study."""
+    from process_bigraph.templates import load_template, template_document
+
+    core = _study_core()
+    path = _write(tmp_path / 'growth.template.yaml', _STUDY_TEMPLATE_YAML)
+    template = load_template(path, core)
+
+    document = template_document(
+        core, template,
+        {'study/model': _model(core), 'study/rate': 0.9})
+
+    sim = Composite({'state': document}, core=core)
+    assert list(sim.process_paths) == [('study', 'model')]
+    assert list(sim.step_paths) == [('study', 'report')]
+
+    sim.run(4.0)
+    assert sim.state['study']['level'] > 2.0
+    assert sim.state['study']['verdict'] == 'pass'
+
+
+def test_a_loaded_template_with_a_required_site_open_is_not_ground(tmp_path):
+    """A required site left unfilled keeps the loaded template non-ground, and
+    `template_document` raises naming the empty hole — the same law as the
+    Python-built template, now reached from a file."""
+    from process_bigraph.templates import load_template, template_document
+
+    core = _study_core()
+    path = _write(tmp_path / 'growth.template.yaml', _STUDY_TEMPLATE_YAML)
+    template = load_template(path, core)
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        template_document(core, template, {})  # model left open
+    assert "'study/model'" in str(raised.value)
+
+
+def test_a_disk_template_round_trips_with_identical_sites(tmp_path):
+    """Save a template to disk and re-load it: identical open sites and
+    identical required sites. This is the Layer-1 `_sort` round-trip in
+    practice — the face `_sort` and the value site's `_default` both survive
+    the file, so `rate` stays *optional* rather than coming back required."""
+    from process_bigraph.templates import (
+        load_template, save_template, open_sites, required_open_sites)
+
+    core = _study_core()
+    # a defaulted value site so the round-trip must preserve `_default`
+    template = core.access({
+        'study': dict(
+            _study_region(),
+            rate={'_type': 'site', '_sort': 'float', '_default': 0.5})})
+
+    path = save_template(template, tmp_path / 'rt.template.yaml', core)
+    reloaded = load_template(path, core)
+
+    assert sorted(open_sites(reloaded)) == sorted(open_sites(template))
+    assert sorted(required_open_sites(reloaded)) == sorted(required_open_sites(template))
+    # `rate` is present but not required — its `_default` survived
+    assert ('study', 'rate') in open_sites(reloaded)
+    assert ('study', 'rate') not in required_open_sites(reloaded)
+
+
+def test_a_study_template_loads_from_json(tmp_path):
+    """JSON and YAML load through the same path (chosen by extension)."""
+    import json
+    from process_bigraph.templates import (
+        load_template, open_sites, template_document)
+
+    core = _study_core()
+    # build the same document, serialise as JSON via the round-trip renderer
+    template = core.access({'study': _study_region()})
+    from process_bigraph.templates import save_template
+    path = save_template(template, tmp_path / 'growth.template.json', core)
+    assert path.suffix == '.json'
+    assert isinstance(json.loads(path.read_text()), dict)
+
+    reloaded = load_template(path, core)
+    assert open_sites(reloaded) == [('study', 'model')]
+
+    document = template_document(core, reloaded, {'study/model': _model(core)})
+    Composite({'state': document}, core=core).run(4.0)
+
+
+def test_load_rejects_a_non_mapping_document(tmp_path):
+    """A file that does not parse to a mapping is rejected, naming the path."""
+    from process_bigraph.templates import load_template
+
+    core = _study_core()
+    path = _write(tmp_path / 'bad.template.yaml', '- just\n- a\n- list\n')
+    with pytest.raises(ValueError, match='must parse to a mapping'):
+        load_template(path, core)
+
+
+# ---- investigation templates on disk ----------------------------------
+
+_INVESTIGATION_TEMPLATE_YAML = """\
+investigation:
+  study_A:
+    level: 1.0
+    verdict: string
+    model:
+      _type: site
+      _sort:
+        _type: link
+        _inputs: {level: float}
+        _outputs: {level: float}
+    report:
+      _type: step
+      address: local:ReportCard
+      config: {threshold: 2.0}
+      inputs: {level: [level]}
+      outputs: {verdict: [verdict]}
+  study_B:
+    level: 1.0
+    verdict: string
+    model:
+      _type: site
+      _sort:
+        _type: link
+        _inputs: {level: float}
+        _outputs: {level: float}
+    report:
+      _type: step
+      address: local:ReportCard
+      config: {threshold: 2.0}
+      inputs: {level: [level]}
+      outputs: {verdict: [verdict]}
+"""
+
+
+def test_an_investigation_template_loads_with_a_site_per_member(tmp_path):
+    from process_bigraph.templates import load_template, open_sites
+
+    core = _study_core()
+    path = _write(
+        tmp_path / 'compare.template.yaml', _INVESTIGATION_TEMPLATE_YAML)
+    template = load_template(path, core)
+
+    assert sorted(open_sites(template)) == [
+        ('investigation', 'study_A', 'model'),
+        ('investigation', 'study_B', 'model')]
+
+
+def test_a_loaded_investigation_prunes_an_unfilled_member(tmp_path):
+    """Filling admits a member; a member left open is pruned — absent from the
+    built document, so it never runs. Gating as filling, read from a file."""
+    from process_bigraph.templates import load_template, investigation_document
+
+    core = _study_core()
+    path = _write(
+        tmp_path / 'compare.template.yaml', _INVESTIGATION_TEMPLATE_YAML)
+    template = load_template(path, core)
+
+    document, blocked = investigation_document(
+        core, template,
+        {'investigation/study_A/model': _model(core)},
+        member_depth=2)
+
+    assert blocked == ['investigation/study_B']
+    assert sorted(document['investigation']) == ['study_A']
+
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+    assert 'study_B' not in sim.state['investigation']
+    assert sim.state['investigation']['study_A']['verdict'] == 'pass'
