@@ -271,3 +271,61 @@ def test_a_broken_type_checker_is_not_read_as_permission():
 
     with pytest.raises(RuntimeError, match='type checker is broken'):
         _coerce(1.0, 'float', name='rate', core=BrokenCore())
+
+
+# ---------------------------------------------------------------------------
+# The runtime partition is structural, so it is cached
+# ---------------------------------------------------------------------------
+
+def _one_process_composite():
+    from process_bigraph import Composite, allocate_core
+    from process_bigraph.processes.examples import IncreaseProcess
+
+    core = allocate_core()
+    core.register_link('IncreaseProcess', IncreaseProcess)
+    return Composite(_one_process_document(), core=core)
+
+
+def _one_process_document():
+    return {'state': {
+        'level': 5.0,
+        'grow': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.1},
+            'inputs': {'level': ['level']},
+            'outputs': {'level': ['level']},
+            'interval': 1.0}}}
+
+
+def test_runtime_partition_is_cached_across_ticks():
+    """It is a function of the process network's shape, which does not
+    change between ticks — it used to be rediscovered by a full walk of
+    every process on every tick."""
+    composite = _one_process_composite()
+    first = composite._partition_processes_by_runtime()
+    assert composite._partition_processes_by_runtime() is first
+
+    composite.run(2.0)
+    assert composite._partition_processes_by_runtime() is first
+
+
+def test_runtime_partition_cache_is_dropped_on_structural_change():
+    """Same lifetime as the layer walk: a document whose process network
+    changed must not keep answering from the old shape."""
+    composite = _one_process_composite()
+    first = composite._partition_processes_by_runtime()
+
+    composite.expire_layer_walk_cache()
+    assert composite._partition_processes_by_runtime() is not first
+
+    rebuilt = composite._partition_processes_by_runtime()
+    composite._invalidate_caches()
+    assert composite._partition_processes_by_runtime() is not rebuilt
+
+
+def test_a_document_with_no_protocol_runtime_partitions_to_nothing():
+    managed, groups = _one_process_composite(
+        )._partition_processes_by_runtime()
+    assert managed == set()
+    assert groups == []
