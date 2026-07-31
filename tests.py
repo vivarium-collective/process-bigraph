@@ -5,6 +5,7 @@ Tests for Process Bigraph
 """
 
 import os
+import pathlib
 import sys
 import random
 import inspect
@@ -4761,3 +4762,358 @@ def test_resolving_a_handle_twice_is_idempotent_and_cheap():
 
     assert first == second
     assert len(calls) == 1, f'query() called {len(calls)} times'
+
+
+# ==========================================
+# Layer 3.5 — partial graph triggering (pull-or-compute)
+# ==========================================
+
+PARCA_RUNS = []
+STUDY_RUNS = []
+
+
+class SpyParca(Step):
+    """A stand-in for an expensive root study. Records every time it runs."""
+
+    config_schema = {'name': {'_type': 'string', '_default': 'parca'}}
+
+    def inputs(self):
+        return {}
+
+    def outputs(self):
+        return {'results': 'node'}
+
+    def update(self, state):
+        PARCA_RUNS.append(self.config['name'])
+        return {'results': self.results()}
+
+    def results(self, path=None, context=None):
+        from process_bigraph.artifacts import ArtifactResults, ArtifactRef
+        return ArtifactResults(ArtifactRef(
+            kind='sim_data', hash='computed', store='',
+            context={'computed': True}))
+
+    def finalize(self, path=None, context=None):
+        return {'results': self.results(path=path, context=context)}
+
+
+class SpyStudy(SpyParca):
+    """A study that records its runs the same way."""
+
+    def update(self, state):
+        STUDY_RUNS.append(self.config['name'])
+        return {'results': self.results()}
+
+    def results(self, path=None, context=None):
+        from process_bigraph.artifacts import ArtifactResults, ArtifactRef
+        return ArtifactResults(ArtifactRef(
+            kind='trajectory', hash='computed', store='',
+            context={'computed': True, 'name': self.config['name']}))
+
+
+def _trigger_core():
+    core = allocate_core()
+    core.register_link('SpyParca', SpyParca)
+    core.register_link('SpyStudy', SpyStudy)
+    return core
+
+
+def _member(name, address, config, inputs=None, kind='trajectory'):
+    return {
+        '_study': {'id': name, 'config': config,
+                   'inputs': inputs or [], 'kind': kind},
+        'results': {},
+        'sim': {
+            '_type': 'step', 'address': address,
+            'config': {'name': name},
+            'inputs': {}, 'outputs': {'results': ['results']}}}
+
+
+def _chain_document():
+    """`parca -> A -> B`, the shape the spec's tests describe."""
+    return {
+        'parca': _member('parca', 'local:SpyParca', {'mode': 'full'},
+                         kind='sim_data'),
+        'A': _member('A', 'local:SpyStudy', {'seed': 1},
+                     inputs=[{'artifact': 'sim_data', 'from': 'parca'}]),
+        'B': _member('B', 'local:SpyStudy', {'seed': 2},
+                     inputs=[{'artifact': 'trajectory', 'from': 'A'}])}
+
+
+def _seed_store(root, document, names, commit=''):
+    """Put artifacts for `names` in the store, at their real addresses."""
+    from process_bigraph.templates import study_address
+    from process_bigraph.artifacts import artifact_store
+
+    for name in names:
+        address = study_address(document, name, commit=commit)
+        pathlib.Path(artifact_store(address, str(root))).mkdir(parents=True,
+                                                       exist_ok=True)
+
+
+def test_the_content_address_is_worktree_independent(tmp_path):
+    """The address is a function of inputs, never of a path — which is what
+    lets two worktrees at the same commit share a cache with no symlink."""
+    from process_bigraph.artifacts import artifact_id
+
+    def address_from(worktree):
+        os.chdir(worktree)
+        return artifact_id(composite_id='parca', config={'mode': 'full'},
+                           input_ids=['raw@1'], commit='abc123')
+
+    here = os.getcwd()
+    try:
+        one = tmp_path / 'worktree-a'
+        two = tmp_path / 'worktree-b'
+        one.mkdir()
+        two.mkdir()
+        assert address_from(one) == address_from(two)
+    finally:
+        os.chdir(here)
+
+    # ...and it does change when an input changes
+    assert artifact_id(composite_id='parca', config={'mode': 'full'},
+                       input_ids=['raw@1'], commit='abc123') != \
+        artifact_id(composite_id='parca', config={'mode': 'fast'},
+                    input_ids=['raw@1'], commit='abc123')
+
+
+def test_trigger_one_study_pulls_its_root_and_prunes_the_rest(tmp_path):
+    """Trigger A in `parca -> A -> B`: parca is pulled (never runs), A
+    computes, B is absent from the document entirely."""
+    from process_bigraph.templates import trigger
+
+    PARCA_RUNS.clear()
+    STUDY_RUNS.clear()
+
+    document = _chain_document()
+    _seed_store(tmp_path, document, ['parca'])
+
+    built, report = trigger(document, 'A', root=str(tmp_path))
+
+    assert report['pulled'] == ['parca']
+    assert report['pruned'] == ['B']
+    assert 'B' not in built
+
+    # parca's node was swapped for the pull step; A's was not
+    assert built['parca']['sim']['address'] == 'local:CachedResults'
+    assert built['A']['sim']['address'] == 'local:SpyStudy'
+
+    sim = Composite({'state': built}, core=_trigger_core())
+    sim.run(0.0)
+
+    assert PARCA_RUNS == [], 'parca ran despite being cached'
+    assert STUDY_RUNS == ['A']
+
+
+def test_rerun_downstream_reusing_upstream(tmp_path):
+    """With parca and A cached, triggering B runs only B — both ancestors
+    are pulled and neither recomputes."""
+    from process_bigraph.templates import trigger
+
+    PARCA_RUNS.clear()
+    STUDY_RUNS.clear()
+
+    document = _chain_document()
+    _seed_store(tmp_path, document, ['parca', 'A'])
+
+    built, report = trigger(document, 'B', root=str(tmp_path))
+
+    assert sorted(report['pulled']) == ['A', 'parca']
+    assert report['computed'] == ['B']
+    assert report['pruned'] == []
+
+    sim = Composite({'state': built}, core=_trigger_core())
+    sim.run(0.0)
+
+    assert PARCA_RUNS == []
+    assert STUDY_RUNS == ['B'], f'expected only B to run, got {STUDY_RUNS}'
+
+
+def test_a_missing_prerequisite_is_named_not_silently_recomputed(tmp_path):
+    from process_bigraph.templates import trigger
+
+    document = _chain_document()   # nothing cached
+
+    with pytest.raises(FileNotFoundError, match='parca') as raised:
+        trigger(document, 'A', root=str(tmp_path))
+    assert 'on_missing' in str(raised.value)
+
+
+def test_on_missing_compute_computes_the_prerequisite(tmp_path):
+    from process_bigraph.templates import trigger
+
+    PARCA_RUNS.clear()
+    STUDY_RUNS.clear()
+
+    document = _chain_document()
+    built, report = trigger(document, 'A', on_missing='compute',
+                            root=str(tmp_path))
+
+    assert report['pulled'] == []
+    assert sorted(report['computed']) == ['A', 'parca']
+
+    sim = Composite({'state': built}, core=_trigger_core())
+    sim.run(0.0)
+
+    assert PARCA_RUNS == ['parca'], 'parca should have computed'
+    assert STUDY_RUNS == ['A']
+
+
+def test_an_upstream_config_change_invalidates_downstream(tmp_path):
+    """The address folds in its inputs' addresses, so changing parca's
+    config changes A's address — the old A artifact no longer answers."""
+    from process_bigraph.templates import study_address
+
+    document = _chain_document()
+    before = study_address(document, 'A')
+
+    document['parca']['_study']['config'] = {'mode': 'fast'}
+    after = study_address(document, 'A')
+
+    assert before != after
+
+
+def test_a_pulled_study_is_indistinguishable_downstream(tmp_path):
+    """A consumer gives the same verdict whether its upstream ran or was
+    pulled from an identical artifact — the contract that makes caching
+    safe."""
+    from process_bigraph.templates import trigger
+    from process_bigraph.artifacts import (
+        register_artifact_loader, ArtifactResults)
+
+    verdicts = []
+
+    class Card(Step):
+        config_schema = {}
+
+        def inputs(self):
+            return {'results': 'node'}
+
+        def outputs(self):
+            return {'verdict': 'string'}
+
+        def update(self, state):
+            handle = state.get('results')
+            payload = handle.resolve() if handle is not None else None
+            verdict = 'pass' if payload == {'mass': [1, 2, 3]} else 'fail'
+            verdicts.append(verdict)
+            return {'verdict': verdict}
+
+    # the stored artifact and the computed one carry identical payloads
+    register_artifact_loader('trajectory', lambda ref: {'mass': [1, 2, 3]})
+
+    class ComputingStudy(SpyStudy):
+        def results(self, path=None, context=None):
+            from process_bigraph.artifacts import ArtifactRef
+            return ArtifactResults(ArtifactRef(kind='trajectory', store=''))
+
+    core = _trigger_core()
+    core.register_link('Card', Card)
+    core.register_link('ComputingStudy', ComputingStudy)
+
+    def build(cached):
+        document = {
+            'A': _member('A', 'local:ComputingStudy', {'seed': 1}),
+            'B': {
+                '_study': {'id': 'B', 'config': {},
+                           'inputs': [{'artifact': 'trajectory', 'from': 'A'}]},
+                'verdict': '',
+                'card': {
+                    '_type': 'step', 'address': 'local:Card',
+                    'inputs': {'results': ['..', 'A', 'results']},
+                    'outputs': {'verdict': ['verdict']}}}}
+        if cached:
+            _seed_store(tmp_path, document, ['A'])
+        built, _ = trigger(document, 'B', root=str(tmp_path),
+                           on_missing='compute')
+        sim = Composite({'state': built}, core=core)
+        sim.run(0.0)
+        return sim.state['B']['verdict']
+
+    ran = build(cached=False)
+    pulled = build(cached=True)
+
+    assert ran == pulled == 'pass', f'ran={ran!r} pulled={pulled!r}'
+
+
+def test_one_resolve_dispatches_on_kind(tmp_path):
+    """`sim_data` resolves the calibration object, `trajectory` the
+    trajectory — one dispatch, two kinds."""
+    import pickle
+    from process_bigraph.artifacts import ArtifactRef, ArtifactResults
+
+    store = tmp_path / 'simdata'
+    store.mkdir()
+    calibration = {'doubling_time': 44.0, 'conditions': 51}
+    with open(store / 'sim_data.pkl', 'wb') as handle:
+        pickle.dump(calibration, handle)
+
+    loaded = ArtifactResults(
+        ArtifactRef(kind='sim_data', store=str(store))).resolve()
+    assert loaded == calibration
+
+    from process_bigraph.artifacts import register_artifact_loader
+    register_artifact_loader('trajectory', lambda ref: {'rows': 6})
+    assert ArtifactResults(
+        ArtifactRef(kind='trajectory', store='')).resolve() == {'rows': 6}
+
+
+def test_an_unknown_kind_says_so(tmp_path):
+    from process_bigraph.artifacts import ArtifactRef, ArtifactResults
+
+    with pytest.raises(KeyError, match='no loader registered'):
+        ArtifactResults(ArtifactRef(kind='hologram', store='')).resolve()
+
+
+def test_emitter_results_is_the_trajectory_kind():
+    """`EmitterResults` answers the artifact protocol without changing its
+    own API — it is the trajectory case."""
+    core = allocate_core()
+    emitter = RAMEmitter({'emit': {'level': 'node'}}, core)
+    handle = emitter.results(path=('emitter',))
+
+    assert handle.kind == 'trajectory'
+    assert handle.provenance_status == 'ok'
+    assert hasattr(handle, 'resolve') and hasattr(handle, 'context')
+
+
+def test_a_results_site_can_require_a_kind():
+    """`admits` type-checks a filler's kind, so a study needing sim_data
+    cannot be wired to a trajectory."""
+    from bigraph_schema.assembly import fill_sites
+    from process_bigraph.artifacts import (
+        ArtifactRef, ArtifactResults, register_artifact_sorts)
+
+    core = register_artifact_sorts(allocate_core())
+    trajectory = ArtifactResults(ArtifactRef(kind='trajectory'))
+    sim_data = ArtifactResults(ArtifactRef(kind='sim_data'))
+
+    body = core.access({'study': {'needs': {
+        '_type': 'site', '_sort': 'results_sim_data'}}})
+
+    filled = fill_sites(core, body, {'study/needs': sim_data})
+    assert filled['study']['needs'].kind == 'sim_data'
+
+    with pytest.raises(ValueError, match="site 'study/needs'"):
+        fill_sites(core, body, {'study/needs': trajectory})
+
+
+def test_a_divergent_recompute_is_flagged_not_served(tmp_path):
+    """A content address hashes *inputs*, so it is only a valid cache key
+    when the producer is deterministic. A recompute that disagrees with the
+    stored fingerprint is flagged rather than silently served."""
+    from process_bigraph.artifacts import (
+        ArtifactRef, ArtifactResults, fingerprint_of, check_fingerprint)
+
+    stored = fingerprint_of({'mass': 10.0})
+    handle = ArtifactResults(
+        ArtifactRef(kind='trajectory', store='', fingerprint=stored))
+
+    assert check_fingerprint(handle, fingerprint_of({'mass': 10.0})) == 'ok'
+    assert handle.provenance_status == 'ok'
+
+    # a stochastic producer recomputes something else at the same address
+    assert check_fingerprint(
+        handle, fingerprint_of({'mass': 10.5})) == 'nondeterministic'
+    assert handle.provenance_status == 'nondeterministic'

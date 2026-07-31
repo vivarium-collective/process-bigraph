@@ -224,6 +224,16 @@ class EmitterResults:
     reaching for the imperative ``gather_emitter_results`` pull.
     """
 
+    #: This handle's artifact kind. ``EmitterResults`` *is* the trajectory
+    #: case of ``artifacts.ArtifactResults`` — it answers the same
+    #: ``kind``/``context``/``resolve()`` protocol, so a consumer cannot tell
+    #: a live emitter from a pulled artifact. The difference is only where
+    #: the data comes from: an emitter still in memory, or a store on disk.
+    kind = 'trajectory'
+
+    #: Set when a recompute disagreed with a stored fingerprint.
+    provenance_status = 'ok'
+
     __slots__ = ('emitter', 'address', 'path', 'context', '_resolved')
 
     def __init__(self, emitter, address=None, path=None, context=None):

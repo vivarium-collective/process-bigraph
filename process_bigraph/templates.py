@@ -114,3 +114,160 @@ def investigation_document(core, template, bindings=None, member_depth=1):
     filled = fill_template(core, template, bindings)
     pruned, blocked = prune_open_regions(filled, member_depth=member_depth)
     return core.render(pruned, defaults=True), blocked
+
+
+# ── partial graph triggering: pull-or-compute ───────────────────────
+#
+# A cached study result is simply a **filled** results site. Nothing new is
+# scheduled: an open results site means the study computes, a filled one means
+# it does not and its consumers read the cached handle instead. `trigger` is
+# the operation that decides which, using the same fill/prune law gating uses.
+
+STUDY_META = '_study'
+"""Per-member metadata: ``{id, config, inputs: [{artifact, from}], kind}``."""
+
+
+def study_members(document):
+    """Every member of an investigation document, by name.
+
+    A member is a top-level region carrying ``_study`` metadata.
+    """
+    return {
+        name: region for name, region in document.items()
+        if isinstance(region, dict) and isinstance(region.get(STUDY_META), dict)}
+
+
+def _meta(region, key, default=None):
+    return (region.get(STUDY_META) or {}).get(key, default)
+
+
+def study_ancestors(document, target):
+    """``target``'s transitive prerequisites, nearest last.
+
+    Edges come from each member's ``inputs: [{artifact, from}]`` — the same
+    declaration the investigation format already carries, so the DAG is read
+    rather than restated.
+    """
+    members = study_members(document)
+    if target not in members:
+        raise KeyError(
+            f'no study {target!r} in the document — members are '
+            f'{sorted(members)}')
+
+    order, seen = [], set()
+
+    def walk(name):
+        if name in seen:
+            return
+        seen.add(name)
+        for edge in _meta(members.get(name, {}), 'inputs', []) or []:
+            upstream = edge.get('from')
+            if upstream and upstream in members:
+                walk(upstream)
+                if upstream not in order:
+                    order.append(upstream)
+
+    walk(target)
+    return order
+
+
+def study_address(document, name, *, commit=''):
+    """The content address of a member's artifact.
+
+    A function of the member's id, its config, its inputs' addresses and the
+    workspace commit — so it is worktree-independent and an upstream change
+    invalidates everything downstream of it.
+    """
+    from process_bigraph.artifacts import artifact_id
+
+    members = study_members(document)
+    region = members[name]
+
+    input_ids = [
+        study_address(document, edge['from'], commit=commit)
+        for edge in (_meta(region, 'inputs', []) or [])
+        if edge.get('from') in members]
+
+    return artifact_id(
+        composite_id=_meta(region, 'id', name),
+        config=_meta(region, 'config', {}) or {},
+        input_ids=input_ids,
+        commit=commit)
+
+
+def cached_node(ref):
+    """The step that replaces a member's simulation when it is pulled."""
+    return {
+        '_type': 'step',
+        'address': 'local:CachedResults',
+        'config': {'artifact_ref': ref},
+        'inputs': {},
+        'outputs': {'results': ['results']}}
+
+
+def trigger(document, target, *, on_missing='error', commit='',
+            root=None, sim_key='sim'):
+    """Build the sub-document that runs ``target``.
+
+    Prerequisites already in the artifact store are **pulled**: their
+    simulation node is swapped for a ``CachedResults`` bound to the resolved
+    reference, so they are ground and do not run. The target is left open, so
+    it computes. Everything that is neither is **pruned** — absent from the
+    document, never constructed.
+
+    "Run one study" and "rerun this study reusing its upstream" are the same
+    call with different targets.
+
+    ``on_missing='error'`` (default) refuses to silently recompute a
+    prerequisite the caller meant to reuse, naming it instead;
+    ``on_missing='compute'`` leaves it open so it computes too.
+
+    Returns ``(document, report)`` where report is
+    ``{'target', 'pulled', 'computed', 'pruned'}``.
+    """
+    from process_bigraph.artifacts import (
+        ARTIFACT_ROOT, ArtifactRef, artifact_exists, artifact_store)
+
+    if on_missing not in ('error', 'compute'):
+        raise ValueError(
+            f"on_missing must be 'error' or 'compute', got {on_missing!r}")
+    root = ARTIFACT_ROOT if root is None else root
+
+    members = study_members(document)
+    ancestors = study_ancestors(document, target)
+    keep = set(ancestors) | {target}
+
+    built = copy.deepcopy(document)
+    pulled, computed, missing = [], [], []
+
+    for name in ancestors:
+        address = study_address(document, name, commit=commit)
+        if artifact_exists(address, root):
+            ref = ArtifactRef(
+                kind=_meta(members[name], 'kind', 'trajectory'),
+                hash=address,
+                store=artifact_store(address, root),
+                context={'study': name})
+            built[name][sim_key] = cached_node(ref.to_dict())
+            pulled.append(name)
+        elif on_missing == 'compute':
+            computed.append(name)
+        else:
+            missing.append(name)
+
+    if missing:
+        raise FileNotFoundError(
+            f'cannot trigger {target!r}: prerequisite(s) '
+            f'{", ".join(repr(n) for n in missing)} have no cached artifact. '
+            f'Run them first, or pass on_missing="compute" to compute them '
+            f'as part of this trigger.')
+
+    pruned = sorted(set(members) - keep)
+    for name in pruned:
+        built.pop(name, None)
+
+    return built, {
+        'target': target,
+        'pulled': pulled,
+        'computed': computed + [target],
+        'pruned': pruned}
