@@ -163,13 +163,22 @@ def _coerce(value, declared_type, name=None, core=None):
     coerced = _cast(value, declared_type)
 
     # Final guarantee: the coerced value really is of the declared type.
-    # An unrecognized declared type (a workspace type, say) is left alone.
-    try:
-        valid = _validation_core(core).check(declared, coerced)
-    except Exception:
+    #
+    # An unrecognized declared type (a workspace type this core does not
+    # define) is left alone — but *asked about* rather than discovered by
+    # catching whatever `check` throws. A blanket `except Exception: return
+    # coerced` here made "this core doesn't know that type" and "the type
+    # checker itself broke" the same outcome: the value passed through
+    # unvalidated either way, so a genuine bug in `check` silently disabled
+    # parameter validation for every spec. `access` answers the question
+    # directly — it hands back a schema for a type it knows and the bare
+    # string for one it doesn't — and any failure inside `check` now
+    # propagates instead of being read as permission.
+    validation_core = _validation_core(core)
+    if isinstance(validation_core.access(declared), str):
         return coerced
 
-    if not valid:
+    if not validation_core.check(declared, coerced):
         _reject(name, declared, value,
                 f"resolved to {coerced!r}, which is not a valid {declared}")
 
