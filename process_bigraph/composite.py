@@ -2488,6 +2488,47 @@ class Composite(Process):
             per_process=dict(self._per_process_time),
         )
 
+    def _require_advancing_interval(
+            self,
+            path: Union[str, Tuple[str, ...]],
+            process_interval: Any,
+    ) -> None:
+        """Reject a process step that would not advance simulation time.
+
+        The scheduler takes the smallest process interval as the step it
+        advances ``global_time`` by. A non-positive interval therefore makes
+        that step zero or negative, ``global_time`` never reaches
+        ``end_time``, and ``run`` spins forever — a hang with no diagnostic.
+
+        A ``Process`` must advance time, so this is always an error: fail
+        loudly, naming the process and the offending value. Note an *omitted*
+        interval is not affected — it takes the ``process`` schema default
+        (1.0); only an explicit non-positive value (or a
+        ``calculate_timestep`` that returns one) lands here.
+        """
+        readable = '/'.join(path) if isinstance(path, (tuple, list)) else path
+
+        if process_interval is None:
+            detail = 'None'
+        elif not isinstance(process_interval, (int, float)) or isinstance(
+                process_interval, bool):
+            detail = f'{process_interval!r} (not a number)'
+        elif process_interval != process_interval:      # NaN
+            detail = 'NaN'
+        elif process_interval > 0:
+            return
+        else:
+            detail = repr(process_interval)
+
+        raise ValueError(
+            f"process {readable!r} has a non-advancing interval: {detail}. "
+            f"A Process must advance time — the scheduler steps by the "
+            f"smallest process interval, so a non-positive one would leave "
+            f"global_time unchanged and run() would never terminate. Give "
+            f"the process a positive 'interval' (omit it to take the "
+            f"default of 1.0), or return a positive value from "
+            f"calculate_timestep().")
+
     def run_process(
             self,
             path: Union[str, Tuple[str, ...]],
@@ -2530,6 +2571,8 @@ class Composite(Process):
                 state_interval = process['interval']
                 process_interval = process['instance'].calculate_timestep(state_interval, state)
                 process['interval'] = process_interval
+
+            self._require_advancing_interval(path, process_interval)
 
             # Determine the target time for the next update
             future = (
@@ -2618,6 +2661,8 @@ class Composite(Process):
                     process_interval = process['instance'].calculate_timestep(
                         state_interval, state)
                     process['interval'] = process_interval
+
+                self._require_advancing_interval(path, process_interval)
 
                 future = (
                     min(process_time + process_interval, end_time)
