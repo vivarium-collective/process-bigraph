@@ -4674,3 +4674,53 @@ def test_the_harness_gates_a_downstream_member():
 
     assert run(0.5) == ('agree', [], ['downstream'])
     assert run(0.9) == ('diverge', ['investigation/downstream'], [])
+
+
+def test_finalize_survives_an_emitter_that_redefines_finalize():
+    """A durable emitter already uses `finalize` for something else.
+
+    The vivarium lineage (`pbg_emitters.BufferedEmitter`) defines
+    `finalize(*, success: bool) -> None`: it flushes buffers, closes the
+    store, and raises if called twice. Asking *that* for a results handle
+    silently produced none — and consumed the buffer close on the way — so a
+    composite writing zarr or parquet finalized to nothing. `results()` is
+    the handle contract and no emitter overrides it.
+    """
+    core = allocate_core()
+    closed = []
+
+    class BufferedRAMEmitter(RAMEmitter):
+        """Stands in for a durable emitter with the legacy finalize."""
+
+        def finalize(self, *, success: bool = False):
+            if closed:
+                raise RuntimeError('finalize() was already called')
+            closed.append(success)
+            return None
+
+    core.register_link('BufferedRAMEmitter', BufferedRAMEmitter)
+
+    doc = {
+        'level': 1.0, 'results': {},
+        'model': {
+            '_type': 'process', 'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.5}, 'interval': 1.0,
+            'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
+        'emitter': {
+            '_type': 'step', 'address': 'local:BufferedRAMEmitter',
+            'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+            'inputs': {'level': ['level'], 'global_time': ['global_time']},
+            'outputs': {'results': ['results']}}}
+
+    sim = Composite({'state': doc}, core=core)
+    sim.run(3.0)
+
+    handles = sim.finalize()
+
+    handle = handles[('emitter',)]
+    assert isinstance(handle, EmitterResults)
+    assert len(handle.resolve()) > 1
+    assert isinstance(sim.state['results'], EmitterResults)
+
+    # the emitter's own finalize was left alone — not consumed for a handle
+    assert closed == []
