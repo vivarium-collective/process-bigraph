@@ -57,6 +57,11 @@ def template_document(core, template, bindings=None):
     Raises when a required site is left unfilled, naming it — the same
     condition ``Composite`` enforces, reported before construction so the
     caller sees which hole is empty rather than a constructor error.
+
+    Rendered with ``defaults=True``: filling a *value* site puts the value on
+    its sort's ``_default``, and a plain render drops defaults — a filled
+    ``float`` site would come back as the bare string ``'float'`` and the
+    value would be silently lost.
     """
     filled = fill_template(core, template, bindings)
 
@@ -67,7 +72,7 @@ def template_document(core, template, bindings=None):
             f'template is not ground — required site(s) left unfilled: '
             f'{named}')
 
-    return core.render(filled)
+    return core.render(filled, defaults=True)
 
 
 def prune_open_regions(document, member_depth=1):
@@ -108,4 +113,4 @@ def investigation_document(core, template, bindings=None, member_depth=1):
     """
     filled = fill_template(core, template, bindings)
     pruned, blocked = prune_open_regions(filled, member_depth=member_depth)
-    return core.render(pruned), blocked
+    return core.render(pruned, defaults=True), blocked

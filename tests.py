@@ -23,8 +23,8 @@ from process_bigraph.composite import (
     Process, Step, Composite, merge_collections, match_star_path, as_process, as_step,
 )
 from process_bigraph.emitter import (
-    EmitterResults, RAMEmitter, emitter_from_wires, gather_emitter_results,
-    add_emitter_to_composite,
+    Emitter, EmitterResults, RAMEmitter, emitter_from_wires,
+    gather_emitter_results, add_emitter_to_composite,
 )
 
 # SQLiteEmitter + friends now live in the focused pbg-emitters library and
@@ -4225,3 +4225,183 @@ def test_a_partially_filled_template_is_still_a_template():
     whole = fill_template(
         core, partial, {'investigation/study_B/model': _model(core)})
     assert open_sites(whole) == []
+
+
+# ==========================================
+# Layer 3 (cont.) — the emitter and the flush entities are sites too
+# ==========================================
+
+CARD_FACE = {
+    '_type': 'link',
+    '_inputs': {'level': 'float'},
+    '_outputs': {'verdict': 'string'}}
+
+
+def _admits_emitter(core, site, filler):
+    """A sort for "any emitter".
+
+    Emitters are interchangeable precisely because they share no
+    distinguishing face — `Emitter.outputs()` is `{}` — so face conformance
+    cannot express the constraint. A registered sort states it directly:
+    the address must name a registered `Emitter`.
+    """
+    from bigraph_schema.schema import normalize_address
+
+    canonical = normalize_address(filler)
+    if not isinstance(canonical, dict):
+        return False
+    edge_class = core.link_registry.get(canonical.get('data'))
+    return isinstance(edge_class, type) and issubclass(edge_class, Emitter)
+
+
+def _flush_core():
+    core = _study_core()
+    core.register_sort('emitter', _admits_emitter)
+    return core
+
+
+def _flush_template(core):
+    """A study whose model, emitter and report cards are ALL sites."""
+    return core.access({'study': {
+        'level': 1.0,
+        'threshold': {'_type': 'site', '_sort': 'float'},
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'emitter': {
+            '_type': 'step',
+            'address': {'_type': 'site', '_sort': 'emitter'},
+            'config': {'emit': {'level': 'node'}},
+            'inputs': {'level': ['level']}},
+        'report_cards': {
+            '_control': 'replicate', '_count': 1,
+            'verdict': 'string',
+            'card': {'_type': 'site', '_sort': CARD_FACE}}}})
+
+
+def _card(core, threshold):
+    return core.access({
+        '_type': 'step', 'address': 'local:ReportCard',
+        'config': {'threshold': threshold},
+        'inputs': {'level': ['..', 'level']},
+        'outputs': {'verdict': ['verdict']}})
+
+
+def test_the_flush_network_is_made_of_sites():
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import open_sites
+
+    core = _flush_core()
+    template = _flush_template(core)
+
+    assert sorted(open_sites(template)) == [
+        ('study', 'emitter', 'address'),
+        ('study', 'model'),
+        ('study', 'report_cards', 'card'),
+        ('study', 'threshold')]
+
+    # the cardinality region expands into one site per instance
+    expanded = replicate(template, {'report_cards': 3})
+    assert sorted(
+        p for p in open_sites(expanded) if p[1].startswith('report_cards')) == [
+        ('study', 'report_cards_0', 'card'),
+        ('study', 'report_cards_1', 'card'),
+        ('study', 'report_cards_2', 'card')]
+
+
+def test_a_fully_filled_study_runs_and_emits():
+    """Fill the model, the emitter, a value site and N report cards → a
+    ground study that runs, emits, and produces one verdict per card."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 2})
+
+    document = template_document(core, expanded, {
+        'study/model': _model(core),
+        'study/threshold': 2.0,
+        'study/emitter/address': 'local:RAMEmitter',
+        'study/report_cards_0/card': _card(core, 2.0),
+        'study/report_cards_1/card': _card(core, 99.0)})
+
+    sim = Composite({'state': document}, core=core)
+    assert sorted('/'.join(p) for p in sim.step_paths) == [
+        'study/emitter', 'study/report_cards_0/card', 'study/report_cards_1/card']
+
+    sim.run(4.0)
+
+    assert sim.state['study']['threshold'] == 2.0       # value site survived
+    assert sim.state['study']['report_cards_0']['verdict'] == 'pass'
+    assert sim.state['study']['report_cards_1']['verdict'] == 'fail'
+
+    rows = gather_emitter_results(sim)[('study', 'emitter')]
+    assert len(rows) > 1 and 'level' in rows[0]
+
+
+def test_the_emitter_site_is_interchangeable():
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    for address in ('local:RAMEmitter', 'local:ConsoleEmitter'):
+        core = _flush_core()
+        expanded = replicate(_flush_template(core), {'report_cards': 0})
+        document = template_document(core, expanded, {
+            'study/model': _model(core),
+            'study/threshold': 2.0,
+            'study/emitter/address': address})
+
+        sim = Composite({'state': document}, core=core)
+        assert list(sim.step_paths) == [('study', 'emitter')]
+
+
+def test_the_emitter_site_refuses_a_non_emitter():
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 0})
+
+    with pytest.raises(ValueError, match="site 'study/emitter/address'"):
+        template_document(core, expanded, {
+            'study/model': _model(core),
+            'study/threshold': 2.0,
+            'study/emitter/address': 'local:IncreaseProcess'})
+
+
+def test_a_report_card_site_refuses_a_non_report_card():
+    """The card site is face-sorted, so only something that turns a level
+    into a verdict fits."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 1})
+
+    with pytest.raises(ValueError,
+                       match="site 'study/report_cards_0/card'") as raised:
+        template_document(core, expanded, {
+            'study/model': _model(core),
+            'study/threshold': 2.0,
+            'study/emitter/address': 'local:RAMEmitter',
+            'study/report_cards_0/card': _model(core)})   # a model, not a card
+
+    assert 'verdict' in str(raised.value)
+
+
+def test_zero_flush_entities_is_a_valid_study():
+    """A study that reports nothing is still a study — the cardinality
+    region simply expands to nothing."""
+    from bigraph_schema.assembly import replicate
+    from process_bigraph.templates import template_document
+
+    core = _flush_core()
+    expanded = replicate(_flush_template(core), {'report_cards': 0})
+
+    document = template_document(core, expanded, {
+        'study/model': _model(core),
+        'study/threshold': 2.0,
+        'study/emitter/address': 'local:RAMEmitter'})
+
+    assert not [k for k in document['study'] if k.startswith('report_cards')]
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+    assert sim.state['study']['level'] > 1.0
