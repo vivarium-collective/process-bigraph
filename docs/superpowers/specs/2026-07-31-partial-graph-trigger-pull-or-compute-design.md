@@ -95,7 +95,35 @@ store        = .pbg/artifacts/<hash>/
 
 The decision (cache-hit ⇒ fill, miss ⇒ compute) lives **in the graph** (engine-native), not in a pre-build workbench resolver — so the same `.pbg/artifacts/` store the workbench pipeline writes is read by the composite at construction time. One store, two writers already (spine's constraint); this adds one reader.
 
-## 7. What runs today vs what this adds
+## 7. Worked example — the comparison-harness investigation (the *real* one)
+
+This mechanism's flagship is not a toy: `workspace/investigations/v2ecoli-vecoli-comparison/investigation.yaml` **already declares exactly this structure** — it is run today by an *imperative loop* (`scripts/_compare/runner.py:run_investigation`), and this spec is what makes it a composite. The conversion is a re-expression, not a redesign, because the data model is already right:
+
+- **`members: [acetate, basal, metabolism_redux, no_oxygen, parca, statistical, succinate, with_aa]`** — the list of per-study configs, *one study per condition*. Each is a top-level `workspace/studies/<name>/study.yaml` with a scalar `condition: <media>`. → the template's **cardinality region** of comparison-study sites, one filled per member.
+- **ParCa reuse is already a declared edge:** every condition study carries `inputs: [{artifact: sim_data, from: parca}]`, and `parca` is a member (the root). → the **pulled root**: `trigger`/build fills each condition study's `sim_data` input from the ParCa artifact; ParCa computes once (or is pulled), never per condition.
+- **The vEcoli repo pointer** lives in the shared context (`vecoli: {repo: https://github.com/CovertLab/vEcoli, commit: ''}`). → a **`git:` address site** `git:CovertLab/vEcoli@<commit>`, filled once, shared by all studies — replacing today's env var (`V2E_VECOLI_DIR`) + *empty* commit pin (unpinned, and `build_comparison_caches.sh` even defaults to a different `vEcoli-upstream` checkout). The address site makes the compared implementation **pinnable and single-sourced**.
+
+**Two ParCa roots, not one** (a real subtlety, do not model it as one): v2ecoli and vEcoli need *separate* fits — divergent formats, `out/cache_full` vs `out/compare_harness/vecoli_parca`, and v2 cannot load the upstream cache (`build_comparison_caches.sh`). So the composite has **two** content-addressed ParCa-root nodes, each pulled once, each feeding its engine's side of every condition study.
+
+```
+comparison investigation (composite):
+  parca_v2      : CachedResults<sim_data>   ← pulled once (v2ecoli fit)
+  parca_vecoli  : CachedResults<sim_data>   ← pulled once (vEcoli fit, via git: address)
+  vecoli.address: <site: git:CovertLab/vEcoli@commit>          (shared)
+  studies[ basal, succinate, acetate, no_oxygen, with_aa,      (cardinality region:
+           metabolism_redux ]:                                  one per condition)
+     each = a comparison study consuming (parca_v2, parca_vecoli) sim_data,
+            emitting a matched-timepoint report card (already a pbg Step)
+  statistical   : cross-condition gate (Welch-t) consuming the per-condition verdicts
+```
+
+**Reuse, don't rebuild the compare side:** the compare + report-card entities are *already* pbg `Step`s (`scripts/_compare/report_cards/`, `@as_step`, `REPORT_CARD_STEPS`; matched-timepoint 5%/10% banding in `comparison_report_card.py`). They drop into the study nodes as flush entities unchanged.
+
+**Fixes a live breakage for free:** the imperative modular runner is *stale* post-migration — `study_spec.load_investigation` reads `data.get("studies", [])` and expects `inv_dir/studies/<name>/`, but the migration moved to `members:` + top-level `workspace/studies/`, so `run_investigation` raises "has no studies" today. A composite that reads `members:` + top-level studies natively repairs this by construction.
+
+**⚠ Decision for the build — per-study vs global compare config.** Per-study config today is minimal (`condition`, `comparison.{seeds,generations,max_steps_per_gen}`, `from_vecoli_config`, `cards`). **Media is derived from `condition`; tolerances + observables are GLOBAL constants** (`comparison_report_card.py: TOL=0.05, TOL2=0.10, OBSERVABLES`). If per-study tolerances/observables are wanted (e.g. looser bands for succinate), the comparison-study template must lift them from global constants to **per-study value sites**; otherwise they stay global. **User decision at build time** — default: keep global (matches today), lift only if asked.
+
+## 8. What runs today vs what this adds
 
 | Piece | State |
 |---|---|
@@ -109,7 +137,7 @@ The decision (cache-hit ⇒ fill, miss ⇒ compute) lives **in the graph** (engi
 | **`trigger(document, target)`** (fill-upstream-from-cache + prune) | ❌ this spec |
 | **ParCa as a study node** with a `sim_data` artifact | ❌ this spec (the proof) |
 
-## 8. Contracts
+## 9. Contracts
 
 1. **Indistinguishability.** A downstream consumer sees the *same* `results` handle whether the upstream ran or was pulled — `CachedResults` and `SimulationStep` share the `{results: node}` face; a flush/analysis step is agnostic to which produced it.
 2. **`trigger` is filling.** Triggering a study = fill its cached ancestors' results sites + leave it open + prune non-ancestors. No scheduler flag, no "skip" list — a pulled study is *ground*, an absent study is *pruned*. Same law as gating.
@@ -117,7 +145,7 @@ The decision (cache-hit ⇒ fill, miss ⇒ compute) lives **in the graph** (engi
 4. **Worktree independence.** The address is a function of `(config, input_ids, workspace_commit)` — never of a filesystem path — so two worktrees at the same commit share cache hits with no symlink.
 5. **Missing prerequisite is explicit.** `on_missing='error'` names the uncached ancestor; it never silently recomputes a "prior" study the user meant to reuse.
 
-## 9. Tests
+## 10. Tests
 
 - **Trigger one study.** A 3-node chain `parca → A → B`; `trigger(doc, 'A')` builds a document whose `process_paths` contains only `A`'s sim (parca pulled, B pruned); running it never invokes ParCa (spy asserts 0 ParCa calls) and A consumes the cached sim_data.
 - **Rerun downstream, reuse upstream.** With `parca` and `A` cached, `trigger(doc, 'B')` runs only `B`; both `parca` and `A` are pulled; B's result differs when B's own config changes but neither ancestor recomputes.
@@ -127,7 +155,7 @@ The decision (cache-hit ⇒ fill, miss ⇒ compute) lives **in the graph** (engi
 - **Content-address is worktree-independent.** The same `(config, commit)` yields the same hash from two different worktree paths.
 - **Nondeterminism flagged.** A stochastic producer whose recompute diverges from the cached fingerprint surfaces `provenance_status='nondeterministic'` rather than serving the stale hit.
 
-## 10. Sequencing & out of scope
+## 11. Sequencing & out of scope
 
 **Sequencing:** (1) `ArtifactRef`/`ArtifactResults` (widen `EmitterResults` to kinds); (2) `CachedResults` step; (3) `trigger()` on the investigation document (reusing `prune_open_regions` + the Spec-1 address); (4) **ParCa as a study node** with a `sim_data` artifact + determinism confirmation — the proof; (5) workbench "run this study / continue from here" affordance over `trigger`. Depends on: the merged `results` port (#160), templates.py (#159), and the workbench artifact store (Spec 1 — **verify merge state first**).
 
