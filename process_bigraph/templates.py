@@ -23,8 +23,87 @@ Two things here that the bigraph-schema helpers do not cover:
 """
 
 import copy
+import json
+from pathlib import Path
 
 from bigraph_schema.assembly import fill_sites, interfaces
+
+
+# ── on-disk templates ───────────────────────────────────────────────
+#
+# A template is authorable as a file: a ``*.template.{yaml,json}`` document
+# with sites written in place. Loading is *just* ``core.access`` on the parsed
+# document — access reconstitutes each site as a place-graph hole, and
+# bigraph-schema 1.4.4's ``_sort`` round-trip means a site's value type / face /
+# default survives the file. The loaded document is the same thing the
+# Python-built templates in the tests are: it hands straight to
+# ``fill_template`` / ``template_document`` / ``investigation_document``.
+#
+# A study template and an investigation template are the *same* on-disk shape —
+# a document with sites — so one loader reads both; the caller picks
+# ``template_document`` (study) or ``investigation_document`` (investigation).
+
+TEMPLATE_SUFFIXES = ('.template.yaml', '.template.yml', '.template.json')
+"""Recognised on-disk template extensions (spec §6 authoring format)."""
+
+
+def _read_mapping(path):
+    """Parse a YAML or JSON document to a dict, chosen by extension."""
+    path = Path(path)
+    text = path.read_text(encoding='utf-8')
+    if path.suffix.lower() == '.json':
+        raw = json.loads(text)
+    else:
+        import yaml
+        raw = yaml.safe_load(text)
+    if not isinstance(raw, dict):
+        kind = type(raw).__name__
+        raise ValueError(
+            f'template {path} must parse to a mapping, got {kind}')
+    return raw
+
+
+def load_template(path, core):
+    """Read a ``*.template.{yaml,json}`` document from disk into a template.
+
+    Parses the file (YAML or JSON, by extension) and runs the result through
+    ``core.access``, which reconstitutes every site as an open place-graph
+    hole. Because ``access`` round-trips ``_sort`` (the Layer-1 fix in
+    bigraph-schema 1.4.4), a value site's type, a face site's interface and a
+    site's ``_default`` all survive the file intact — the loaded document has
+    exactly the ``open_sites`` the file declared.
+
+    The returned document is a template like any other: hand it to
+    ``fill_template`` / ``template_document`` (a study) or
+    ``investigation_document`` (an investigation, one member per site). Both
+    file kinds load through this one function; only the caller's follow-on call
+    differs. Any process/step edges named in the file must already be
+    registered on ``core``.
+    """
+    return core.access(_read_mapping(path))
+
+
+def save_template(template, path, core):
+    """Write a template document to disk so it re-loads with identical sites.
+
+    Rendered with ``defaults=True`` on purpose. A plain ``render`` drops each
+    site's ``_default`` and stringizes a face ``_sort`` — after round-tripping
+    through the file an optional site would come back **required** and a face
+    would be flattened, so ``load_template`` would read back a *different*
+    template. ``defaults=True`` is what makes the on-disk round-trip identity
+    (the same subtlety ``template_document`` documents for the fill path).
+
+    Returns the ``Path`` written.
+    """
+    path = Path(path)
+    rendered = core.render(template, defaults=True)
+    if path.suffix.lower() == '.json':
+        text = json.dumps(rendered, indent=2, sort_keys=True)
+    else:
+        import yaml
+        text = yaml.safe_dump(rendered, sort_keys=True)
+    path.write_text(text, encoding='utf-8')
+    return path
 
 
 def open_sites(document):
