@@ -3957,3 +3957,271 @@ def test_to_document_stays_a_pure_dict_walk():
     document = spec.to_document(emit=False)
     assert document['state']['proc']['config']['tick'] == 2.0
     assert 'instance' not in document['state']['proc']
+
+
+# ==========================================
+# Layer 3 — studies and investigations ARE templates
+# ==========================================
+
+MODEL_FACE = {
+    '_type': 'link',
+    '_inputs': {'level': 'float'},
+    '_outputs': {'level': 'float'}}
+
+
+class ReportCard(Step):
+    """A trivial downstream flush: turns the model's final level into a
+    verdict, the way a study's report card turns a run into pass/fail."""
+
+    config_schema = {'threshold': 'float'}
+
+    def inputs(self):
+        return {'level': 'float'}
+
+    def outputs(self):
+        return {'verdict': 'string'}
+
+    def update(self, state):
+        return {'verdict': 'pass' if state['level'] >= self.config['threshold']
+                else 'fail'}
+
+
+def _study_core():
+    core = allocate_core()
+    core.register_link('ReportCard', ReportCard)
+    return core
+
+
+def _study_region(threshold=2.0):
+    """A study: a model **site**, a fixed report step wired to it, stores."""
+    return {
+        'level': 1.0,
+        'verdict': 'string',
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'report': {
+            '_type': 'step', 'address': 'local:ReportCard',
+            'config': {'threshold': threshold},
+            'inputs': {'level': ['level']},
+            'outputs': {'verdict': ['verdict']}}}
+
+
+def _model(core, rate=0.5):
+    return core.access({
+        '_type': 'process', 'address': 'local:IncreaseProcess',
+        'config': {'rate': rate}, 'interval': 1.0,
+        'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}})
+
+
+def _nonconforming(core):
+    """Right kind of thing, wrong face — outputs `mass`, not `level`."""
+    return core.access({
+        '_type': 'link', '_inputs': {'level': 'float'},
+        '_outputs': {'mass': 'float'}})
+
+
+def test_a_study_template_is_not_ground():
+    from process_bigraph.templates import is_ground_document, open_sites
+
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    assert not is_ground_document(template)
+    assert open_sites(template) == [('study', 'model')]
+
+
+def test_filling_the_model_site_yields_a_running_study():
+    """The whole point: drop a conforming composite into the model site and
+    the study builds, constructs and runs — no code."""
+    from process_bigraph.templates import template_document, is_ground_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region(threshold=2.0)})
+
+    document = template_document(core, template, {'study/model': _model(core)})
+
+    sim = Composite({'state': document}, core=core)
+    assert list(sim.process_paths) == [('study', 'model')]
+    assert list(sim.step_paths) == [('study', 'report')]
+
+    sim.run(4.0)
+    assert sim.state['study']['level'] > 2.0
+    assert sim.state['study']['verdict'] == 'pass'
+
+
+def test_the_same_template_takes_a_different_model():
+    """A template is reusable: the site accepts any conforming model, and the
+    study's verdict follows the model that was dropped in."""
+    from process_bigraph.templates import template_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region(threshold=2.0)})
+
+    slow = Composite(
+        {'state': template_document(
+            core, template, {'study/model': _model(core, rate=0.01)})},
+        core=core)
+    slow.run(4.0)
+
+    assert slow.state['study']['verdict'] == 'fail'
+
+
+def test_a_non_conforming_model_is_refused():
+    """The site is face-sorted, so only a model with the study's expected
+    interface fits — the error names the site and the missing port."""
+    from process_bigraph.templates import template_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    with pytest.raises(ValueError, match="site 'study/model'") as raised:
+        template_document(core, template, {'study/model': _nonconforming(core)})
+
+    assert 'level' in str(raised.value)
+
+
+def test_an_unfilled_study_site_is_refused_before_construction():
+    from process_bigraph.templates import template_document
+
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        template_document(core, template, {})
+    assert "'study/model'" in str(raised.value)
+
+
+def test_an_unfilled_study_site_is_refused_by_the_composite_too():
+    """Belt and braces: even handed straight to `Composite`, an open site is
+    rejected at construction (Part A's A0)."""
+    core = _study_core()
+    template = core.access({'study': _study_region()})
+
+    with pytest.raises(ValueError, match='not ground'):
+        Composite({'state': core.render(template)}, core=core)
+
+
+# ---- investigations: gating as filling --------------------------------
+
+def _investigation_template(core, threshold=2.0):
+    return core.access({'investigation': {
+        'study_A': _study_region(threshold),
+        'study_B': _study_region(threshold)}})
+
+
+def test_an_investigation_template_has_a_site_per_member():
+    from process_bigraph.templates import open_sites
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    assert sorted(open_sites(template)) == [
+        ('investigation', 'study_A', 'model'),
+        ('investigation', 'study_B', 'model')]
+
+
+def test_filling_admits_a_member_and_leaving_open_blocks_it():
+    """Gating expressed as filling: the member whose site was filled is built
+    and runs; the one left open is absent from the document entirely, so the
+    engine never has to decide not to run it."""
+    from process_bigraph.templates import investigation_document
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    document, blocked = investigation_document(
+        core, template,
+        {'investigation/study_A/model': _model(core)},
+        member_depth=2)
+
+    assert blocked == ['investigation/study_B']
+    assert sorted(document['investigation']) == ['study_A']
+
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+    assert 'study_B' not in sim.state['investigation']
+    assert sim.state['investigation']['study_A']['verdict'] == 'pass'
+
+
+def test_filling_every_site_builds_the_whole_investigation():
+    from process_bigraph.templates import investigation_document
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    document, blocked = investigation_document(
+        core, template,
+        {'investigation/study_A/model': _model(core),
+         'investigation/study_B/model': _model(core)},
+        member_depth=2)
+
+    assert blocked == []
+    sim = Composite({'state': document}, core=core)
+    sim.run(4.0)
+    assert sorted(sim.state['investigation']) == ['study_A', 'study_B']
+
+
+def test_a_gate_edge_decides_the_downstream_filler():
+    """The end-to-end gate: an upstream study runs, its report card is a real
+    edge in the composite, and its verdict decides whether the downstream
+    study's site gets filled.
+
+    The gate runs *between* builds, not inside one: an open site is a
+    construction-time condition, so the downstream document is assembled once
+    the upstream verdict exists. Filling remains the mechanism — a `fail`
+    simply never produces the filler.
+    """
+    from process_bigraph.templates import (
+        template_document, investigation_document)
+
+    def run_gated(rate):
+        core = _study_core()
+
+        # -- stage 1: the upstream study, with its gate edge (the report card)
+        upstream = core.access({'study': _study_region(threshold=2.0)})
+        stage_one = Composite(
+            {'state': template_document(
+                core, upstream, {'study/model': _model(core, rate=rate)})},
+            core=core)
+        stage_one.run(4.0)
+        verdict = stage_one.state['study']['verdict']
+
+        # -- gating IS filling: a pass emits the downstream filler, a fail
+        #    emits nothing, so the site stays open.
+        template = _investigation_template(core)
+        bindings = {'investigation/study_A/model': _model(core, rate=rate)}
+        if verdict == 'pass':
+            bindings['investigation/study_B/model'] = _model(core, rate=rate)
+
+        document, blocked = investigation_document(
+            core, template, bindings, member_depth=2)
+        downstream = Composite({'state': document}, core=core)
+        downstream.run(4.0)
+        return verdict, blocked, sorted(downstream.state['investigation'])
+
+    verdict, blocked, members = run_gated(rate=0.5)
+    assert verdict == 'pass'
+    assert blocked == []
+    assert members == ['study_A', 'study_B']
+
+    verdict, blocked, members = run_gated(rate=0.01)
+    assert verdict == 'fail'
+    assert blocked == ['investigation/study_B']
+    assert members == ['study_A']
+
+
+def test_a_partially_filled_template_is_still_a_template():
+    """Filling is incremental — a template with one of two sites filled is a
+    smaller template, not an error."""
+    from process_bigraph.templates import fill_template, open_sites
+
+    core = _study_core()
+    template = _investigation_template(core)
+
+    partial = fill_template(
+        core, template, {'investigation/study_A/model': _model(core)})
+
+    assert open_sites(partial) == [('investigation', 'study_B', 'model')]
+
+    whole = fill_template(
+        core, partial, {'investigation/study_B/model': _model(core)})
+    assert open_sites(whole) == []
