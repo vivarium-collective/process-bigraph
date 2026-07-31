@@ -3848,3 +3848,112 @@ def test_the_scheduler_sees_a_round_tripped_priority():
         for path, meta in sim.step_dependencies.items()}
     assert priorities['high'] == 9.0
     assert priorities['low'] == 1.0
+
+
+# ==========================================
+# Part B' — typed parameter validation
+# ==========================================
+
+def _typed_spec(param_type, default):
+    from process_bigraph.composite_spec import CompositeSpec
+    return CompositeSpec(
+        id='typed', name='typed',
+        parameters={'rate': {'type': param_type, 'default': default}},
+        state={'stores': {'rate': '${rate}'}})
+
+
+@pytest.mark.parametrize('param_type,override,expected', [
+    ('float', 1.0, 1.0),
+    ('float', 1, 1.0),          # int for a float widens, as it always has
+    ('float', '1.5', 1.5),      # a numeric string from a form field
+    ('integer', 5, 5),
+    ('integer', 5.0, 5),        # integral float is lossless
+    ('integer', '5', 5),
+    ('boolean', True, True),
+    ('boolean', 'yes', True),
+    ('boolean', 'false', False),
+    ('string', 'x', 'x'),
+    ('string', 5, '5'),
+])
+def test_a_well_typed_override_coerces_as_before(param_type, override, expected):
+    spec = _typed_spec(param_type, override)
+    document = spec.to_document(emit=False)
+    assert document['state']['stores']['rate'] == expected
+
+
+@pytest.mark.parametrize('param_type,override,fragment', [
+    ('float', 'abc', 'not a number'),
+    ('float', {'a': 1}, 'not a number'),
+    ('float', True, 'a boolean is not a number'),
+    ('integer', 3.7, 'fractional'),
+    ('integer', 'x', 'not a whole number'),
+    ('boolean', 'banana', 'not a recognized boolean'),
+    ('map', [1], 'not a map'),
+    ('list', {'a': 1}, 'not a list'),
+])
+def test_a_mistyped_override_is_rejected(param_type, override, fragment):
+    """`_cast` used to coerce silently — `int(3.7)` became 3 and any
+    unrecognized string became False — so a typo produced a plausible-looking
+    but wrong simulation. It must name the parameter and say why."""
+    from process_bigraph.composite_spec import ParameterTypeError
+
+    spec = _typed_spec(param_type, 0 if param_type != 'string' else '')
+    with pytest.raises(ParameterTypeError) as raised:
+        spec.to_document({'rate': override}, emit=False)
+
+    message = str(raised.value)
+    assert "'rate'" in message
+    assert param_type in message
+    assert repr(override) in message
+    assert fragment in message
+
+
+def test_an_unknown_declared_type_is_left_alone():
+    """A workspace type the core does not know is passed through rather than
+    guessed at."""
+    spec = _typed_spec('some_workspace_type', {'anything': 1})
+    assert spec.to_document(emit=False)['state']['stores']['rate'] == {
+        'anything': 1}
+
+
+def test_an_untyped_parameter_is_left_alone():
+    from process_bigraph.composite_spec import CompositeSpec
+
+    spec = CompositeSpec(
+        id='untyped', name='untyped',
+        parameters={'rate': {'default': 'whatever'}},
+        state={'stores': {'rate': '${rate}'}})
+
+    assert spec.to_document(emit=False)['state']['stores']['rate'] == 'whatever'
+
+
+def test_inline_interpolation_still_works():
+    """The two real inline uses in the corpus are a solver input deck — string
+    templating inside an opaque blob, which typing must not disturb."""
+    from process_bigraph.composite_spec import CompositeSpec
+
+    spec = CompositeSpec(
+        id='inline', name='inline',
+        parameters={'density': {'type': 'float', 'default': 0.8}},
+        state={'sim': {'config': {'script': 'lattice sc ${density}\nrun 100'}}})
+
+    script = spec.to_document(emit=False)['state']['sim']['config']['script']
+    assert script == 'lattice sc 0.8\nrun 100'
+
+
+def test_to_document_stays_a_pure_dict_walk():
+    """Validation must not drag realization in: a spec naming a process the
+    core cannot even load must still produce its document."""
+    from process_bigraph.composite_spec import CompositeSpec
+
+    spec = CompositeSpec(
+        id='opaque', name='opaque',
+        parameters={'interval': {'type': 'float', 'default': 2.0}},
+        state={'proc': {
+            '_type': 'process',
+            'address': 'local:NoSuchProcessAnywhere',
+            'config': {'tick': '${interval}'}}})
+
+    document = spec.to_document(emit=False)
+    assert document['state']['proc']['config']['tick'] == 2.0
+    assert 'instance' not in document['state']['proc']
