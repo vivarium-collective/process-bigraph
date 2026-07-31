@@ -90,11 +90,26 @@ rendered to HTML and published automatically on GitHub Pages.
 
 More tutorials are added continuously and appear automatically in the index.
 
+### Architecture
+
+- **The framework, end to end** — *start here to understand the whole system:
+  what the objects are (documents, sites, handles), how they compose, the
+  higher-order DAG, templates and gating, content-addressed artifacts, the
+  `git:` protocol, and the laws everything else follows from.*
+  [doc/architecture.md](doc/architecture.md)
+
 ### Topic Guides
 
 - **Emitters — Recording Simulation Results**
   *Built-in emitters (RAM, console, JSON, SQLite), how to wire them, retrieve results, store runs long-term, and write your own.*
   [doc/emitters.md](doc/emitters.md)
+
+- **Tick lifecycle** — *how a step network is ordered and advanced, and how a
+  protocol runtime batches remote dispatch.*
+  [doc/tick_lifecycle.md](doc/tick_lifecycle.md)
+
+- **Distributed lifecycles** — *running parts of a composite off-process.*
+  [doc/distributed_lifecycles.md](doc/distributed_lifecycles.md)
 
 ---
 
