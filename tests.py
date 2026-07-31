@@ -3542,3 +3542,101 @@ def test_a_nested_flush_step_waits_for_the_simulation():
 
     assert FLUSH_FIRINGS == ['EmitterResults']
     assert study.state['cards_0']['rows'] > 1
+
+
+# ==========================================
+# A0 — groundness at the Composite boundary
+# ==========================================
+
+MODEL_FACE = {
+    '_type': 'link',
+    '_inputs': {'level': 'float'},
+    '_outputs': {'level': 'float'}}
+
+
+def test_unfilled_required_site_is_rejected():
+    """A document with an open template hole is not runnable.
+
+    Nothing downstream — wiring, scheduling, emitters — can be built over a
+    site, so the composite must say so at construction rather than fail
+    obscurely mid-run.
+    """
+    core = allocate_core()
+    document = {'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'level': 1.0}}
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        Composite({'state': document}, core=core)
+
+    assert "'study/model'" in str(raised.value)
+
+
+def test_every_unfilled_site_is_named():
+    core = allocate_core()
+    document = {'study': {
+        'model': {'_type': 'site', '_sort': MODEL_FACE},
+        'reference': {'_type': 'site', '_sort': MODEL_FACE}}}
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        Composite({'state': document}, core=core)
+
+    message = str(raised.value)
+    assert "'study/model'" in message
+    assert "'study/reference'" in message
+
+
+def test_optional_site_does_not_block_construction():
+    """A site carrying a `_default` can supply its own filler, so it is not
+    a required hole."""
+    core = allocate_core()
+    document = {'study': {
+        'rate': {'_type': 'site', '_sort': 'float', '_default': 0.5},
+        'level': 1.0}}
+
+    sim = Composite({'state': document}, core=core)
+    assert sim.state['study']['level'] == 1.0
+
+
+def test_a_normal_composite_is_still_ground():
+    """The check is over *sites*, not `is_ground`: a composite containing a
+    process has unwired ports by construction, so `is_ground` would reject
+    every real composite. It must not."""
+    core = allocate_core()
+    document = {
+        'proc': {
+            '_type': 'process',
+            'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.1},
+            'inputs': {'level': ['level']},
+            'outputs': {'level': ['level']},
+            'interval': 1.0},
+        'level': 1.0}
+
+    sim = Composite({'state': document}, core=core)
+    sim.run(2.0)
+    assert sim.state['global_time'] == 2.0
+
+
+def test_a_filled_template_constructs():
+    """The end-to-end shape: fill the hole, then the composite builds."""
+    from bigraph_schema.assembly import fill_sites
+
+    core = allocate_core()
+    template = core.access({
+        'proc': {'_type': 'site', '_sort': MODEL_FACE},
+        'level': 'float'})
+    filler = core.access({
+        '_type': 'process',
+        'address': 'local:IncreaseProcess',
+        'config': {'rate': 0.1},
+        'inputs': {'level': ['level']},
+        'outputs': {'level': ['level']},
+        'interval': 1.0})
+
+    filled = fill_sites(core, template, {'proc': filler})
+
+    sim = Composite({'state': core.render(filled)}, core=allocate_core())
+    assert list(sim.process_paths) == [('proc',)]
+    sim.run(2.0)
+    assert sim.state['global_time'] == 2.0
