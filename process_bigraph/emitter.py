@@ -139,12 +139,87 @@ def add_emitter_to_composite(composite, core, emitter_mode='all', address='local
 # Emitter Base Classes
 # =====================
 
+class EmitterResults:
+    """A durable **reference** to what an emitter accumulated.
+
+    Carries no bulk data — only what is needed to find it again: the
+    emitter's address, where it sits, how much it holds, and whatever
+    context (``sim_data`` and friends) a consumer needs to interpret it.
+    :meth:`resolve` pulls the data on demand, so handing a handle down a
+    step network stays cheap no matter how large the run was.
+
+    This is what an emitter's ``results`` port carries, so a downstream
+    step can depend on the emitter as an ordinary producer rather than
+    reaching for the imperative ``gather_emitter_results`` pull.
+    """
+
+    __slots__ = ('emitter', 'address', 'path', 'context')
+
+    def __init__(self, emitter, address=None, path=None, context=None):
+        self.emitter = emitter
+        self.address = address
+        self.path = tuple(path) if path else ()
+        self.context = context or {}
+
+    @property
+    def count(self):
+        """How many records the emitter is holding, when it can say."""
+        history = getattr(self.emitter, 'history', None)
+        return len(history) if history is not None else None
+
+    def resolve(self, paths=None):
+        """Pull the accumulated data. The handle stays a reference; this is
+        the only place the bulk is materialized."""
+        return self.emitter.query(paths)
+
+    def to_dict(self):
+        """A JSON-safe summary — the reference, never the data."""
+        return {
+            'address': self.address,
+            'path': list(self.path),
+            'count': self.count,
+            'context': self.context}
+
+    def __repr__(self):
+        return (f'EmitterResults(address={self.address!r}, '
+                f'path={"/".join(self.path)!r}, count={self.count})')
+
+
 class Emitter(Step):
     '''Base emitter class: defines schema and stub methods.'''
     config_schema = {'emit': 'schema'}
 
     def inputs(self) -> Dict:
         return self.config['emit']
+
+    def outputs(self) -> Dict:
+        '''Emitters produce a ``results`` handle.
+
+        Declaring the port is what lets a flush step depend on the emitter
+        as an ordinary producer/consumer edge. The handle is a reference,
+        not the data — see :class:`EmitterResults`.
+
+        Note the port is *not* written by :meth:`update`: results are a
+        completion-time value, and writing them per tick would fire every
+        downstream consumer on every tick. :meth:`finalize` produces them.
+        '''
+        return {'results': 'node'}
+
+    def results(self, path=None, context=None) -> 'EmitterResults':
+        '''The durable handle for what this emitter has accumulated.'''
+        return EmitterResults(
+            self,
+            address=self.config.get('address'),
+            path=path,
+            context=context)
+
+    def finalize(self, path=None, context=None) -> Dict:
+        '''The update an emitter contributes at the end of a run.
+
+        Separate from :meth:`update` because ``results`` is meaningful once,
+        at completion — not once per tick.
+        '''
+        return {'results': self.results(path=path, context=context)}
 
     def query(self, paths=None, query=None):
         '''Return recorded history.
