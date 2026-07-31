@@ -88,6 +88,10 @@ rendered to HTML and published automatically on GitHub Pages.
   *Defining mathematical relationships, signal pipelines, and events using `MathExpressionStep`*  
   https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_3.html
 
+- **Tutorial 4 — Study & Investigation Templates**  
+  *Documents with open **sites**; filling a hole turns a study or investigation into a runnable `Composite`; gating expressed as filling*  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_4.html
+
 More tutorials are added continuously and appear automatically in the index.
 
 ### Architecture
