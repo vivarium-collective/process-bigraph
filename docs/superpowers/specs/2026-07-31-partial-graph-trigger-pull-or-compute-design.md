@@ -54,14 +54,14 @@ A new `Step` in `process_bigraph.processes` (sibling to `SimulationStep`), the p
 class CachedResults(Step):
     """Resolve a content-addressed study artifact and emit its handle —
     the filled counterpart of SimulationStep. Never runs a simulation."""
-    config_schema = {'artifact_ref': 'quote'}   # {kind, hash, store, context}
+    config_schema = {'artifact_ref': 'quote'}   # {kind, hash, store, context, fingerprint}
     def inputs(self):  return {}
     def outputs(self): return {'results': 'node'}
-    def finalize(self, path=None, context=None):
+    def update(self, state):
         return {'results': ArtifactResults.from_ref(self.config['artifact_ref'])}
 ```
 
-- It has **no inputs and produces `results` at finalize** — structurally identical to how `SimulationStep`'s emitter surfaces `results`, so a downstream flush/consumer cannot tell a pulled result from a freshly-computed one (that indistinguishability is the whole point).
+- It has **no inputs and produces `results` from `update()`** — indistinguishable from `SimulationStep`, which is the counterpart to match. *(Build correction, PR #164: an earlier draft produced at `finalize()` by analogy with an **emitter**. That is wrong — an emitter finalizes because its results only exist post-run, but a study node is a producer **in the step DAG** and `SimulationStep` returns the handle from `update()`. A `CachedResults` that produced only at finalize left its consumers unordered — they fired first and read an empty store. Indistinguishability means matching `SimulationStep` (the step-DAG producer), not matching the emitter. `finalize()` is retained as a secondary route.)*
 - `trigger` swaps a prerequisite's `SimulationStep` node for a `CachedResults` node bound to the resolved `artifact_ref`. Same interface (`{results}` out), so the wiring is unchanged.
 
 ## 5. Artifact references — the honest generalization ParCa forces
@@ -72,8 +72,17 @@ A simulation's `results` is a **zarr trajectory** (`EmitterResults` → `emitter
 ArtifactRef = { kind: 'trajectory' | 'sim_data' | 'figures' | …,
                 hash: <content-address>,
                 store: <path under .pbg/artifacts/<hash>/>,
-                context: {…} }
+                context: {…},
+                fingerprint: <for §6 determinism-gating; must survive a store round-trip> }
 ```
+
+> **Naming (build correction, PR #164):** the registered kind sorts are `results_<kind>`
+> (`results_trajectory`, `results_sim_data`), **not** `results:<kind>`. A `_sort` value is
+> parsed by the type grammar, where `a:b` is the named-parameter form — a colon in the name
+> is swallowed and the registered sort is never found (it silently falls through to
+> `core.check`). This is the *third* appearance of the colon-in-a-name trap (after `local:edge`
+> and the address work): **any user-facing name that reaches `_sort` or a type position must
+> avoid `:`.**
 
 - `kind='trajectory'` resolves via the emitter's `RunReader`/`query()` (what the slice proves).
 - `kind='sim_data'` resolves by loading the calibration object from the store (a pickle/zarr/parquet ParCa already writes).
