@@ -124,60 +124,48 @@ this behind the shim so the dashboard keeps working, and finish the dashboard si
 
 ---
 
-## PART B — Lower `CompositeSpec` onto the bigraph-schema template (after Layer 1)
+## PART B — SUPERSEDED: `${name}` does NOT lower onto a site (proven by the corpus)
 
-The umbrella's open question ("does `CompositeSpec` become a thin adapter over the
-bigraph-schema template, or is it refactored onto it?") is decided here: **refactor
-its parameterization onto the template primitive; keep the `CompositeSpec` surface
-as the ergonomic authoring API.**
+> **Corrected 2026-07-31.** The original plan — refactor `CompositeSpec.to_document`
+> to `fill_sites(to_template, overrides)`, deleting `substitute_parameters` — was
+> **disproven by the frozen corpus** (`feat/composite-template-lowering`, commit
+> `8aa97b7`). Do **not** implement it. `substitute_parameters` **stays**.
 
-### B1. The mapping
+**What the corpus showed.** v2ecoli's 29 registered generators are **builder-kind
+with zero `${name}`** — nothing to lower. The real placeholder corpus is 68 static
+`*.composite.{yaml,json}` (237 full + 2 inline placeholders). Of the 237:
 
-| CompositeSpec today | Template (Layer 1) |
-|---|---|
-| `parameters: {name: {type, default, ...}}` + `${name}` substitution | **value slots** (sorted `Site`s of a value type) bound by `bind` |
-| a parameter that names a process/composite to drop in | a **process slot** (a sorted `Site` whose sort's formation is interface conformance) |
-| `default_n_steps`, counts that scale structure | **cardinality slots** (generative, `tensor`-expanded) |
-| `builder`-kind generator (Python fn building state) | a template whose `_body` carries sorted `Site`s; the builder becomes body-construction, binding replaces `**params` |
-| `to_document(overrides)` | `core.bind(template, bindings)` → `(schema, state)` |
+- **73%** live inside a `config` blob the process constructor reads **raw** — a site
+  would inject a schema node into an opaque value;
+- **23%** are **edge fields** (`interval`, `priority`) — **not place-graph
+  positions**, invisible to `collect_sites`;
+- **4%** are actual store positions — the only case the site primitive fits.
 
-`substitute_parameters` / `_resolve_value` / `_cast` (composite_spec.py:50–98) —
-the bespoke `${name}` engine — is exactly the ~30% that the template's
-`bind`/`compose_at` replaces. `_cast`/`normalize_type` become slot sort/type
-coercion (bigraph-schema `core.check`/`resolve`).
+And `fill_sites → core.fill` **realizes every edge** (tried to load a COPASI model
+during document *construction*; crashed on another spec). Legacy `to_document`
+instantiates nothing — which is why all 68 build cheaply. **Byte-identity is
+unreachable.** Root mismatch: a **site** fills a place-graph position *in a schema*;
+`${name}` fills a value *inside opaque config blobs and typed edge fields in a state
+document*. Different things.
 
-### B2. The refactor — `${name}` *is* a site
+### B′ (the real, small win) — typed parameters, keep the dict walk
 
-- Add `CompositeSpec.to_template(core)`: replace each **full**-placeholder `${name}`
-  occurrence with `Site(_sort=<declared param type>)` **keyed by the parameter name**
-  — so value and structural filling are literally the *same* call and the
-  "two-mechanism seam" never exists. `_cast`/`normalize_type` (`composite_spec.py:34,47`)
-  become the site's sort (`core.check`).
-- Re-express `to_document(overrides, core)` as
-  `core.fill_sites(self.to_template(core), self._merged_params(overrides))` then
-  `core.fill(defaults)` — same signature, same return. **Delete
-  `substitute_parameters`/`_resolve_value`/`_cast` (`composite_spec.py:47-95`).**
-  (Register is `core.fill_sites`, not `core.bind` — the latter already exists.)
-- **Stated limitation:** *inline* interpolation (`"pre_${n}_post"`,
-  `_INLINE_PLACEHOLDER`, `composite_spec.py:44`) is string concatenation, not
-  substitution, and does **not** lower to a site. The golden corpus (B3/§4) must
-  first report how many on-disk specs use it; then either keep a one-function
-  string-interp pass for that case (and say so) or restrict authoring to
-  full-placeholder form.
-- Keep `@composite_spec` / `from_file` / registry / the shim **unchanged on the
-  surface** — only the *resolution* mechanism swaps underneath.
+Give `${name}` params the one thing the lowering actually offered: **typed
+validation**. At substitution, coerce/validate each value against its declared type
+via `core.check` (replacing `_cast`'s silent coercion), rejecting a mistyped override
+with a clear error. `to_document` stays a pure dict walk; `substitute_parameters`
+stays; byte-identity is free. This is Part B in full.
 
-### B3. Back-compat
+### The real template layer (Option 3) — a SEPARATE spec, not a `CompositeSpec` refactor
 
-- **Behavior-preserving for `spec`-kind** (static `schema`/`state` + `${name}`):
-  every current substitution must produce byte-identical documents. Guard with a
-  golden-corpus test (all `*.composite.{yaml,json}` + the 13 v2ecoli generators,
-  render-and-compare old vs. new).
-- `builder`-kind generators keep working; their Python builder now returns a body
-  with `Site`s (or, transitionally, the same dict — a template with zero slots is
-  just a document, so unconverted builders still run).
-- The `${name}` string syntax stays supported as **sugar that lowers to value
-  slots** during `to_template`, so on-disk specs need no rewrite.
+"Templates for studies and investigations" — and the flagship **comparison-harness**
+(value sites + a `CovertLab/vEcoli` **address site**, umbrella §Layer 2) — are the
+site-based `fill`/`is_ground` machinery from **Layer 1, which already works**. They
+are a **new authoring format** where a parameter *is* a first-class schema **site**
+(value / address / model site), **not** a `${}` marker in a state blob. That format
++ a one-time migration is its own spec (`docs/.../study-investigation-template-*`),
+built on Layer 1, with **no `${name}` involvement**. The legacy `${name}`
+`CompositeSpec` is kept (with B′ typing) and coexists.
 
 ---
 
