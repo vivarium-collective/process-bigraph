@@ -293,7 +293,13 @@ def find_leaves(tree_structure, path=None):
                 subleaves = find_leaves(value, path=path)
                 leaves.extend(subleaves)
             else:
-                leaves.append(path + tuple(value))
+                # Normalize `..` ascents. A wire is relative to its edge's
+                # parent, so a nested step reaching a shared store writes
+                # `['..', 'results']`. Runtime views resolve that, but the
+                # dependency graph compared the literal path — which never
+                # matches the producer's output path, so the edge was
+                # silently dropped and the consumer ran unordered.
+                leaves.append(resolve_path(path + tuple(value)))
 
     return leaves
 

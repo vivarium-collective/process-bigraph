@@ -3501,3 +3501,44 @@ def test_simulation_step_exposes_the_finished_composite():
     inner = study.state['sim']['instance'].composite
     assert inner.state['global_time'] == 3.0
     assert inner.state['level'] > 1.0
+
+
+def test_an_ascending_wire_still_creates_a_dependency_edge():
+    """A wire is relative to its edge's parent, so a nested step reaching a
+    shared store writes `['..', 'results']`. Runtime views resolve that; the
+    dependency graph used to compare the literal path, so the edge was
+    silently dropped and the consumer ran before its producer.
+    """
+    from process_bigraph.scheduling import find_leaves
+
+    assert find_leaves(
+        {'results': ['..', 'results']},
+        path=('study', 'cards_0')) == [('study', 'results')]
+
+
+def test_a_nested_flush_step_waits_for_the_simulation():
+    """The nested case: report cards inside a region, reaching up to the
+    shared `results` store, still fire exactly once and after the sim."""
+    FLUSH_FIRINGS.clear()
+
+    core = _study_core_2b()
+    state = {
+        'sim': {
+            '_type': 'step', 'address': 'local:SimulationStep',
+            'config': {'state': _sim_state(), 'runtime': 4.0},
+            'inputs': {}, 'outputs': {'results': ['results']}},
+        'cards_0': {
+            'rows': 0,
+            'card': {
+                '_type': 'step', 'address': 'local:FlushStep',
+                'inputs': {'results': ['..', 'results']},
+                'outputs': {'rows': ['rows']}}}}
+
+    study = Composite({'state': state}, core=core)
+    assert study.step_dependencies[('cards_0', 'card')]['input_paths'] == [
+        ('results',)]
+
+    study.run(0.0)
+
+    assert FLUSH_FIRINGS == ['EmitterResults']
+    assert study.state['cards_0']['rows'] > 1
