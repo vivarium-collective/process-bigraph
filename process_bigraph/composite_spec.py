@@ -61,7 +61,122 @@ def _cast(value: Any, declared_type: "str | None") -> Any:
     return value
 
 
-def _resolve_value(value, params, overrides):
+class ParameterTypeError(TypeError):
+    """A parameter value that does not fit its declared type."""
+
+
+_TRUE_WORDS = ("true", "1", "yes", "on")
+_FALSE_WORDS = ("false", "0", "no", "off")
+
+_VALIDATION_CORE = None
+
+
+def _validation_core(core=None):
+    """A core to type-check parameter values against.
+
+    Prefers the caller's core; otherwise builds a base-types-only core once.
+    ``allocate_core()`` costs seconds because it walks every installed
+    package, and checking ``float``/``integer``/``string``/``boolean`` needs
+    none of that — keeping ``to_document`` the cheap dict walk it has always
+    been.
+    """
+    if core is not None:
+        return core
+
+    global _VALIDATION_CORE
+    if _VALIDATION_CORE is None:
+        from bigraph_schema import Core
+        from bigraph_schema.schema import BASE_TYPES
+        _VALIDATION_CORE = Core(BASE_TYPES)
+    return _VALIDATION_CORE
+
+
+def _reject(name, declared, value, why):
+    label = f"parameter '{name}'" if name else "parameter"
+    raise ParameterTypeError(
+        f"{label} is declared '{declared}' but got {value!r} "
+        f"({type(value).__name__}): {why}")
+
+
+def _coerce(value, declared_type, name=None, core=None):
+    """Coerce a parameter value to its declared type, refusing to mangle it.
+
+    ``_cast`` coerced silently: ``int(3.7)`` quietly became ``3`` and any
+    unrecognized string quietly became ``False``, so a typo in an override
+    produced a plausible-looking but wrong simulation. The coercions callers
+    genuinely rely on still pass — an ``int`` for a ``float`` parameter, a
+    numeric string from a form field — but a lossy or meaningless one now
+    raises, naming the parameter, its declared type and the offending value.
+
+    The coerced result is then checked against the declared type with
+    ``core.check``. A declared type this core does not know is left alone
+    rather than guessed at.
+    """
+    if declared_type is None:
+        return value
+
+    declared = normalize_type(declared_type)
+
+    if value is None:
+        _reject(name, declared, value, "no value was supplied")
+
+    # bool is a subclass of int, so it would silently satisfy the numeric
+    # coercions; a boolean where a number belongs is a mistake, not a widening.
+    if declared in ("float", "integer") and isinstance(value, bool):
+        _reject(name, declared, value, "a boolean is not a number")
+
+    if declared == "float":
+        if isinstance(value, str):
+            try:
+                float(value)
+            except ValueError:
+                _reject(name, declared, value, "not a number")
+        elif not isinstance(value, (int, float)):
+            _reject(name, declared, value, "not a number")
+
+    elif declared == "integer":
+        if isinstance(value, float) and value != int(value):
+            _reject(name, declared, value,
+                    "would lose its fractional part")
+        elif isinstance(value, str):
+            try:
+                int(value)
+            except ValueError:
+                _reject(name, declared, value, "not a whole number")
+        elif not isinstance(value, (int, float)):
+            _reject(name, declared, value, "not a whole number")
+
+    elif declared == "boolean":
+        if isinstance(value, str):
+            if value.strip().lower() not in _TRUE_WORDS + _FALSE_WORDS:
+                _reject(name, declared, value,
+                        f"not a recognized boolean "
+                        f"(use one of {list(_TRUE_WORDS + _FALSE_WORDS)})")
+        elif not isinstance(value, (bool, int)):
+            _reject(name, declared, value, "not a boolean")
+
+    elif declared in ("list", "map"):
+        expected = list if declared == "list" else dict
+        if not isinstance(value, expected):
+            _reject(name, declared, value, f"not a {declared}")
+
+    coerced = _cast(value, declared_type)
+
+    # Final guarantee: the coerced value really is of the declared type.
+    # An unrecognized declared type (a workspace type, say) is left alone.
+    try:
+        valid = _validation_core(core).check(declared, coerced)
+    except Exception:
+        return coerced
+
+    if not valid:
+        _reject(name, declared, value,
+                f"resolved to {coerced!r}, which is not a valid {declared}")
+
+    return coerced
+
+
+def _resolve_value(value, params, overrides, core=None):
     if not isinstance(value, str):
         return value
     m = _FULL_PLACEHOLDER.match(value)
@@ -73,7 +188,7 @@ def _resolve_value(value, params, overrides):
         raw = overrides.get(pname, pdef.get("default"))
         if raw is None and "default" not in pdef:
             raise KeyError(f"parameter '{pname}' has no default and no override")
-        return _cast(raw, pdef.get("type"))
+        return _coerce(raw, pdef.get("type"), name=pname, core=core)
     if _INLINE_PLACEHOLDER.search(value):
         def repl(match):
             pname = match.group(1)
@@ -85,14 +200,19 @@ def _resolve_value(value, params, overrides):
     return value
 
 
-def substitute_parameters(state, params, overrides=None):
-    """Recursively substitute ``${name}`` placeholders. Returns a new structure."""
+def substitute_parameters(state, params, overrides=None, core=None):
+    """Recursively substitute ``${name}`` placeholders. Returns a new structure.
+
+    Each substituted value is type-checked against its declared parameter type
+    (see :func:`_coerce`); ``core`` is only needed to resolve a declared type
+    the base types do not cover.
+    """
     overrides = overrides or {}
     if isinstance(state, dict):
-        return {k: substitute_parameters(v, params, overrides) for k, v in state.items()}
+        return {k: substitute_parameters(v, params, overrides, core) for k, v in state.items()}
     if isinstance(state, list):
-        return [substitute_parameters(v, params, overrides) for v in state]
-    return _resolve_value(state, params, overrides)
+        return [substitute_parameters(v, params, overrides, core) for v in state]
+    return _resolve_value(state, params, overrides, core)
 
 
 def _resolve_builder(builder, module):
@@ -216,8 +336,8 @@ class CompositeSpec:
         self._merged_params(overrides)
         if self.kind == "spec":
             doc = {
-                "schema": substitute_parameters(self.schema, self.parameters, overrides),
-                "state": substitute_parameters(self.state, self.parameters, overrides),
+                "schema": substitute_parameters(self.schema, self.parameters, overrides, core),
+                "state": substitute_parameters(self.state, self.parameters, overrides, core),
             }
         else:
             fn = _resolve_builder(self.builder, self.module)
