@@ -160,6 +160,45 @@ def emitter_node_from_declaration(
     return node
 
 
+def _node_is_emitter(node, core=None):
+    '''True when ``node`` is an edge node that resolves to an Emitter.
+
+    Works on a *raw* document node (not yet realized): an already-built
+    ``instance`` that is an Emitter, an ``address`` the core resolves to an
+    Emitter subclass, or — as a last resort when no core is on hand — an
+    address whose class name ends in ``Emitter``.
+    '''
+    if not isinstance(node, dict) or node.get('_type') not in ('step', 'process', 'edge'):
+        return False
+    if isinstance(node.get('instance'), Emitter):
+        return True
+    address = node.get('address')
+    if not isinstance(address, str):
+        return False
+    name = address.split(':', 1)[-1]
+    registry = getattr(core, 'link_registry', None) if core is not None else None
+    if registry is not None:
+        cls = registry.get(name) or registry.get(name.rsplit('.', 1)[-1])
+        if isinstance(cls, type) and issubclass(cls, Emitter):
+            return True
+        if cls is not None:
+            return False
+    return name.rsplit('.', 1)[-1].endswith('Emitter')
+
+
+def document_has_emitter(state, core=None):
+    '''Recursively test whether a document ``state`` already contains an
+    emitter node (at any depth — e.g. one a builder nested inside an agent
+    sub-composite).'''
+    if _node_is_emitter(state, core):
+        return True
+    if isinstance(state, dict):
+        return any(document_has_emitter(v, core) for v in state.values())
+    if isinstance(state, (list, tuple)):
+        return any(document_has_emitter(v, core) for v in state)
+    return False
+
+
 def install_emitters(state, declarations, run_id=None, out_dir=None, core=None):
     '''Return a copy of ``state`` with the declared emitter(s) installed.
 
