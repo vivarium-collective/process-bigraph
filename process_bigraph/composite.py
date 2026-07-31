@@ -3132,4 +3132,18 @@ class Composite(Process):
 
         self.run(interval)
 
+        # A composite used as a node completes when its update returns, so
+        # this is where its completion-time outputs are produced: ask the
+        # emitters for their `results` handles and let them cross the bridge
+        # with everything else. That is what makes the outer network a
+        # higher-order DAG — the whole simulation is one node, and a flush
+        # step downstream of it depends on `results` as an ordinary edge.
+        if self.finalize():
+            # finalize writes straight into state, so it bypasses the
+            # apply_updates path that normally records bridge output — read
+            # the bridge once more so the handles reach the outer network.
+            completion = self.read_bridge()
+            if completion:
+                self.bridge_updates.append(completion)
+
         return self.bridge_updates

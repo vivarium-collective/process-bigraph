@@ -3272,3 +3272,189 @@ def test_gather_emitter_results_is_unchanged():
     assert rows[0]['level'] == 1.0
     # an emitter with no results wire finalizes harmlessly
     assert isinstance(sim.finalize()[('emitter',)], EmitterResults)
+
+
+# ==========================================
+# Layer 2b — the study as a higher-order DAG
+# ==========================================
+#
+# The flush entities are ORDINARY steps. What they depend on is the whole
+# simulation, as a single node. Because the sim's per-tick stepping happens
+# *inside* that node rather than in the outer network, the flush steps are
+# not siblings of the sim's internal steps — so ordinary producer/consumer
+# ordering fires them once, after the sim completes. No finalize marker, no
+# scheduler exclusion, no completion phase.
+
+SIM_TICKS = []
+FLUSH_FIRINGS = []
+
+
+class SimulationStep(Step):
+    """A whole simulation as ONE node of the outer step network.
+
+    Its `results` output is the emitter's handle, so a downstream flush step
+    depends on the simulation exactly the way one step depends on another.
+    """
+
+    config_schema = {'state': 'quote', 'runtime': 'float'}
+
+    def inputs(self):
+        return {}
+
+    def outputs(self):
+        return {'results': 'node'}
+
+    def update(self, state):
+        inner = Composite({'state': self.config['state']}, core=self.core)
+        inner.run(self.config['runtime'])
+        SIM_TICKS.append(inner.state['global_time'])
+        handles = inner.finalize()
+        return {'results': list(handles.values())[0]}
+
+
+class FlushStep(Step):
+    """A report card: an ordinary step that consumes `results`."""
+
+    config_schema = {}
+
+    def inputs(self):
+        return {'results': 'node'}
+
+    def outputs(self):
+        return {'rows': 'integer'}
+
+    def update(self, state):
+        handle = state.get('results')
+        FLUSH_FIRINGS.append(type(handle).__name__)
+        return {'rows': len(handle.resolve())
+                if isinstance(handle, EmitterResults) else -1}
+
+
+def _sim_state():
+    return {
+        'level': 1.0, 'results': {},
+        'model': {
+            '_type': 'process', 'address': 'local:IncreaseProcess',
+            'config': {'rate': 0.5}, 'interval': 1.0,
+            'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
+        'emitter': {
+            '_type': 'step', 'address': 'local:RAMEmitter',
+            'config': {'emit': {'level': 'node', 'global_time': 'node'}},
+            'inputs': {'level': ['level'], 'global_time': ['global_time']},
+            'outputs': {'results': ['results']}}}
+
+
+def _study_core_2b():
+    core = allocate_core()
+    core.register_link('SimulationStep', SimulationStep)
+    core.register_link('FlushStep', FlushStep)
+    return core
+
+
+def _study_state(runtime=4.0):
+    return {
+        'results': {}, 'rows': 0,
+        'sim': {
+            '_type': 'step', 'address': 'local:SimulationStep',
+            'config': {'state': _sim_state(), 'runtime': runtime},
+            'inputs': {}, 'outputs': {'results': ['results']}},
+        'flush': {
+            '_type': 'step', 'address': 'local:FlushStep',
+            'inputs': {'results': ['results']},
+            'outputs': {'rows': ['rows']}}}
+
+
+def test_the_study_is_a_higher_order_dag():
+    """The outer network is sim-node → results → flush, by ordinary
+    producer/consumer wiring."""
+    core = _study_core_2b()
+    study = Composite({'state': _study_state()}, core=core)
+
+    assert study.step_dependencies[('sim',)]['output_paths'] == [('results',)]
+    assert study.step_dependencies[('flush',)]['input_paths'] == [('results',)]
+    # the simulation's own processes are inside the node, not in this network
+    assert list(study.process_paths) == []
+
+
+def test_a_flush_step_fires_exactly_once_after_the_simulation():
+    """The proof: zero firings while the simulation steps internally, one
+    firing after it completes — with the real handle."""
+    SIM_TICKS.clear()
+    FLUSH_FIRINGS.clear()
+
+    core = _study_core_2b()
+    study = Composite({'state': _study_state(runtime=4.0)}, core=core)
+    study.run(0.0)
+
+    # the simulation really did step internally
+    assert SIM_TICKS == [4.0]
+
+    # ...and the flush fired once, not once per inner tick
+    assert FLUSH_FIRINGS == ['EmitterResults']
+    assert study.state['rows'] > 1
+
+
+def test_the_flush_step_reads_the_resolved_handle():
+    FLUSH_FIRINGS.clear()
+
+    core = _study_core_2b()
+    study = Composite({'state': _study_state(runtime=4.0)}, core=core)
+    study.run(0.0)
+
+    handle = study.state['results']
+    assert isinstance(handle, EmitterResults)
+    assert study.state['rows'] == len(handle.resolve()) == handle.count
+
+
+def test_a_longer_simulation_does_not_fire_the_flush_more():
+    """The flush count is independent of how many ticks the simulation
+    takes — that is what "the sim is one node" buys."""
+    for runtime in (2.0, 8.0, 20.0):
+        SIM_TICKS.clear()
+        FLUSH_FIRINGS.clear()
+
+        core = _study_core_2b()
+        study = Composite({'state': _study_state(runtime=runtime)}, core=core)
+        study.run(0.0)
+
+        assert SIM_TICKS == [runtime]
+        assert FLUSH_FIRINGS == ['EmitterResults'], (
+            f'runtime={runtime} fired {len(FLUSH_FIRINGS)} times')
+
+
+def test_several_flush_steps_all_fire_once():
+    """Viz, analyses and report cards are just more consumers of the same
+    handle."""
+    FLUSH_FIRINGS.clear()
+
+    core = _study_core_2b()
+    state = _study_state()
+    for name in ('viz', 'analysis'):
+        state[f'{name}_rows'] = 0
+        state[name] = {
+            '_type': 'step', 'address': 'local:FlushStep',
+            'inputs': {'results': ['results']},
+            'outputs': {'rows': [f'{name}_rows']}}
+
+    study = Composite({'state': state}, core=core)
+    study.run(0.0)
+
+    assert len(FLUSH_FIRINGS) == 3               # flush + viz + analysis
+    assert set(FLUSH_FIRINGS) == {'EmitterResults'}
+    assert study.state['viz_rows'] == study.state['analysis_rows']
+
+
+def test_results_cross_a_composite_bridge():
+    """A composite used as a node surfaces its `results` across the bridge:
+    its update completes, so its completion-time outputs are produced."""
+    core = allocate_core()
+    inner = _sim_state()
+
+    node = Composite(
+        {'state': inner, 'bridge': {'outputs': {'results': ['results']}}},
+        core=core)
+    node.update({}, 4.0)
+
+    handle = node.read_bridge()['results']
+    assert isinstance(handle, EmitterResults)
+    assert len(handle.resolve()) == handle.count
