@@ -5491,6 +5491,13 @@ GOLDEN_ADDRESSES = [
     # key order must not matter: canonical() sorts keys
     (('study', {'b': 2, 'a': 1}, [], ''), 'a70c18c5c80eb729'),
     (('study', {'a': 1, 'b': 2}, [], ''), 'a70c18c5c80eb729'),
+    # spelling must not matter: a whole float and its int are one address.
+    # These two constants are the value the INT spelling always had — the
+    # float spelling moved onto it, so the vectors above are unchanged and
+    # only float-spelled configs were re-keyed.
+    (('study', {'seed': 1}, [], ''), '7cfd48d2cf54e4b6'),
+    (('study', {'seed': 1.0}, [], ''), '7cfd48d2cf54e4b6'),
+    (('study', {'n': [1.0, 2, 3.5]}, [], ''), '66e1fbdc641f035a'),
 ]
 
 
@@ -5521,31 +5528,87 @@ def test_canonical_json_is_stable():
     assert canonical({'rate': 0.5}) == '{"rate":0.5}'
 
 
-def test_int_and_whole_float_are_DIFFERENT_addresses():
-    """A known hazard, pinned so it stays visible.
+def test_int_and_whole_float_are_the_same_address():
+    """`1` and `1.0` are the same number, so they are the same artifact.
 
-    `canonical` passes `_stable` as json's `default=` hook, which reads as
-    "narrow whole floats to ints so 1 and 1.0 address the same". It does not
-    do that: `default=` is consulted only for types json *cannot* serialize,
-    and a float is serializable, so `_stable` never sees one. The narrowing
-    has never happened.
+    They were not. `canonical` passed `_stable` as json's `default=` hook,
+    which reads as "narrow whole floats to ints" but never ran: `default=` is
+    consulted only for types json *cannot* serialize, and a float is
+    serializable. So a config carrying `seed: 1` from YAML and `seed: 1.0`
+    after a float-typed parameter pass addressed two different artifacts for
+    the same study — a silent cache miss and a duplicate recompute, on the
+    exact path content-addressing exists to prevent.
 
-    The consequence is real: a config carrying `seed: 1` from YAML and
-    `seed: 1.0` after a float-typed parameter pass addresses two different
-    artifacts for the same study — a silent cache miss and a duplicate
-    recompute, in both this copy and the workbench's.
-
-    This test asserts the CURRENT behaviour on purpose. Fixing it is a wire
-    format change that orphans every stored artifact, so it needs a
-    migration, not a patch.
+    The narrowing is now a pre-walk, which is the only place it can work.
     """
     from process_bigraph.artifacts import artifact_id, canonical
 
-    assert canonical({'seed': 1.0}) != canonical({'seed': 1})
+    assert canonical({'seed': 1.0}) == canonical({'seed': 1}) == '{"seed":1}'
     assert (artifact_id(composite_id='s', config={'seed': 1.0},
                         input_ids=[], commit='')
-            != artifact_id(composite_id='s', config={'seed': 1},
+            == artifact_id(composite_id='s', config={'seed': 1},
                            input_ids=[], commit=''))
+
+
+def test_narrowing_reaches_nested_values():
+    """A config is a tree, and the spelling must not matter anywhere in it."""
+    from process_bigraph.artifacts import canonical, narrow_whole_floats
+
+    assert narrow_whole_floats({'a': [1.0, {'b': 2.0}]}) == {'a': [1, {'b': 2}]}
+    assert canonical({'x': {'y': [1.0, 2.5]}}) == '{"x":{"y":[1,2.5]}}'
+
+
+def test_narrowing_leaves_everything_else_alone():
+    """Only whole floats move.
+
+    `bool` is the one that would bite: it is an `int` subclass, so narrowing
+    it would erase the difference between `True` and `1` — a widening the
+    address must not perform. Non-whole floats and the infinities are not
+    whole, so they are untouched by construction.
+    """
+    from process_bigraph.artifacts import canonical, narrow_whole_floats
+
+    assert narrow_whole_floats(True) is True
+    assert narrow_whole_floats(False) is False
+    assert canonical({'flag': True, 'one': 1}) == '{"flag":true,"one":1}'
+    assert canonical({'rate': 0.5}) == '{"rate":0.5}'
+    assert narrow_whole_floats('1.0') == '1.0'
+    assert narrow_whole_floats(float('inf')) == float('inf')
+
+
+def test_the_fix_only_moves_float_spelled_configs():
+    """The migration rule, asserted rather than described.
+
+        artifact_id(config) == legacy_artifact_id(narrow_whole_floats(config))
+
+    A float-spelled config's artifact moves onto the address its int-spelled
+    twin already had — the two spellings converge on the one that was always
+    correct, and no third address is invented. Any config with no whole float
+    keeps its address unchanged, so the migration is a targeted rename, not a
+    rehash of every store.
+    """
+    from process_bigraph.artifacts import (
+        artifact_id, legacy_artifact_id, narrow_whole_floats)
+
+    unchanged = [{}, {'seed': 0}, {'rate': 0.5}, {'s': 'x'}, {'flag': True}]
+    moved = [{'seed': 1.0}, {'a': 1, 'b': 2.0}, {'n': [1.0, 2, 3.5]},
+             {'d': {'k': 4.0}}, {'z': 0.0}]
+
+    def new(config):
+        return artifact_id(composite_id='s', config=config,
+                           input_ids=[], commit='c')
+
+    def old(config):
+        return legacy_artifact_id(composite_id='s', config=config,
+                                  input_ids=[], commit='c')
+
+    for config in unchanged:
+        assert new(config) == old(config), f'{config} should not have moved'
+
+    for config in moved:
+        assert new(config) != old(config), f'{config} should have moved'
+        # ...and it moved onto the address the int spelling already had
+        assert new(config) == old(narrow_whole_floats(config))
 
 
 def test_artifact_id_is_sensitive_to_every_input():
