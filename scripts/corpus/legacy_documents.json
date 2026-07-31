@@ -1,0 +1,10478 @@
+{
+ "adaptive-chemotaxis.composite.yaml": {
+  "schema": {
+   "agents": "tree"
+  },
+  "state": {
+   "agents": {},
+   "chemotaxis": {
+    "_type": "process",
+    "address": "local:Chemotaxis",
+    "config": {
+     "chemotactic": true,
+     "seed": 0
+    },
+    "inputs": {
+     "agents": [
+      "agents"
+     ],
+     "mean_nutrient": [
+      "mean_nutrient"
+     ],
+     "n_alive": [
+      "n_alive"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "agents": [
+      "agents"
+     ],
+     "mean_nutrient": [
+      "mean_nutrient"
+     ],
+     "n_alive": [
+      "n_alive"
+     ]
+    }
+   },
+   "mean_nutrient": 0.0,
+   "n_alive": 80.0
+  }
+ },
+ "anisotropic.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Anisotropic": {
+    "_type": "step",
+    "address": "local:AnisotropicTension",
+    "config": {
+     "axes": [
+      "x",
+      "y"
+     ],
+     "tension_values": [
+      0.0,
+      0.2
+     ]
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ]
+    },
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ]
+    }
+   },
+   "Behaviors": {},
+   "Network Changed": false,
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/test_square.hf5",
+     "factory": "model_factory",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "name": "Test Square",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "is_alive": 1.0,
+       "migration_strength": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.1,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "mx": 1.0,
+       "my": 1.0,
+       "mz": 0.0,
+       "perimeter_elasticity": 0.1,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.4
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "base_solver.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity",
+      "VesselSurfaceElasticity"
+     ],
+     "eptm": "workspace/datasets/test_cylinder.hf5",
+     "factory": "model_factory",
+     "geom": "VesselGeometry",
+     "maps": {},
+     "name": "Test Cylinder",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "perimeter_elasticity": 0.5,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.5
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "prefered_radius": 2.5,
+       "vessel_elasticity": 1.0,
+       "viscosity": 0.1
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "baseline.composite.json": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "level": "float"
+     }
+    },
+    "inputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    }
+   },
+   "increase": {
+    "_type": "process",
+    "address": "local:IncreaseProcess",
+    "config": {
+     "rate": 2.0
+    },
+    "inputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    }
+   },
+   "stores": {
+    "level": 1.0
+   }
+  }
+ },
+ "baseline.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "level": "float"
+     }
+    },
+    "inputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    }
+   },
+   "increase": {
+    "_type": "process",
+    "address": "local:IncreaseProcess",
+    "config": {
+     "rate": 2.0
+    },
+    "inputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    }
+   },
+   "stores": {
+    "level": 1.0
+   }
+  }
+ },
+ "bond-network-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "caspule": {
+    "_type": "process",
+    "address": "local:CASPULEProcess",
+    "config": {
+     "cluster_max_atoms": 200000,
+     "input_script": "units lj\natom_style bond\nboundary p p p\nneighbor 0.4 bin\nneigh_modify every 1 delay 0\nregion box block 0 8 0 8 0 8\ncreate_box 1 box bond/types 1 extra/bond/per/atom 4\nmass 1 1.0\ncreate_atoms 1 single 1.0 4.0 4.0\ncreate_atoms 1 single 2.0 4.0 4.0\ncreate_atoms 1 single 3.0 4.0 4.0\ncreate_bonds single/bond 1 1 2\ncreate_bonds single/bond 1 2 3\npair_style lj/cut 1.5\npair_coeff * * 1.0 1.0 1.5\nbond_style harmonic\nbond_coeff 1 100.0 1.0\nfix nve all nve\nfix lan all langevin 0.4 0.4 1.0 12345\ntimestep 0.005\nthermo 1\n"
+    },
+    "inputs": {
+     "atoms_to_remove": [
+      "stores",
+      "atoms_to_remove"
+     ]
+    },
+    "interval": 0.05,
+    "outputs": {
+     "atom_types": [
+      "stores",
+      "atom_types"
+     ],
+     "bond_energy": [
+      "stores",
+      "bond_energy"
+     ],
+     "bonds": [
+      "stores",
+      "bonds"
+     ],
+     "num_bonds": [
+      "stores",
+      "num_bonds"
+     ],
+     "positions": [
+      "stores",
+      "positions"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "bond_energy": "float",
+      "num_bonds": "integer",
+      "temperature": "float",
+      "total_energy": "float"
+     }
+    },
+    "inputs": {
+     "bond_energy": [
+      "stores",
+      "bond_energy"
+     ],
+     "num_bonds": [
+      "stores",
+      "num_bonds"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ]
+    }
+   },
+   "stores": {
+    "atom_types": [],
+    "atoms_to_remove": [],
+    "bond_energy": 0.0,
+    "bonds": [],
+    "num_bonds": 0,
+    "positions": [],
+    "temperature": 0.0,
+    "total_energy": 0.0,
+    "viz_3d_html": "",
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:BondNetworkPlots",
+    "config": {
+     "title": "CASPULE bond network"
+    },
+    "inputs": {
+     "bond_energy": [
+      "stores",
+      "bond_energy"
+     ],
+     "num_bonds": [
+      "stores",
+      "num_bonds"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "viz_bond_3d": {
+    "_type": "step",
+    "address": "local:BondNetwork3D",
+    "config": {
+     "title": "CASPULE atoms and bonds"
+    },
+    "inputs": {
+     "bonds": [
+      "stores",
+      "bonds"
+     ],
+     "positions": [
+      "stores",
+      "positions"
+     ],
+     "types": [
+      "stores",
+      "atom_types"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_3d_html"
+     ]
+    }
+   }
+  }
+ },
+ "bond-network-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "caspule": {
+    "_type": "process",
+    "address": "local:CASPULEProcess",
+    "config": {
+     "input_script": "units lj\natom_style bond\nboundary p p p\nneighbor 0.4 bin\nneigh_modify every 1 delay 0\nregion box block 0 8 0 8 0 8\ncreate_box 1 box bond/types 1 extra/bond/per/atom 4\nmass 1 1.0\ncreate_atoms 1 single 1.0 4.0 4.0\ncreate_atoms 1 single 2.0 4.0 4.0\ncreate_atoms 1 single 3.0 4.0 4.0\ncreate_bonds single/bond 1 1 2\ncreate_bonds single/bond 1 2 3\npair_style lj/cut 1.5\npair_coeff * * 1.0 1.0 1.5\nbond_style harmonic\nbond_coeff 1 100.0 1.0\nfix nve all nve\nfix lan all langevin 0.4 0.4 1.0 12345\ntimestep 0.005\nthermo 1\n"
+    },
+    "inputs": {
+     "atoms_to_remove": [
+      "stores",
+      "atoms_to_remove"
+     ]
+    },
+    "interval": 0.05,
+    "outputs": {
+     "atom_types": [
+      "stores",
+      "atom_types"
+     ],
+     "bond_energy": [
+      "stores",
+      "bond_energy"
+     ],
+     "bonds": [
+      "stores",
+      "bonds"
+     ],
+     "num_bonds": [
+      "stores",
+      "num_bonds"
+     ],
+     "positions": [
+      "stores",
+      "positions"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "bond_energy": "float",
+      "num_bonds": "integer",
+      "temperature": "float",
+      "total_energy": "float"
+     }
+    },
+    "inputs": {
+     "bond_energy": [
+      "stores",
+      "bond_energy"
+     ],
+     "num_bonds": [
+      "stores",
+      "num_bonds"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ]
+    }
+   },
+   "stores": {
+    "atom_types": [],
+    "atoms_to_remove": [],
+    "bond_energy": 0.0,
+    "bonds": [],
+    "num_bonds": 0,
+    "positions": [],
+    "temperature": 0.0,
+    "total_energy": 0.0,
+    "viz_3d_html": "",
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:BondNetworkPlots",
+    "config": {
+     "title": "CASPULE bond network"
+    },
+    "inputs": {
+     "bond_energy": [
+      "stores",
+      "bond_energy"
+     ],
+     "num_bonds": [
+      "stores",
+      "num_bonds"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "viz_bond_3d": {
+    "_type": "step",
+    "address": "local:BondNetwork3D",
+    "config": {
+     "title": "CASPULE atoms and bonds"
+    },
+    "inputs": {
+     "bonds": [
+      "stores",
+      "bonds"
+     ],
+     "positions": [
+      "stores",
+      "positions"
+     ],
+     "types": [
+      "stores",
+      "atom_types"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_3d_html"
+     ]
+    }
+   }
+  }
+ },
+ "bubble-column-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "biomass": "float",
+      "co2_evolution_rate": "float",
+      "dissolved_co2": "float",
+      "dissolved_o2": "float",
+      "gas_holdup": "float",
+      "kla_o2": "float",
+      "o2_uptake_rate": "float",
+      "specific_growth_rate": "float"
+     }
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "co2_evolution_rate": [
+      "stores",
+      "co2_evolution_rate"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_holdup": [
+      "stores",
+      "gas_holdup"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_uptake_rate": [
+      "stores",
+      "o2_uptake_rate"
+     ],
+     "specific_growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ]
+    }
+   },
+   "reactor": {
+    "_type": "process",
+    "address": "local:BiRDReactorProcess",
+    "config": {
+     "co2_fraction_inlet": 0.0004,
+     "diameter_m": 0.2,
+     "gas_flow_rate_Lpm": 1.0,
+     "initial_biomass_gL": 0.5,
+     "initial_dco2_mgL": 0.5,
+     "initial_do_mgL": 8.0,
+     "ks_oxygen_mgL": 0.2,
+     "liquid_height_m": 0.5,
+     "maintenance_coeff_per_h": 0.01,
+     "max_growth_rate_per_h": 0.4,
+     "mean_bubble_diameter_mm": 3.0,
+     "o2_fraction_inlet": 0.21,
+     "pressure_atm": 1.0,
+     "reactor_type": "bubble_column",
+     "respiratory_quotient": 1.0,
+     "temperature_K": 298.15,
+     "volume_L": 20.0,
+     "yield_biomass_o2": 1.2
+    },
+    "inputs": {
+     "gas_flow_rate_Lpm": [
+      "stores",
+      "gas_flow_rate_Lpm"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "bubble_diameter_mm": [
+      "stores",
+      "bubble_diameter_mm"
+     ],
+     "co2_evolution_rate": [
+      "stores",
+      "co2_evolution_rate"
+     ],
+     "co2_saturation": [
+      "stores",
+      "co2_saturation"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_holdup": [
+      "stores",
+      "gas_holdup"
+     ],
+     "kla_co2": [
+      "stores",
+      "kla_co2"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_saturation": [
+      "stores",
+      "o2_saturation"
+     ],
+     "o2_uptake_rate": [
+      "stores",
+      "o2_uptake_rate"
+     ],
+     "specific_growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ],
+     "superficial_gas_velocity": [
+      "stores",
+      "superficial_gas_velocity"
+     ]
+    }
+   },
+   "stores": {
+    "biomass": 0.0,
+    "bubble_diameter_mm": 0.0,
+    "co2_evolution_rate": 0.0,
+    "co2_saturation": 0.0,
+    "dissolved_co2": 0.0,
+    "dissolved_o2": 0.0,
+    "gas_flow_rate_Lpm": 1.0,
+    "gas_holdup": 0.0,
+    "kla_co2": 0.0,
+    "kla_o2": 0.0,
+    "o2_saturation": 0.0,
+    "o2_uptake_rate": 0.0,
+    "specific_growth_rate": 0.0,
+    "superficial_gas_velocity": 0.0
+   }
+  }
+ },
+ "bubble-column-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "biomass": "float",
+      "co2_evolution_rate": "float",
+      "dissolved_co2": "float",
+      "dissolved_o2": "float",
+      "gas_holdup": "float",
+      "kla_o2": "float",
+      "o2_uptake_rate": "float",
+      "specific_growth_rate": "float"
+     }
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "co2_evolution_rate": [
+      "stores",
+      "co2_evolution_rate"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_holdup": [
+      "stores",
+      "gas_holdup"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_uptake_rate": [
+      "stores",
+      "o2_uptake_rate"
+     ],
+     "specific_growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ]
+    }
+   },
+   "reactor": {
+    "_type": "process",
+    "address": "local:BiRDReactorProcess",
+    "config": {
+     "co2_fraction_inlet": 0.0004,
+     "diameter_m": 0.2,
+     "gas_flow_rate_Lpm": 1.0,
+     "initial_biomass_gL": 0.5,
+     "initial_dco2_mgL": 0.5,
+     "initial_do_mgL": 8.0,
+     "ks_oxygen_mgL": 0.2,
+     "liquid_height_m": 0.5,
+     "maintenance_coeff_per_h": 0.01,
+     "max_growth_rate_per_h": 0.4,
+     "mean_bubble_diameter_mm": 3.0,
+     "o2_fraction_inlet": 0.21,
+     "pressure_atm": 1.0,
+     "reactor_type": "bubble_column",
+     "respiratory_quotient": 1.0,
+     "temperature_K": 298.15,
+     "volume_L": 20.0,
+     "yield_biomass_o2": 1.2
+    },
+    "inputs": {
+     "gas_flow_rate_Lpm": [
+      "stores",
+      "gas_flow_rate_Lpm"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "bubble_diameter_mm": [
+      "stores",
+      "bubble_diameter_mm"
+     ],
+     "co2_evolution_rate": [
+      "stores",
+      "co2_evolution_rate"
+     ],
+     "co2_saturation": [
+      "stores",
+      "co2_saturation"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_holdup": [
+      "stores",
+      "gas_holdup"
+     ],
+     "kla_co2": [
+      "stores",
+      "kla_co2"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_saturation": [
+      "stores",
+      "o2_saturation"
+     ],
+     "o2_uptake_rate": [
+      "stores",
+      "o2_uptake_rate"
+     ],
+     "specific_growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ],
+     "superficial_gas_velocity": [
+      "stores",
+      "superficial_gas_velocity"
+     ]
+    }
+   },
+   "stores": {
+    "biomass": 0.0,
+    "bubble_diameter_mm": 0.0,
+    "co2_evolution_rate": 0.0,
+    "co2_saturation": 0.0,
+    "dissolved_co2": 0.0,
+    "dissolved_o2": 0.0,
+    "gas_flow_rate_Lpm": 1.0,
+    "gas_holdup": 0.0,
+    "kla_co2": 0.0,
+    "kla_o2": 0.0,
+    "o2_saturation": 0.0,
+    "o2_uptake_rate": 0.0,
+    "specific_growth_rate": 0.0,
+    "superficial_gas_velocity": 0.0,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:BioreactorPlots",
+    "config": {
+     "title": "BiRD bubble-column bioreactor"
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "cell-sorting-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "cc3d": {
+    "_type": "process",
+    "address": "local:CompuCell3DProcess",
+    "config": {
+     "blob_radius": 12,
+     "cell_width": 4,
+     "contact_medium_t1": 16.0,
+     "contact_medium_t2": 16.0,
+     "contact_t1_t1": 2.0,
+     "contact_t1_t2": 11.0,
+     "contact_t2_t2": 16.0,
+     "dim_x": 60,
+     "dim_y": 60,
+     "fluctuation_amplitude": 10.0,
+     "lambda_volume": 2.0,
+     "mcs_per_step": 50,
+     "target_volume": 25
+    },
+    "inputs": {},
+    "interval": 50.0,
+    "outputs": {
+     "avg_surface": [
+      "stores",
+      "avg_surface"
+     ],
+     "avg_volume": [
+      "stores",
+      "avg_volume"
+     ],
+     "mcs": [
+      "stores",
+      "mcs"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "type_1_count": [
+      "stores",
+      "type_1_count"
+     ],
+     "type_2_count": [
+      "stores",
+      "type_2_count"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "avg_surface": "float",
+      "avg_volume": "float",
+      "mcs": "integer",
+      "n_cells": "integer",
+      "type_1_count": "integer",
+      "type_2_count": "integer"
+     }
+    },
+    "inputs": {
+     "avg_surface": [
+      "stores",
+      "avg_surface"
+     ],
+     "avg_volume": [
+      "stores",
+      "avg_volume"
+     ],
+     "mcs": [
+      "stores",
+      "mcs"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "type_1_count": [
+      "stores",
+      "type_1_count"
+     ],
+     "type_2_count": [
+      "stores",
+      "type_2_count"
+     ]
+    }
+   },
+   "stores": {
+    "avg_surface": 0.0,
+    "avg_volume": 0.0,
+    "mcs": 0,
+    "n_cells": 0,
+    "type_1_count": 0,
+    "type_2_count": 0
+   }
+  }
+ },
+ "cell-sorting-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "cc3d": {
+    "_type": "process",
+    "address": "local:CompuCell3DProcess",
+    "config": {
+     "blob_radius": 12,
+     "cell_width": 4,
+     "contact_medium_t1": 16.0,
+     "contact_medium_t2": 16.0,
+     "contact_t1_t1": 2.0,
+     "contact_t1_t2": 11.0,
+     "contact_t2_t2": 16.0,
+     "dim_x": 60,
+     "dim_y": 60,
+     "fluctuation_amplitude": 10.0,
+     "lambda_volume": 2.0,
+     "mcs_per_step": 50,
+     "target_volume": 25
+    },
+    "inputs": {},
+    "interval": 50.0,
+    "outputs": {
+     "avg_surface": [
+      "stores",
+      "avg_surface"
+     ],
+     "avg_volume": [
+      "stores",
+      "avg_volume"
+     ],
+     "mcs": [
+      "stores",
+      "mcs"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "type_1_count": [
+      "stores",
+      "type_1_count"
+     ],
+     "type_2_count": [
+      "stores",
+      "type_2_count"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "avg_surface": "float",
+      "avg_volume": "float",
+      "mcs": "integer",
+      "n_cells": "integer",
+      "type_1_count": "integer",
+      "type_2_count": "integer"
+     }
+    },
+    "inputs": {
+     "avg_surface": [
+      "stores",
+      "avg_surface"
+     ],
+     "avg_volume": [
+      "stores",
+      "avg_volume"
+     ],
+     "mcs": [
+      "stores",
+      "mcs"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "type_1_count": [
+      "stores",
+      "type_1_count"
+     ],
+     "type_2_count": [
+      "stores",
+      "type_2_count"
+     ]
+    }
+   },
+   "stores": {
+    "avg_surface": 0.0,
+    "avg_volume": 0.0,
+    "mcs": 0,
+    "n_cells": 0,
+    "type_1_count": 0,
+    "type_2_count": 0,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:CellSortingPlots",
+    "config": {
+     "title": "CompuCell3D cell sorting"
+    },
+    "inputs": {
+     "avg_surface": [
+      "stores",
+      "avg_surface"
+     ],
+     "avg_volume": [
+      "stores",
+      "avg_volume"
+     ],
+     "mcs": [
+      "stores",
+      "mcs"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "type_1_count": [
+      "stores",
+      "type_1_count"
+     ],
+     "type_2_count": [
+      "stores",
+      "type_2_count"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "coupled_reactor_cell.composite.yaml": {
+  "schema": {},
+  "state": {
+   "cell": {
+    "_type": "process",
+    "address": "local:MonodCellProcess",
+    "config": {
+     "growth_enabled": false,
+     "initial_biomass_gL": 5.0,
+     "ks_oxygen_mgL": 0.2,
+     "maintenance_coeff_per_h": 0.01,
+     "max_growth_rate_per_h": 0.4,
+     "respiratory_quotient": 1.0,
+     "yield_biomass_o2": 1.2
+    },
+    "inputs": {
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "cell_mass": [
+      "stores",
+      "cell_mass"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "external_exchange_fluxes": [
+      "stores",
+      "external_exchange_fluxes"
+     ],
+     "growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ],
+     "o2_exchange_delta": [
+      "stores",
+      "o2_exchange_delta"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "biomass": "float",
+      "cell_mass": "float",
+      "dissolved_co2": "float",
+      "dissolved_o2": "float",
+      "kla_o2": "float",
+      "o2_exchange_delta": "float",
+      "o2_transport_delta": "float",
+      "specific_growth_rate": "float",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "cell_mass": [
+      "stores",
+      "cell_mass"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_exchange_delta": [
+      "stores",
+      "o2_exchange_delta"
+     ],
+     "o2_transport_delta": [
+      "stores",
+      "o2_transport_delta"
+     ],
+     "specific_growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ],
+     "time": [
+      "global_time"
+     ]
+    }
+   },
+   "stores": {
+    "biomass": 5.0,
+    "dissolved_co2": 0.5,
+    "dissolved_o2": 8.0,
+    "gas_flow_rate_Lpm": 1.0,
+    "glucose": 10.0
+   },
+   "transport": {
+    "_type": "process",
+    "address": "local:BiRDTransportProcess",
+    "config": {
+     "co2_fraction_inlet": 0.0004,
+     "diameter_m": 0.2,
+     "gas_flow_rate_Lpm": 1.0,
+     "impeller_power_W": 0.0,
+     "mean_bubble_diameter_mm": 3.0,
+     "o2_fraction_inlet": 0.21,
+     "pressure_atm": 1.0,
+     "reactor_type": "bubble_column",
+     "temperature_K": 298.15,
+     "volume_L": 20.0
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_flow_rate_Lpm": [
+      "stores",
+      "gas_flow_rate_Lpm"
+     ],
+     "glucose": [
+      "stores",
+      "glucose"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "co2_transport_delta": [
+      "stores",
+      "co2_transport_delta"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_holdup": [
+      "stores",
+      "gas_holdup"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_saturation": [
+      "stores",
+      "o2_saturation"
+     ],
+     "o2_transport_delta": [
+      "stores",
+      "o2_transport_delta"
+     ]
+    }
+   }
+  }
+ },
+ "decay-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "rates": "map[float]",
+      "species": "map[float]",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "rates": [
+      "stores",
+      "rates"
+     ],
+     "species": [
+      "stores",
+      "species"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "stores": {
+    "parameters": {},
+    "rates": {},
+    "species": {},
+    "time": 0.0
+   },
+   "tellurium": {
+    "_type": "process",
+    "address": "local:TelluriumProcess",
+    "config": {
+     "integrator": "cvode",
+     "model": "model decay\n  S1 = 10; S2 = 0\n  S1 -> S2; k*S1; k = 0.3\nend\n",
+     "model_format": "antimony",
+     "parameter_overrides": {
+      "k": 0.3
+     },
+     "species_overrides": {
+      "S1": 10.0
+     }
+    },
+    "inputs": {},
+    "interval": 1.0,
+    "outputs": {
+     "parameters": [
+      "stores",
+      "parameters"
+     ],
+     "rates": [
+      "stores",
+      "rates"
+     ],
+     "species": [
+      "stores",
+      "species"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   }
+  }
+ },
+ "decay-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "rates": "map[float]",
+      "species": "map[float]",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "rates": [
+      "stores",
+      "rates"
+     ],
+     "species": [
+      "stores",
+      "species"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "stores": {
+    "parameters": {},
+    "rates": {},
+    "species": {},
+    "time": 0.0,
+    "viz_html": ""
+   },
+   "tellurium": {
+    "_type": "process",
+    "address": "local:TelluriumProcess",
+    "config": {
+     "integrator": "cvode",
+     "model": "model decay\n  S1 = 10; S2 = 0\n  S1 -> S2; k*S1; k = 0.3\nend\n",
+     "model_format": "antimony"
+    },
+    "inputs": {},
+    "interval": 1.0,
+    "outputs": {
+     "parameters": [
+      "stores",
+      "parameters"
+     ],
+     "rates": [
+      "stores",
+      "rates"
+     ],
+     "species": [
+      "stores",
+      "species"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:SpeciesTimeSeriesPlots",
+    "config": {
+     "title": "Tellurium decay (S1 -> S2)"
+    },
+    "inputs": {
+     "species": [
+      "stores",
+      "species"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "dfba-textbook-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "community": {
+    "_type": "process",
+    "address": "local:DynamicFBAProcess",
+    "config": {
+     "initial_biomass": [
+      0.001
+     ],
+     "initial_media": {
+      "ac": 0.0,
+      "co2": 1000.0,
+      "glc__D": 10.0,
+      "h": 1000.0,
+      "h2o": 1000.0,
+      "nh4": 1000.0,
+      "o2": 40.0,
+      "pi": 1000.0
+     },
+     "model_ids": [
+      "Ecoli"
+     ],
+     "models": [
+      "textbook"
+     ],
+     "substep": 0.2
+    },
+    "inputs": {},
+    "interval": 1.0,
+    "outputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "growth_rates": [
+      "stores",
+      "growth_rates"
+     ],
+     "media": [
+      "stores",
+      "media"
+     ],
+     "total_biomass": [
+      "stores",
+      "total_biomass"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "biomass": "map[float]",
+      "growth_rates": "map[float]",
+      "media": "map[float]",
+      "time": "float",
+      "total_biomass": "float"
+     }
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "growth_rates": [
+      "stores",
+      "growth_rates"
+     ],
+     "media": [
+      "stores",
+      "media"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_biomass": [
+      "stores",
+      "total_biomass"
+     ]
+    }
+   },
+   "stores": {
+    "biomass": {},
+    "growth_rates": {},
+    "media": {},
+    "total_biomass": 0.0
+   }
+  }
+ },
+ "dfba-textbook-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "community": {
+    "_type": "process",
+    "address": "local:DynamicFBAProcess",
+    "config": {
+     "initial_biomass": [
+      0.001
+     ],
+     "initial_media": {
+      "ac": 0.0,
+      "co2": 1000.0,
+      "glc__D": 10.0,
+      "h": 1000.0,
+      "h2o": 1000.0,
+      "nh4": 1000.0,
+      "o2": 40.0,
+      "pi": 1000.0
+     },
+     "model_ids": [
+      "Ecoli"
+     ],
+     "models": [
+      "textbook"
+     ],
+     "substep": 0.2
+    },
+    "inputs": {},
+    "interval": 1.0,
+    "outputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "growth_rates": [
+      "stores",
+      "growth_rates"
+     ],
+     "media": [
+      "stores",
+      "media"
+     ],
+     "total_biomass": [
+      "stores",
+      "total_biomass"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "biomass": "map[float]",
+      "growth_rates": "map[float]",
+      "media": "map[float]",
+      "time": "float",
+      "total_biomass": "float"
+     }
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "growth_rates": [
+      "stores",
+      "growth_rates"
+     ],
+     "media": [
+      "stores",
+      "media"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_biomass": [
+      "stores",
+      "total_biomass"
+     ]
+    }
+   },
+   "stores": {
+    "biomass": {},
+    "growth_rates": {},
+    "media": {},
+    "total_biomass": 0.0,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:DynamicFBAPlots",
+    "config": {
+     "title": "COMETS dynamic FBA"
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "growth_rates": [
+      "stores",
+      "growth_rates"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_biomass": [
+      "stores",
+      "total_biomass"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "diffusion-reaction-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "molecule_counts": "map[integer]",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "molecule_counts": [
+      "stores",
+      "molecule_counts"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "smoldyn": {
+    "_type": "process",
+    "address": "local:SmoldynProcess",
+    "config": {
+     "boundary_type": "r",
+     "bounds": [
+      [
+       0,
+       100
+      ],
+      [
+       0,
+       100
+      ]
+     ],
+     "dimensions": 2,
+     "dt": 0.01,
+     "reactions": [
+      {
+       "name": "convert",
+       "prds": [
+        "B"
+       ],
+       "rate": 0.01,
+       "subs": [
+        "A"
+       ]
+      }
+     ],
+     "seed": 12345,
+     "species": {
+      "A": {
+       "color": "red",
+       "count": 200,
+       "difc": 1.0,
+       "display_size": 3
+      },
+      "B": {
+       "color": "blue",
+       "count": 0,
+       "difc": 0.3,
+       "display_size": 3
+      }
+     }
+    },
+    "inputs": {},
+    "interval": 5.0,
+    "outputs": {
+     "molecule_counts": [
+      "stores",
+      "molecule_counts"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "stores": {
+    "molecule_counts": {},
+    "time": 0.0
+   }
+  }
+ },
+ "diffusion-reaction-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "molecule_counts": "map[integer]",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "molecule_counts": [
+      "stores",
+      "molecule_counts"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "smoldyn": {
+    "_type": "process",
+    "address": "local:SmoldynProcess",
+    "config": {
+     "boundary_type": "r",
+     "bounds": [
+      [
+       0,
+       100
+      ],
+      [
+       0,
+       100
+      ]
+     ],
+     "dimensions": 2,
+     "dt": 0.01,
+     "reactions": [
+      {
+       "name": "convert",
+       "prds": [
+        "B"
+       ],
+       "rate": 0.01,
+       "subs": [
+        "A"
+       ]
+      }
+     ],
+     "seed": 12345,
+     "species": {
+      "A": {
+       "color": "red",
+       "count": 200,
+       "difc": 1.0,
+       "display_size": 3
+      },
+      "B": {
+       "color": "blue",
+       "count": 0,
+       "difc": 0.3,
+       "display_size": 3
+      }
+     }
+    },
+    "inputs": {},
+    "interval": 5.0,
+    "outputs": {
+     "molecule_counts": [
+      "stores",
+      "molecule_counts"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "stores": {
+    "molecule_counts": {},
+    "time": 0.0,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:SmoldynPlots",
+    "config": {
+     "title": "Smoldyn diffusion-reaction"
+    },
+    "inputs": {
+     "molecule_counts": [
+      "stores",
+      "molecule_counts"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "donor.composite.yaml": {
+  "schema": {},
+  "state": {}
+ },
+ "epithelium_2d.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/test_square.hf5",
+     "factory": "model_factory",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "name": "Epithelium 2D",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "cell_type": "healthy",
+       "is_alive": 1.0,
+       "perimeter_elasticity": 0.1,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.6
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.01,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "flagella-assembly-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "complexation": {
+    "_type": "process",
+    "address": "local:NFSimProcess",
+    "config": {
+     "model_file": "<<flagella-model-path>>",
+     "n_steps": 10
+    },
+    "inputs": {
+     "observables": [
+      "species"
+     ]
+    },
+    "interval": 50.0,
+    "outputs": {
+     "observables": [
+      "species"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "species": "map[float]",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "species": [
+      "species"
+     ],
+     "time": [
+      "global_time"
+     ]
+    }
+   },
+   "production": {
+    "_type": "process",
+    "address": "local:MonomerProduction",
+    "config": {
+     "production_rates": {
+      "Free_flhA": 0.05,
+      "Free_flhB": 0.05,
+      "Free_fliG": 1.3,
+      "Free_fliM": 1.7,
+      "Free_fliN": 0.05
+     }
+    },
+    "interval": 1.0,
+    "outputs": {
+     "monomers": [
+      "species"
+     ]
+    }
+   },
+   "species": {}
+  }
+ },
+ "flagella-assembly-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "complexation": {
+    "_type": "process",
+    "address": "local:NFSimProcess",
+    "config": {
+     "model_file": "<<flagella-model-path>>",
+     "n_steps": 10
+    },
+    "inputs": {
+     "observables": [
+      "species"
+     ]
+    },
+    "interval": 50.0,
+    "outputs": {
+     "observables": [
+      "species"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "species": "map[float]",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "species": [
+      "species"
+     ],
+     "time": [
+      "global_time"
+     ]
+    }
+   },
+   "production": {
+    "_type": "process",
+    "address": "local:MonomerProduction",
+    "config": {
+     "production_rates": {
+      "Free_flhA": 0.05,
+      "Free_flhB": 0.05,
+      "Free_fliG": 1.3,
+      "Free_fliM": 1.7,
+      "Free_fliN": 0.05
+     }
+    },
+    "interval": 1.0,
+    "outputs": {
+     "monomers": [
+      "species"
+     ]
+    }
+   },
+   "species": {},
+   "viz": {
+    "_type": "step",
+    "address": "local:FlagellaAssemblyPlots",
+    "config": {
+     "title": "NFSim flagella assembly"
+    },
+    "inputs": {
+     "species": [
+      "species"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "viz_html"
+     ]
+    }
+   },
+   "viz_html": ""
+  }
+ },
+ "gillespie.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Gillespie": {
+    "_type": "process",
+    "address": "local:Gillespie",
+    "config": {
+     "apoptosis_crit": 0.1,
+     "cell_types": [
+      "sc",
+      "pc",
+      "ent",
+      "gc",
+      "dcs"
+     ],
+     "division_crit": 1.2,
+     "geom": "VesselGeometry",
+     "global_interval": 0.005,
+     "growth_rate": 0.1,
+     "michaelis_constants": {
+      "dcs": {},
+      "ent": {
+       "ex_density": 1,
+       "ex_wnt": 42.9
+      },
+      "gc": {
+       "ex_density": 1,
+       "ex_wnt": 42.9
+      },
+      "pc": {
+       "ent_wnt": 8.8,
+       "gc_wnt": 8.8,
+       "pc_density": 1,
+       "pc_wnt": 8.8
+      },
+      "sc": {
+       "pc_wnt": 2.64,
+       "sc_density": 1,
+       "sc_wnt": 2.64
+      }
+     },
+     "rates_max": {
+      "dcs": {
+       "dcs": 0.0
+      },
+      "ent": {
+       "ex": 0.34
+      },
+      "gc": {
+       "ex": 0.34
+      },
+      "pc": {
+       "ent": 0.15,
+       "gc": 0.0495,
+       "pc": 0.22
+      },
+      "sc": {
+       "pc": 0.2,
+       "sc": 0.15
+      }
+     },
+     "regulation_loc": {
+      "wnt": "z"
+     },
+     "regulations": {
+      "dcs": {},
+      "ent": {
+       "ex": {
+        "density": "positive",
+        "wnt": "positive"
+       }
+      },
+      "gc": {
+       "ex": {
+        "density": "positive",
+        "wnt": "positive"
+       }
+      },
+      "pc": {
+       "ent": {
+        "wnt": "positive"
+       },
+       "gc": {
+        "wnt": "positive"
+       },
+       "pc": {
+        "density": "negative",
+        "wnt": "negative"
+       }
+      },
+      "sc": {
+       "pc": {
+        "wnt": "positive"
+       },
+       "sc": {
+        "density": "negative",
+        "wnt": "negative"
+       }
+      }
+     },
+     "shrink_rate": 0.1,
+     "transition_lengths": {
+      "dcs": {},
+      "ent": {
+       "ex_density": 0.3,
+       "ex_wnt": 3.3
+      },
+      "gc": {
+       "ex_density": 0.3,
+       "ex_wnt": 3.3
+      },
+      "pc": {
+       "ent_wnt": 3.3,
+       "gc_wnt": 3.3,
+       "pc_density": 0.3,
+       "pc_wnt": 8.8
+      },
+      "sc": {
+       "pc_wnt": 1.1,
+       "sc_density": 0.3,
+       "sc_wnt": 1.1
+      }
+     }
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.005,
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "gillespie_trigger": [
+      "Gillespie Trigger"
+     ]
+    }
+   },
+   "Network Changed": false,
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "FaceAreaElasticity",
+      "PerimeterElasticity",
+      "LineTension",
+      "VesselSurfaceElasticity"
+     ],
+     "eptm": "workspace/datasets/crypt_cylinder.hf5",
+     "factory": "model_factory_vessel",
+     "geom": "VesselGeometry",
+     "maps": {},
+     "max_displacement": 0.2,
+     "name": "Test Cylinder",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "perimeter_elasticity": 1.0,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.5
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "prefered_radius": 2.5,
+       "surface_elasticity": 5.0,
+       "vessel_elasticity": 5.0,
+       "viscosity": 5.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "axis": "z",
+      "radius": 2.5,
+      "threshold_length": 0.1
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.005,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "gradient.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Gradient": {
+    "_type": "step",
+    "address": "local:ParameterGradient",
+    "config": {
+     "args": {
+      "c": 4.6,
+      "m": -0.1
+     },
+     "axis": "x",
+     "gradient_type": "linear",
+     "model_parameters": {
+      "prefered_perimeter": "face"
+     }
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ]
+    },
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ]
+    }
+   },
+   "Network Changed": false,
+   "Stochastic": {
+    "_type": "process",
+    "address": "local:StochasticLineTension",
+    "config": {
+     "sigma": 0.1,
+     "tau": 0.2
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ]
+    }
+   },
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/test_square.hf5",
+     "factory": "model_factory_bound",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "name": "Test Square",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "is_alive": 1.0,
+       "migration_strength": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.1,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "mx": 1.0,
+       "my": 0.0,
+       "mz": 0.0,
+       "perimeter_elasticity": 0.1,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.6
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "growth-division.composite.yaml": {
+  "schema": {
+   "population": "tree"
+  },
+  "state": {
+   "deaths": 0.0,
+   "divisions": 0.0,
+   "growth": {
+    "_type": "process",
+    "address": "local:GrowthDivision",
+    "config": {
+     "seed": 0,
+     "supply": 0.55
+    },
+    "inputs": {
+     "deaths": [
+      "deaths"
+     ],
+     "divisions": [
+      "divisions"
+     ],
+     "population": [
+      "population"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "deaths": [
+      "deaths"
+     ],
+     "divisions": [
+      "divisions"
+     ],
+     "population": [
+      "population"
+     ]
+    }
+   },
+   "population": [
+    {
+     "M": 8.0,
+     "theta": 0.5
+    }
+   ]
+  }
+ },
+ "hra_colon_surface.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": false,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/hra_colon_surface.hf5",
+     "factory": "model_factory",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "max_displacement": 0.1,
+     "name": "HRA colon surface (3D)",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.02
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "is_alive": 1.0,
+       "perimeter_elasticity": 0.1
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.02,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "hra_crypt_field.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": false,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/hra_crypt_field.hf5",
+     "factory": "model_factory",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "max_displacement": 0.1,
+     "name": "HRA intestinal crypt (2D)",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 0.0,
+       "is_alive": 1.0,
+       "perimeter_elasticity": 0.0
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.02,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "increase-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "level": "float"
+     }
+    },
+    "inputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    }
+   },
+   "increase": {
+    "_type": "process",
+    "address": "local:IncreaseProcess",
+    "config": {
+     "rate": 2.0
+    },
+    "inputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "level": [
+      "stores",
+      "level"
+     ]
+    }
+   },
+   "stores": {
+    "level": 1.0
+   }
+  }
+ },
+ "jamming.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Jamming": {
+    "_type": "process",
+    "address": "local:CellJamming",
+    "config": {
+     "limits": [
+      3.0,
+      4.2
+     ],
+     "rate": -0.05,
+     "trigger_time": 100.0
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ]
+    }
+   },
+   "Network Changed": false,
+   "Stochastic": {
+    "_type": "process",
+    "address": "local:StochasticLineTension",
+    "config": {
+     "sigma": 0.1,
+     "tau": 0.2
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ]
+    }
+   },
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/test_square.hf5",
+     "factory": "model_factory_bound",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "name": "Test Square",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "is_alive": 1.0,
+       "migration_strength": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.1,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "mx": 1.0,
+       "my": 1.0,
+       "mz": 0.0,
+       "perimeter_elasticity": 0.1,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.6
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "lj-nve-demo-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "kinetic_energy": "float",
+      "potential_energy": "float",
+      "pressure": "float",
+      "temperature": "float",
+      "total_energy": "float",
+      "volume": "float"
+     }
+    },
+    "inputs": {
+     "kinetic_energy": [
+      "stores",
+      "kinetic_energy"
+     ],
+     "potential_energy": [
+      "stores",
+      "potential_energy"
+     ],
+     "pressure": [
+      "stores",
+      "pressure"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "lammps": {
+    "_type": "process",
+    "address": "local:LAMMPSProcess",
+    "config": {
+     "input_script": "units lj\natom_style atomic\ndimension 3\nboundary p p p\nlattice sc 0.5\nregion box block 0 3 0 3 0 3\ncreate_box 1 box\ncreate_atoms 1 box\nmass 1 1.0\npair_style lj/cut 2.5\npair_coeff 1 1 1.0 1.0\npair_modify shift yes\nvelocity all create 1.0 87287 dist gaussian\ntimestep 0.005\nfix integ all nve\n"
+    },
+    "inputs": {},
+    "interval": 0.5,
+    "outputs": {
+     "kinetic_energy": [
+      "stores",
+      "kinetic_energy"
+     ],
+     "potential_energy": [
+      "stores",
+      "potential_energy"
+     ],
+     "pressure": [
+      "stores",
+      "pressure"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "kinetic_energy": 0.0,
+    "potential_energy": 0.0,
+    "pressure": 0.0,
+    "temperature": 0.0,
+    "total_energy": 0.0,
+    "viz_html": "",
+    "volume": 0.0
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:LAMMPSThermoPlots",
+    "config": {
+     "title": "LAMMPS LJ NVE thermodynamics"
+    },
+    "inputs": {
+     "kinetic_energy": [
+      "stores",
+      "kinetic_energy"
+     ],
+     "potential_energy": [
+      "stores",
+      "potential_energy"
+     ],
+     "pressure": [
+      "stores",
+      "pressure"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "lj-nve-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "kinetic_energy": "float",
+      "potential_energy": "float",
+      "pressure": "float",
+      "temperature": "float",
+      "total_energy": "float",
+      "volume": "float"
+     }
+    },
+    "inputs": {
+     "kinetic_energy": [
+      "stores",
+      "kinetic_energy"
+     ],
+     "potential_energy": [
+      "stores",
+      "potential_energy"
+     ],
+     "pressure": [
+      "stores",
+      "pressure"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "lammps": {
+    "_type": "process",
+    "address": "local:LAMMPSProcess",
+    "config": {
+     "input_script": "units lj\natom_style atomic\ndimension 3\nboundary p p p\nlattice sc 0.5\nregion box block 0 3 0 3 0 3\ncreate_box 1 box\ncreate_atoms 1 box\nmass 1 1.0\npair_style lj/cut 2.5\npair_coeff 1 1 1.0 1.0\npair_modify shift yes\nvelocity all create 1.0 87287 dist gaussian\ntimestep 0.005\nfix integ all nve\n"
+    },
+    "inputs": {},
+    "interval": 0.5,
+    "outputs": {
+     "kinetic_energy": [
+      "stores",
+      "kinetic_energy"
+     ],
+     "potential_energy": [
+      "stores",
+      "potential_energy"
+     ],
+     "pressure": [
+      "stores",
+      "pressure"
+     ],
+     "temperature": [
+      "stores",
+      "temperature"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "kinetic_energy": 0.0,
+    "potential_energy": 0.0,
+    "pressure": 0.0,
+    "temperature": 0.0,
+    "total_energy": 0.0,
+    "volume": 0.0
+   }
+  }
+ },
+ "martinize-demo-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "n_atoms_full": "integer",
+      "n_atoms_input": "integer",
+      "n_beads": "integer",
+      "n_bonds_cg": "integer",
+      "reduction_ratio": "float"
+     }
+    },
+    "inputs": {
+     "n_atoms_full": [
+      "stores",
+      "n_atoms_full"
+     ],
+     "n_atoms_input": [
+      "stores",
+      "n_atoms_input"
+     ],
+     "n_beads": [
+      "stores",
+      "n_beads"
+     ],
+     "n_bonds_cg": [
+      "stores",
+      "n_bonds_cg"
+     ],
+     "reduction_ratio": [
+      "stores",
+      "reduction_ratio"
+     ]
+    }
+   },
+   "martinize": {
+    "_type": "step",
+    "address": "local:MartinizeStep",
+    "config": {
+     "delete_unknown": true,
+     "from_ff": "charmm",
+     "ignh": false,
+     "to_ff": "martini3001"
+    },
+    "inputs": {
+     "pdb_text": [
+      "stores",
+      "pdb_text"
+     ]
+    },
+    "outputs": {
+     "bead_type_counts": [
+      "stores",
+      "bead_type_counts"
+     ],
+     "cg_beads": [
+      "stores",
+      "cg_beads"
+     ],
+     "cg_bonds": [
+      "stores",
+      "cg_bonds"
+     ],
+     "cg_positions": [
+      "stores",
+      "cg_positions"
+     ],
+     "interactions": [
+      "stores",
+      "interactions"
+     ],
+     "n_atoms_full": [
+      "stores",
+      "n_atoms_full"
+     ],
+     "n_atoms_input": [
+      "stores",
+      "n_atoms_input"
+     ],
+     "n_beads": [
+      "stores",
+      "n_beads"
+     ],
+     "n_bonds_cg": [
+      "stores",
+      "n_bonds_cg"
+     ],
+     "reduction_ratio": [
+      "stores",
+      "reduction_ratio"
+     ],
+     "residue_counts": [
+      "stores",
+      "residue_counts"
+     ]
+    }
+   },
+   "stores": {
+    "n_atoms_full": 0,
+    "n_atoms_input": 0,
+    "n_beads": 0,
+    "n_bonds_cg": 0,
+    "pdb_text": "ATOM      1  N   ALA A   1       1.000   1.000   1.000  1.00  0.00           N\nATOM      2  CA  ALA A   1       2.450   1.000   1.000  1.00  0.00           C\nATOM      3  C   ALA A   1       3.000   2.400   1.000  1.00  0.00           C\nATOM      4  O   ALA A   1       2.400   3.400   1.000  1.00  0.00           O\nATOM      5  CB  ALA A   1       3.000   0.200   2.200  1.00  0.00           C\nATOM      6  N   ALA A   2       4.300   2.400   1.000  1.00  0.00           N\nATOM      7  CA  ALA A   2       5.000   3.700   1.000  1.00  0.00           C\nATOM      8  C   ALA A   2       6.500   3.700   1.000  1.00  0.00           C\nATOM      9  O   ALA A   2       7.100   4.700   1.000  1.00  0.00           O\nATOM     10  CB  ALA A   2       4.500   4.500   2.200  1.00  0.00           C\nATOM     11  N   ALA A   3       7.100   2.600   1.000  1.00  0.00           N\nATOM     12  CA  ALA A   3       8.500   2.500   1.000  1.00  0.00           C\nATOM     13  C   ALA A   3       9.100   3.800   1.000  1.00  0.00           C\nATOM     14  O   ALA A   3       8.500   4.800   1.000  1.00  0.00           O\nATOM     15  CB  ALA A   3       9.000   1.700   2.200  1.00  0.00           C\nEND\n",
+    "reduction_ratio": 0.0,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:MartiniBeadSummaryPlots",
+    "config": {
+     "title": "Martini CG mapping summary"
+    },
+    "inputs": {
+     "n_atoms_full": [
+      "stores",
+      "n_atoms_full"
+     ],
+     "n_atoms_input": [
+      "stores",
+      "n_atoms_input"
+     ],
+     "n_beads": [
+      "stores",
+      "n_beads"
+     ],
+     "n_bonds_cg": [
+      "stores",
+      "n_bonds_cg"
+     ],
+     "reduction_ratio": [
+      "stores",
+      "reduction_ratio"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "martinize-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "n_atoms_full": "integer",
+      "n_atoms_input": "integer",
+      "n_beads": "integer",
+      "n_bonds_cg": "integer",
+      "reduction_ratio": "float"
+     }
+    },
+    "inputs": {
+     "n_atoms_full": [
+      "stores",
+      "n_atoms_full"
+     ],
+     "n_atoms_input": [
+      "stores",
+      "n_atoms_input"
+     ],
+     "n_beads": [
+      "stores",
+      "n_beads"
+     ],
+     "n_bonds_cg": [
+      "stores",
+      "n_bonds_cg"
+     ],
+     "reduction_ratio": [
+      "stores",
+      "reduction_ratio"
+     ]
+    }
+   },
+   "martinize": {
+    "_type": "step",
+    "address": "local:MartinizeStep",
+    "config": {
+     "delete_unknown": true,
+     "from_ff": "charmm",
+     "ignh": false,
+     "to_ff": "martini3001"
+    },
+    "inputs": {
+     "pdb_text": [
+      "stores",
+      "pdb_text"
+     ]
+    },
+    "outputs": {
+     "bead_type_counts": [
+      "stores",
+      "bead_type_counts"
+     ],
+     "cg_beads": [
+      "stores",
+      "cg_beads"
+     ],
+     "cg_bonds": [
+      "stores",
+      "cg_bonds"
+     ],
+     "cg_positions": [
+      "stores",
+      "cg_positions"
+     ],
+     "interactions": [
+      "stores",
+      "interactions"
+     ],
+     "n_atoms_full": [
+      "stores",
+      "n_atoms_full"
+     ],
+     "n_atoms_input": [
+      "stores",
+      "n_atoms_input"
+     ],
+     "n_beads": [
+      "stores",
+      "n_beads"
+     ],
+     "n_bonds_cg": [
+      "stores",
+      "n_bonds_cg"
+     ],
+     "reduction_ratio": [
+      "stores",
+      "reduction_ratio"
+     ],
+     "residue_counts": [
+      "stores",
+      "residue_counts"
+     ]
+    }
+   },
+   "stores": {
+    "n_atoms_full": 0,
+    "n_atoms_input": 0,
+    "n_beads": 0,
+    "n_bonds_cg": 0,
+    "pdb_text": "ATOM      1  N   ALA A   1       1.000   1.000   1.000  1.00  0.00           N\nATOM      2  CA  ALA A   1       2.450   1.000   1.000  1.00  0.00           C\nATOM      3  C   ALA A   1       3.000   2.400   1.000  1.00  0.00           C\nATOM      4  O   ALA A   1       2.400   3.400   1.000  1.00  0.00           O\nATOM      5  CB  ALA A   1       3.000   0.200   2.200  1.00  0.00           C\nATOM      6  N   ALA A   2       4.300   2.400   1.000  1.00  0.00           N\nATOM      7  CA  ALA A   2       5.000   3.700   1.000  1.00  0.00           C\nATOM      8  C   ALA A   2       6.500   3.700   1.000  1.00  0.00           C\nATOM      9  O   ALA A   2       7.100   4.700   1.000  1.00  0.00           O\nATOM     10  CB  ALA A   2       4.500   4.500   2.200  1.00  0.00           C\nATOM     11  N   ALA A   3       7.100   2.600   1.000  1.00  0.00           N\nATOM     12  CA  ALA A   3       8.500   2.500   1.000  1.00  0.00           C\nATOM     13  C   ALA A   3       9.100   3.800   1.000  1.00  0.00           C\nATOM     14  O   ALA A   3       8.500   4.800   1.000  1.00  0.00           O\nATOM     15  CB  ALA A   3       9.000   1.700   2.200  1.00  0.00           C\nEND\n",
+    "reduction_ratio": 0.0
+   }
+  }
+ },
+ "membrane-deflation.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "bending_energy": "float",
+      "pressure_energy": "float",
+      "surface_area": "float",
+      "surface_energy": "float",
+      "total_energy": "float",
+      "volume": "float"
+     }
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "membrane": {
+    "_type": "process",
+    "address": "local:Mem3DGProcess",
+    "config": {
+     "Kbc": 0.0005,
+     "characteristic_timestep": 1.0,
+     "mesh_type": "icosphere",
+     "osmotic_strength": 0.1,
+     "preferred_volume_fraction": 0.5,
+     "radius": 1.0,
+     "subdivision": 3,
+     "tension_modulus": 0.01,
+     "tolerance": 1e-12
+    },
+    "inputs": {},
+    "interval": 5.0,
+    "outputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "converged": [
+      "stores",
+      "converged"
+     ],
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "mean_curvatures": [
+      "stores",
+      "mean_curvatures"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "vertex_positions": [
+      "stores",
+      "vertex_positions"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "faces": [],
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "viz_3d_html": "",
+    "viz_html": "",
+    "volume": 0.0
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:MembranePlots",
+    "config": {
+     "title": "Deflation \u2014 energy + geometry"
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "viz_membrane_3d": {
+    "_type": "step",
+    "address": "local:Membrane3D",
+    "config": {
+     "title": "Deflation mesh",
+     "wireframe": false
+    },
+    "inputs": {
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "vertices": [
+      "stores",
+      "vertex_positions"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_3d_html"
+     ]
+    }
+   }
+  }
+ },
+ "membrane-demo-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "bending_energy": "float",
+      "pressure_energy": "float",
+      "surface_area": "float",
+      "surface_energy": "float",
+      "total_energy": "float",
+      "volume": "float"
+     }
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "membrane": {
+    "_type": "process",
+    "address": "local:Mem3DGProcess",
+    "config": {
+     "characteristic_timestep": 1.0,
+     "mesh_type": "icosphere",
+     "radius": 1.0,
+     "subdivision": 2
+    },
+    "inputs": {},
+    "interval": 5.0,
+    "outputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "converged": [
+      "stores",
+      "converged"
+     ],
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "mean_curvatures": [
+      "stores",
+      "mean_curvatures"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "vertex_positions": [
+      "stores",
+      "vertex_positions"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "faces": [],
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "viz_3d_html": "",
+    "viz_html": "",
+    "volume": 0.0
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:MembranePlots",
+    "config": {
+     "title": "Mem3DG membrane relaxation"
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "viz_membrane_3d": {
+    "_type": "step",
+    "address": "local:Membrane3D",
+    "config": {
+     "title": "Membrane mesh"
+    },
+    "inputs": {
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "vertices": [
+      "stores",
+      "vertex_positions"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_3d_html"
+     ]
+    }
+   }
+  }
+ },
+ "membrane-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "bending_energy": "float",
+      "pressure_energy": "float",
+      "surface_area": "float",
+      "surface_energy": "float",
+      "total_energy": "float",
+      "volume": "float"
+     }
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "membrane": {
+    "_type": "process",
+    "address": "local:Mem3DGProcess",
+    "config": {
+     "Kbc": 8.22e-05,
+     "characteristic_timestep": 1.0,
+     "mesh_type": "icosphere",
+     "osmotic_strength": 0.02,
+     "preferred_volume_fraction": 0.7,
+     "radius": 1.0,
+     "subdivision": 2,
+     "tension_modulus": 0.1
+    },
+    "inputs": {},
+    "interval": 5.0,
+    "outputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "converged": [
+      "stores",
+      "converged"
+     ],
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "mean_curvatures": [
+      "stores",
+      "mean_curvatures"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "vertex_positions": [
+      "stores",
+      "vertex_positions"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "faces": [],
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "viz_3d_html": "",
+    "viz_html": "",
+    "volume": 0.0
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:MembranePlots",
+    "config": {
+     "title": "Mem3DG membrane relaxation"
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "viz_membrane_3d": {
+    "_type": "step",
+    "address": "local:Membrane3D",
+    "config": {
+     "title": "Membrane mesh"
+    },
+    "inputs": {
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "vertices": [
+      "stores",
+      "vertex_positions"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_3d_html"
+     ]
+    }
+   }
+  }
+ },
+ "membrane-metabolism-loop.composite.yaml": {
+  "schema": {},
+  "state": {
+   "boundary": {
+    "_type": "process",
+    "address": "local:Boundary",
+    "config": {},
+    "inputs": {
+     "membrane_lipids": [
+      "membrane_lipids"
+     ],
+     "volume": [
+      "volume"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "volume": [
+      "volume"
+     ]
+    }
+   },
+   "lipid": 0.0,
+   "membrane": {
+    "_type": "process",
+    "address": "local:Membrane",
+    "config": {},
+    "inputs": {
+     "lipid": [
+      "lipid"
+     ],
+     "membrane_lipids": [
+      "membrane_lipids"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "lipid": [
+      "lipid"
+     ],
+     "membrane_lipids": [
+      "membrane_lipids"
+     ]
+    }
+   },
+   "membrane_lipids": 40.0,
+   "metabolism": {
+    "_type": "process",
+    "address": "local:Metabolism",
+    "config": {},
+    "inputs": {
+     "lipid": [
+      "lipid"
+     ],
+     "nutrient": [
+      "nutrient"
+     ],
+     "precursor": [
+      "precursor"
+     ],
+     "volume": [
+      "volume"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "lipid": [
+      "lipid"
+     ],
+     "nutrient": [
+      "nutrient"
+     ],
+     "precursor": [
+      "precursor"
+     ]
+    }
+   },
+   "nutrient": 0.0,
+   "precursor": 10.0,
+   "supply": {
+    "_type": "process",
+    "address": "local:Supply",
+    "config": {
+     "rate": 2.0
+    },
+    "inputs": {},
+    "interval": 1.0,
+    "outputs": {
+     "nutrient": [
+      "nutrient"
+     ]
+    }
+   },
+   "volume": 2.97
+  }
+ },
+ "membrane-patch.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "bending_energy": "float",
+      "pressure_energy": "float",
+      "surface_area": "float",
+      "surface_energy": "float",
+      "total_energy": "float",
+      "volume": "float"
+     }
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "membrane": {
+    "_type": "process",
+    "address": "local:Mem3DGProcess",
+    "config": {
+     "Kbc": 0.0003,
+     "boundary_condition": "fixed",
+     "characteristic_timestep": 0.5,
+     "mesh_type": "hexagon",
+     "osmotic_model": "constant",
+     "osmotic_pressure": 0.08,
+     "preferred_area_scale": 1.2,
+     "radius": 1.0,
+     "subdivision": 4,
+     "tension_modulus": 0.01,
+     "tolerance": 1e-14
+    },
+    "inputs": {},
+    "interval": 5.0,
+    "outputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "converged": [
+      "stores",
+      "converged"
+     ],
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "mean_curvatures": [
+      "stores",
+      "mean_curvatures"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "vertex_positions": [
+      "stores",
+      "vertex_positions"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "faces": [],
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "viz_3d_html": "",
+    "viz_html": "",
+    "volume": 0.0
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:MembranePlots",
+    "config": {
+     "title": "Patch \u2014 energy + geometry"
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "viz_membrane_3d": {
+    "_type": "step",
+    "address": "local:Membrane3D",
+    "config": {
+     "title": "Patch mesh",
+     "wireframe": false
+    },
+    "inputs": {
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "vertices": [
+      "stores",
+      "vertex_positions"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_3d_html"
+     ]
+    }
+   }
+  }
+ },
+ "membrane-tube.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "bending_energy": "float",
+      "pressure_energy": "float",
+      "surface_area": "float",
+      "surface_energy": "float",
+      "total_energy": "float",
+      "volume": "float"
+     }
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "membrane": {
+    "_type": "process",
+    "address": "local:Mem3DGProcess",
+    "config": {
+     "Kbc": 0.0005,
+     "axial_subdivision": 30,
+     "boundary_condition": "pin",
+     "characteristic_timestep": 0.5,
+     "mesh_type": "cylinder",
+     "osmotic_strength": 0.08,
+     "preferred_area_scale": 0.8,
+     "preferred_volume_fraction": 0.6,
+     "radius": 0.5,
+     "subdivision": 20,
+     "tension_modulus": 0.05,
+     "tolerance": 1e-14
+    },
+    "inputs": {},
+    "interval": 5.0,
+    "outputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "converged": [
+      "stores",
+      "converged"
+     ],
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "mean_curvatures": [
+      "stores",
+      "mean_curvatures"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "vertex_positions": [
+      "stores",
+      "vertex_positions"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "faces": [],
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "viz_3d_html": "",
+    "viz_html": "",
+    "volume": 0.0
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:MembranePlots",
+    "config": {
+     "title": "Tube \u2014 energy + geometry"
+    },
+    "inputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "stores",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "stores",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "stores",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "volume": [
+      "stores",
+      "volume"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "viz_membrane_3d": {
+    "_type": "step",
+    "address": "local:Membrane3D",
+    "config": {
+     "title": "Tube mesh",
+     "wireframe": false
+    },
+    "inputs": {
+     "faces": [
+      "stores",
+      "faces"
+     ],
+     "vertices": [
+      "stores",
+      "vertex_positions"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_3d_html"
+     ]
+    }
+   }
+  }
+ },
+ "millard2017_metabolism.composite.yaml": {
+  "schema": {},
+  "state": {
+   "copasi_utc_process": {
+    "_type": "process",
+    "address": "local:CopasiUTCProcess",
+    "config": {
+     "intervals": 10,
+     "model_source": "v2ecoli/models/sbml/millard2017_central_metabolism.xml",
+     "time": 100.0
+    },
+    "inputs": {
+     "species_concentrations": [
+      "stores",
+      "species_concentrations"
+     ],
+     "species_counts": [
+      "stores",
+      "species_counts"
+     ]
+    },
+    "interval": 100.0,
+    "outputs": {
+     "fluxes": [
+      "stores",
+      "fluxes"
+     ],
+     "species_concentrations": [
+      "stores",
+      "species_concentrations"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "stores": {
+    "fluxes": {},
+    "species_concentrations": {},
+    "species_counts": {},
+    "time": []
+   }
+  }
+ },
+ "millard_fba_bridge.composite.yaml": {
+  "schema": {},
+  "state": {
+   "bridge": {
+    "_type": "process",
+    "address": "local:FBABridge",
+    "config": {
+     "cell_volume_L": 1e-15,
+     "direction": "millard_to_v2ecoli",
+     "mapping_file": "v2ecoli/data/millard_v2ecoli_species_map.yaml"
+    },
+    "inputs": {
+     "central_metabolites_millard": [
+      "shared",
+      "central_metabolites"
+     ],
+     "v2ecoli_bulk": [
+      "v2ecoli",
+      "bulk"
+     ]
+    },
+    "interval": 100.0,
+    "outputs": {
+     "bridge_diagnostics": [
+      "shared",
+      "bridge_diagnostics"
+     ],
+     "v2ecoli_bulk": [
+      "v2ecoli",
+      "bulk"
+     ]
+    }
+   },
+   "millard_ode": {
+    "_type": "process",
+    "address": "local:CopasiUTCProcess",
+    "config": {
+     "intervals": 10,
+     "model_source": "v2ecoli/models/sbml/millard2017_central_metabolism.xml",
+     "time": 100.0
+    },
+    "inputs": {},
+    "interval": 100.0,
+    "outputs": {
+     "fluxes": [
+      "shared",
+      "central_fluxes"
+     ],
+     "species_concentrations": [
+      "shared",
+      "central_metabolites"
+     ],
+     "time": [
+      "shared",
+      "time"
+     ]
+    }
+   },
+   "shared": {
+    "bridge_diagnostics": {},
+    "central_fluxes": {},
+    "central_metabolites": {},
+    "time": 0.0
+   },
+   "v2ecoli": {
+    "bulk": {}
+   }
+  }
+ },
+ "millard_lqr.composite.yaml": {
+  "schema": {},
+  "state": {
+   "lqr_controller": {
+    "_type": "process",
+    "address": "local:LQRController",
+    "config": {
+     "Q": 1.0,
+     "R": 0.1,
+     "reference_npy": "v2ecoli/data/phase0_glucose_mu_ref.npy",
+     "tick_s": 100.0
+    },
+    "inputs": {
+     "central_metabolites_millard": [
+      "shared",
+      "central_metabolites"
+     ]
+    },
+    "interval": 100.0,
+    "outputs": {
+     "lqr_control": [
+      "shared",
+      "lqr_control"
+     ],
+     "lqr_diagnostics": [
+      "shared",
+      "lqr_diagnostics"
+     ]
+    }
+   },
+   "millard_ode": {
+    "_type": "process",
+    "address": "local:CopasiUTCProcess",
+    "config": {
+     "intervals": 10,
+     "model_source": "v2ecoli/models/sbml/millard2017_central_metabolism.xml",
+     "time": 100.0
+    },
+    "inputs": {},
+    "interval": 100.0,
+    "outputs": {
+     "fluxes": [
+      "shared",
+      "central_fluxes"
+     ],
+     "species_concentrations": [
+      "shared",
+      "central_metabolites"
+     ],
+     "time": [
+      "shared",
+      "time"
+     ]
+    }
+   },
+   "shared": {
+    "central_fluxes": {},
+    "central_metabolites": {},
+    "lqr_control": {},
+    "lqr_diagnostics": {},
+    "time": 0.0
+   }
+  }
+ },
+ "monolayer_liftoff.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": false,
+     "bounds": {},
+     "effectors": [
+      "CellVolumeElasticity",
+      "FaceAreaElasticity",
+      "FaceContractility",
+      "LineTension"
+     ],
+     "eptm": "workspace/datasets/monolayer_box.hf5",
+     "factory": "model_factory",
+     "geom": "MonolayerGeometry",
+     "maps": {},
+     "max_displacement": 0.2,
+     "name": "Monolayer Lift-Off",
+     "output_columns": {},
+     "parameters": {
+      "cell_df": {
+       "is_alive": 1.0,
+       "prefered_vol": 1.0,
+       "vol_elasticity": 1.0
+      },
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": {
+        "apical": 2.0,
+        "default": 0.0
+       }
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "contractility": 0.05,
+       "is_alive": 1.0,
+       "prefered_area": 1.0
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "tissue_type": "Monolayer"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.02,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "network-demo-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "cytoskeleton": {
+    "_type": "process",
+    "address": "local:MedyanProcess",
+    "config": {
+     "actin_concentration": 4.0,
+     "box_size": 1.0,
+     "initial_filament_length": 0.25,
+     "n_crosslinks": 0,
+     "n_filaments": 5,
+     "n_motors": 0,
+     "rng_seed": 42
+    },
+    "inputs": {},
+    "interval": 1.0,
+    "outputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "mean_filament_length": [
+      "stores",
+      "mean_filament_length"
+     ],
+     "membrane_area": [
+      "stores",
+      "membrane_area"
+     ],
+     "membrane_bending_energy": [
+      "stores",
+      "membrane_bending_energy"
+     ],
+     "membrane_mean_radius": [
+      "stores",
+      "membrane_mean_radius"
+     ],
+     "membrane_volume": [
+      "stores",
+      "membrane_volume"
+     ],
+     "n_crosslinks": [
+      "stores",
+      "n_crosslinks"
+     ],
+     "n_filaments": [
+      "stores",
+      "n_filaments"
+     ],
+     "n_motors": [
+      "stores",
+      "n_motors"
+     ],
+     "network_span": [
+      "stores",
+      "network_span"
+     ],
+     "radius_of_gyration": [
+      "stores",
+      "radius_of_gyration"
+     ],
+     "stretch_energy": [
+      "stores",
+      "stretch_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "total_length": [
+      "stores",
+      "total_length"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "mean_filament_length": "float",
+      "n_filaments": "float",
+      "network_span": "float",
+      "radius_of_gyration": "float",
+      "total_energy": "float",
+      "total_length": "float"
+     }
+    },
+    "inputs": {
+     "mean_filament_length": [
+      "stores",
+      "mean_filament_length"
+     ],
+     "n_filaments": [
+      "stores",
+      "n_filaments"
+     ],
+     "network_span": [
+      "stores",
+      "network_span"
+     ],
+     "radius_of_gyration": [
+      "stores",
+      "radius_of_gyration"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "total_length": [
+      "stores",
+      "total_length"
+     ]
+    }
+   },
+   "stores": {
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:NetworkMetricsPlots",
+    "config": {
+     "title": "MEDYAN network metrics"
+    },
+    "inputs": {
+     "mean_filament_length": [
+      "stores",
+      "mean_filament_length"
+     ],
+     "n_filaments": [
+      "stores",
+      "n_filaments"
+     ],
+     "network_span": [
+      "stores",
+      "network_span"
+     ],
+     "radius_of_gyration": [
+      "stores",
+      "radius_of_gyration"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "total_length": [
+      "stores",
+      "total_length"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "network-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "cytoskeleton": {
+    "_type": "process",
+    "address": "local:MedyanProcess",
+    "config": {
+     "actin_concentration": 4.0,
+     "box_size": 1.0,
+     "initial_filament_length": 0.25,
+     "n_crosslinks": 0,
+     "n_filaments": 5,
+     "n_motors": 0,
+     "rng_seed": 42
+    },
+    "inputs": {},
+    "interval": 1.0,
+    "outputs": {
+     "bending_energy": [
+      "stores",
+      "bending_energy"
+     ],
+     "mean_filament_length": [
+      "stores",
+      "mean_filament_length"
+     ],
+     "membrane_area": [
+      "stores",
+      "membrane_area"
+     ],
+     "membrane_bending_energy": [
+      "stores",
+      "membrane_bending_energy"
+     ],
+     "membrane_mean_radius": [
+      "stores",
+      "membrane_mean_radius"
+     ],
+     "membrane_volume": [
+      "stores",
+      "membrane_volume"
+     ],
+     "n_crosslinks": [
+      "stores",
+      "n_crosslinks"
+     ],
+     "n_filaments": [
+      "stores",
+      "n_filaments"
+     ],
+     "n_motors": [
+      "stores",
+      "n_motors"
+     ],
+     "network_span": [
+      "stores",
+      "network_span"
+     ],
+     "radius_of_gyration": [
+      "stores",
+      "radius_of_gyration"
+     ],
+     "stretch_energy": [
+      "stores",
+      "stretch_energy"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "total_length": [
+      "stores",
+      "total_length"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "mean_filament_length": "float",
+      "n_filaments": "float",
+      "network_span": "float",
+      "radius_of_gyration": "float",
+      "total_energy": "float",
+      "total_length": "float"
+     }
+    },
+    "inputs": {
+     "mean_filament_length": [
+      "stores",
+      "mean_filament_length"
+     ],
+     "n_filaments": [
+      "stores",
+      "n_filaments"
+     ],
+     "network_span": [
+      "stores",
+      "network_span"
+     ],
+     "radius_of_gyration": [
+      "stores",
+      "radius_of_gyration"
+     ],
+     "total_energy": [
+      "stores",
+      "total_energy"
+     ],
+     "total_length": [
+      "stores",
+      "total_length"
+     ]
+    }
+   },
+   "stores": {}
+  }
+ },
+ "parsimony-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {}
+    },
+    "inputs": {
+     "pack": [
+      "stores",
+      "pack"
+     ]
+    }
+   },
+   "parsimony_pack": {
+    "_type": "step",
+    "address": "local:ParsimonyPackStep",
+    "config": {
+     "name": "demo",
+     "out_dir": "out/parsimony-demo/_build",
+     "proxy_lod": 2,
+     "scale": 1.0,
+     "spec": {
+      "capsule": {
+       "half_len": 1500.0,
+       "radius": 900.0
+      },
+      "ingredients": [
+       {
+        "category": "Protein folding",
+        "color": [
+         0.95,
+         0.85,
+         0.3
+        ],
+        "count": 40,
+        "display_name": "GroEL/ES chaperonin",
+        "id": "groel",
+        "proxy_voxel_size": 12.0,
+        "region": "interior",
+        "structure": {
+         "kind": "pdb",
+         "ref": "1AON"
+        }
+       },
+       {
+        "category": "Metabolism",
+        "color": [
+         0.5,
+         0.8,
+         0.55
+        ],
+        "count": 320,
+        "display_name": "Lysozyme",
+        "id": "lysozyme",
+        "region": "interior",
+        "structure": {
+         "kind": "pdb",
+         "ref": "1AKI"
+        }
+       },
+       {
+        "category": "Metabolism",
+        "color": [
+         0.85,
+         0.4,
+         0.4
+        ],
+        "count": 220,
+        "display_name": "Hemoglobin",
+        "id": "hemoglobin",
+        "region": "interior",
+        "structure": {
+         "kind": "pdb",
+         "ref": "1HHO"
+        }
+       },
+       {
+        "category": "Envelope",
+        "color": [
+         0.82,
+         0.78,
+         0.68
+        ],
+        "count": 6000,
+        "display_name": "Membrane lipid",
+        "id": "lipid",
+        "principal_vector": [
+         0,
+         0,
+         1
+        ],
+        "region": "surface",
+        "sphere_radius": 12.0
+       }
+      ]
+     }
+    },
+    "inputs": {
+     "counts": [
+      "stores",
+      "counts"
+     ]
+    },
+    "outputs": {
+     "pack": [
+      "stores",
+      "pack"
+     ]
+    }
+   },
+   "stores": {
+    "counts": {},
+    "pack": {}
+   }
+  }
+ },
+ "parsimony-whole-cell.composite.yaml": {
+  "schema": {},
+  "state": {
+   "assemble": {
+    "_type": "step",
+    "address": "local:ParsimonyAssembleStep",
+    "config": {
+     "box_max": [
+      750.0,
+      750.0,
+      750.0
+     ],
+     "box_min": [
+      -750.0,
+      -750.0,
+      -750.0
+     ],
+     "out_dir": "output/parsimony_slice",
+     "pack_path": "",
+     "species": [
+      "EG10367-MONOMER",
+      "EG11036-MONOMER",
+      "groel",
+      "EG11384-MONOMER",
+      "EG50003-MONOMER",
+      "EG10669-MONOMER"
+     ],
+     "stub_beads": 5,
+     "use_bentopy": true
+    },
+    "inputs": {},
+    "outputs": {
+     "gro": [
+      "stores",
+      "gro"
+     ],
+     "n_beads": [
+      "stores",
+      "n_beads"
+     ],
+     "n_molecules": [
+      "stores",
+      "n_molecules"
+     ],
+     "per_species_counts": [
+      "stores",
+      "per_species_counts"
+     ],
+     "placements_json": [
+      "stores",
+      "placements_json"
+     ],
+     "top": [
+      "stores",
+      "top"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "final_energy": "float",
+      "gro": "string",
+      "md_ran": "boolean",
+      "n_beads": "integer",
+      "n_molecules": "integer"
+     }
+    },
+    "inputs": {
+     "final_energy": [
+      "stores",
+      "final_energy"
+     ],
+     "gro": [
+      "stores",
+      "gro"
+     ],
+     "md_ran": [
+      "stores",
+      "md_ran"
+     ],
+     "n_beads": [
+      "stores",
+      "n_beads"
+     ],
+     "n_molecules": [
+      "stores",
+      "n_molecules"
+     ]
+    }
+   },
+   "md": {
+    "_type": "step",
+    "address": "local:MartiniMDStep",
+    "config": {
+     "md_steps": 0,
+     "relax_steps": 200,
+     "run_md": false
+    },
+    "inputs": {
+     "gro": [
+      "stores",
+      "gro"
+     ],
+     "top": [
+      "stores",
+      "top"
+     ]
+    },
+    "outputs": {
+     "final_energy": [
+      "stores",
+      "final_energy"
+     ],
+     "md_ran": [
+      "stores",
+      "md_ran"
+     ],
+     "minimized_gro": [
+      "stores",
+      "minimized_gro"
+     ]
+    }
+   },
+   "slice": {
+    "_type": "step",
+    "address": "local:ParsimonySliceStep",
+    "config": {
+     "box_max": [
+      750.0,
+      750.0,
+      750.0
+     ],
+     "box_min": [
+      -750.0,
+      -750.0,
+      -750.0
+     ],
+     "pack_path": "",
+     "species": [
+      "EG10367-MONOMER",
+      "EG11036-MONOMER",
+      "groel",
+      "EG11384-MONOMER",
+      "EG50003-MONOMER",
+      "EG10669-MONOMER"
+     ]
+    },
+    "inputs": {},
+    "outputs": {
+     "n_molecules": [
+      "stores",
+      "slice_n_molecules"
+     ],
+     "per_species_counts": [
+      "stores",
+      "slice_counts"
+     ]
+    }
+   },
+   "stores": {
+    "final_energy": 0.0,
+    "gro": "",
+    "md_ran": false,
+    "minimized_gro": "",
+    "n_beads": 0,
+    "n_molecules": 0,
+    "per_species_counts": {},
+    "placements_json": "",
+    "slice_counts": {},
+    "slice_n_molecules": 0,
+    "top": ""
+   }
+  }
+ },
+ "rd-decay-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "means": "map[float]",
+      "num_snapshots": "integer",
+      "snapshot_index": "integer",
+      "time": "float",
+      "totals": "map[float]"
+     }
+    },
+    "inputs": {
+     "means": [
+      "stores",
+      "means"
+     ],
+     "num_snapshots": [
+      "stores",
+      "num_snapshots"
+     ],
+     "snapshot_index": [
+      "stores",
+      "snapshot_index"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "totals": [
+      "stores",
+      "totals"
+     ]
+    }
+   },
+   "rd": {
+    "_type": "process",
+    "address": "local:VCellFVProcess",
+    "config": {
+     "antimony": "compartment ec;\ncompartment cell;\nspecies A in cell;\nspecies B in cell;\nA -> B; k*A\nk = 0.3\nA = 0\nB = 0\n",
+     "compartment": "cell",
+     "diff_coefs": {
+      "A": 0.0,
+      "B": 0.0
+     },
+     "duration": 1.0,
+     "extent_x": 4.0,
+     "extent_y": 4.0,
+     "extent_z": 4.0,
+     "init_concs": {
+      "A": "10.0",
+      "B": "0.0"
+     },
+     "mesh_x": 5,
+     "mesh_y": 5,
+     "mesh_z": 5,
+     "output_time_step": 0.25,
+     "quiet": true,
+     "track_species": [
+      "A",
+      "B"
+     ]
+    },
+    "inputs": {},
+    "interval": 0.25,
+    "outputs": {
+     "fields": [
+      "stores",
+      "fields"
+     ],
+     "means": [
+      "stores",
+      "means"
+     ],
+     "num_snapshots": [
+      "stores",
+      "num_snapshots"
+     ],
+     "snapshot_index": [
+      "stores",
+      "snapshot_index"
+     ],
+     "time": [
+      "stores",
+      "last_time"
+     ],
+     "totals": [
+      "stores",
+      "totals"
+     ]
+    }
+   },
+   "stores": {
+    "fields": {},
+    "last_time": 0.0,
+    "means": {},
+    "num_snapshots": 0,
+    "snapshot_index": 0,
+    "totals": {}
+   }
+  }
+ },
+ "rd-decay-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "means": "map[float]",
+      "num_snapshots": "integer",
+      "snapshot_index": "integer",
+      "time": "float",
+      "totals": "map[float]"
+     }
+    },
+    "inputs": {
+     "means": [
+      "stores",
+      "means"
+     ],
+     "num_snapshots": [
+      "stores",
+      "num_snapshots"
+     ],
+     "snapshot_index": [
+      "stores",
+      "snapshot_index"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "totals": [
+      "stores",
+      "totals"
+     ]
+    }
+   },
+   "rd": {
+    "_type": "process",
+    "address": "local:VCellFVProcess",
+    "config": {
+     "antimony": "compartment ec;\ncompartment cell;\nspecies A in cell;\nspecies B in cell;\nA -> B; k*A\nk = 0.3\nA = 0\nB = 0\n",
+     "compartment": "cell",
+     "diff_coefs": {
+      "A": 0.0,
+      "B": 0.0
+     },
+     "duration": 1.0,
+     "extent_x": 4.0,
+     "extent_y": 4.0,
+     "extent_z": 4.0,
+     "init_concs": {
+      "A": "10.0",
+      "B": "0.0"
+     },
+     "mesh_x": 5,
+     "mesh_y": 5,
+     "mesh_z": 5,
+     "output_time_step": 0.25,
+     "quiet": true,
+     "track_species": [
+      "A",
+      "B"
+     ]
+    },
+    "inputs": {},
+    "interval": 0.25,
+    "outputs": {
+     "fields": [
+      "stores",
+      "fields"
+     ],
+     "means": [
+      "stores",
+      "means"
+     ],
+     "num_snapshots": [
+      "stores",
+      "num_snapshots"
+     ],
+     "snapshot_index": [
+      "stores",
+      "snapshot_index"
+     ],
+     "time": [
+      "stores",
+      "last_time"
+     ],
+     "totals": [
+      "stores",
+      "totals"
+     ]
+    }
+   },
+   "stores": {
+    "fields": {},
+    "last_time": 0.0,
+    "means": {},
+    "num_snapshots": 0,
+    "snapshot_index": 0,
+    "totals": {},
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:RDFieldPlots",
+    "config": {
+     "title": "VCell FV reaction-diffusion"
+    },
+    "inputs": {
+     "means": [
+      "stores",
+      "means"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "totals": [
+      "stores",
+      "totals"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "reactor.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:ram-emitter",
+    "config": {
+     "emit": {
+      "biomass": "float",
+      "co2_evolution_rate": "float",
+      "dissolved_co2": "float",
+      "dissolved_o2": "float",
+      "gas_holdup": "float",
+      "kla_o2": "float",
+      "o2_uptake_rate": "float",
+      "specific_growth_rate": "float",
+      "time": "float"
+     }
+    },
+    "inputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "co2_evolution_rate": [
+      "stores",
+      "co2_evolution_rate"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_holdup": [
+      "stores",
+      "gas_holdup"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_uptake_rate": [
+      "stores",
+      "o2_uptake_rate"
+     ],
+     "specific_growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ],
+     "time": [
+      "global_time"
+     ]
+    }
+   },
+   "reactor": {
+    "_type": "process",
+    "address": "local:BiRDReactorProcess",
+    "config": {
+     "co2_fraction_inlet": 0.0004,
+     "diameter_m": 0.2,
+     "gas_flow_rate_Lpm": 1.0,
+     "impeller_power_W": 0.0,
+     "initial_biomass_gL": 0.5,
+     "initial_dco2_mgL": 0.5,
+     "initial_do_mgL": 8.0,
+     "ks_oxygen_mgL": 0.2,
+     "liquid_height_m": 0.5,
+     "maintenance_coeff_per_h": 0.01,
+     "max_growth_rate_per_h": 0.4,
+     "mean_bubble_diameter_mm": 3.0,
+     "o2_fraction_inlet": 0.21,
+     "pressure_atm": 1.0,
+     "reactor_type": "bubble_column",
+     "respiratory_quotient": 1.0,
+     "temperature_K": 298.15,
+     "volume_L": 20.0,
+     "yield_biomass_o2": 1.2
+    },
+    "inputs": {
+     "gas_flow_rate_Lpm": [
+      "stores",
+      "gas_flow_rate_Lpm"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "biomass": [
+      "stores",
+      "biomass"
+     ],
+     "bubble_diameter_mm": [
+      "stores",
+      "bubble_diameter_mm"
+     ],
+     "co2_evolution_rate": [
+      "stores",
+      "co2_evolution_rate"
+     ],
+     "co2_saturation": [
+      "stores",
+      "co2_saturation"
+     ],
+     "dissolved_co2": [
+      "stores",
+      "dissolved_co2"
+     ],
+     "dissolved_o2": [
+      "stores",
+      "dissolved_o2"
+     ],
+     "gas_holdup": [
+      "stores",
+      "gas_holdup"
+     ],
+     "kla_co2": [
+      "stores",
+      "kla_co2"
+     ],
+     "kla_o2": [
+      "stores",
+      "kla_o2"
+     ],
+     "o2_saturation": [
+      "stores",
+      "o2_saturation"
+     ],
+     "o2_uptake_rate": [
+      "stores",
+      "o2_uptake_rate"
+     ],
+     "specific_growth_rate": [
+      "stores",
+      "specific_growth_rate"
+     ],
+     "superficial_gas_velocity": [
+      "stores",
+      "superficial_gas_velocity"
+     ]
+    }
+   },
+   "stores": {
+    "gas_flow_rate_Lpm": 1.0
+   }
+  }
+ },
+ "readdy-demo-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "energy": "float",
+      "time": "float",
+      "total_particles": "integer"
+     }
+    },
+    "inputs": {
+     "energy": [
+      "stores",
+      "energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_particles": [
+      "stores",
+      "total_particles"
+     ]
+    }
+   },
+   "readdy": {
+    "_type": "process",
+    "address": "local:ReaDDyProcess",
+    "config": {
+     "box_size": [
+      6.0,
+      6.0,
+      6.0
+     ],
+     "initial_particles": {
+      "A": [
+       [
+        0.0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.0,
+        1.0
+       ],
+       [
+        0.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        -1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        -1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        -1.0
+       ],
+       [
+        -1.0,
+        -1.0,
+        0.0
+       ],
+       [
+        -1.0,
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        -1.0,
+        -1.0
+       ],
+       [
+        -1.0,
+        -1.0,
+        -1.0
+       ]
+      ]
+     },
+     "observe_stride": 10,
+     "periodic": [
+      true,
+      true,
+      true
+     ],
+     "reactions": [
+      {
+       "descriptor": "decay: A ->",
+       "rate": 0.1
+      }
+     ],
+     "species": {
+      "A": 1.0
+     },
+     "timestep": 0.01
+    },
+    "inputs": {},
+    "interval": 0.5,
+    "outputs": {
+     "energy": [
+      "stores",
+      "energy"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ],
+     "total_particles": [
+      "stores",
+      "total_particles"
+     ]
+    }
+   },
+   "stores": {
+    "energy": 0.0,
+    "time": 0.0,
+    "total_particles": 0,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:ReaDDyPlots",
+    "config": {
+     "title": "ReaDDy decay dynamics"
+    },
+    "inputs": {
+     "energy": [
+      "stores",
+      "energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_particles": [
+      "stores",
+      "total_particles"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "readdy-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "energy": "float",
+      "time": "float",
+      "total_particles": "integer"
+     }
+    },
+    "inputs": {
+     "energy": [
+      "stores",
+      "energy"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "total_particles": [
+      "stores",
+      "total_particles"
+     ]
+    }
+   },
+   "readdy": {
+    "_type": "process",
+    "address": "local:ReaDDyProcess",
+    "config": {
+     "box_size": [
+      6.0,
+      6.0,
+      6.0
+     ],
+     "initial_particles": {
+      "A": [
+       [
+        0.0,
+        0.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        0.0
+       ],
+       [
+        1.0,
+        0.0,
+        1.0
+       ],
+       [
+        0.0,
+        1.0,
+        1.0
+       ],
+       [
+        1.0,
+        1.0,
+        1.0
+       ],
+       [
+        -1.0,
+        0.0,
+        0.0
+       ],
+       [
+        0.0,
+        -1.0,
+        0.0
+       ],
+       [
+        0.0,
+        0.0,
+        -1.0
+       ],
+       [
+        -1.0,
+        -1.0,
+        0.0
+       ],
+       [
+        -1.0,
+        0.0,
+        -1.0
+       ],
+       [
+        0.0,
+        -1.0,
+        -1.0
+       ],
+       [
+        -1.0,
+        -1.0,
+        -1.0
+       ]
+      ]
+     },
+     "observe_stride": 10,
+     "periodic": [
+      true,
+      true,
+      true
+     ],
+     "reactions": [
+      {
+       "descriptor": "decay: A ->",
+       "rate": 0.1
+      }
+     ],
+     "species": {
+      "A": 1.0
+     },
+     "timestep": 0.01
+    },
+    "inputs": {},
+    "interval": 0.5,
+    "outputs": {
+     "energy": [
+      "stores",
+      "energy"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ],
+     "total_particles": [
+      "stores",
+      "total_particles"
+     ]
+    }
+   },
+   "stores": {
+    "energy": 0.0,
+    "time": 0.0,
+    "total_particles": 0
+   }
+  }
+ },
+ "regulation.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "Regulation": {
+    "_type": "process",
+    "address": "local:TestRegulations",
+    "config": {
+     "crit_area": 2.0,
+     "double": false,
+     "geom": "VesselGeometry",
+     "growth_rate": 0.2,
+     "period": 5.0
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ]
+    }
+   },
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity",
+      "VesselSurfaceElasticity"
+     ],
+     "eptm": "workspace/datasets/test_cylinder.hf5",
+     "factory": "model_factory",
+     "geom": "VesselGeometry",
+     "maps": {},
+     "name": "Test Cylinder",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "perimeter_elasticity": 0.5,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.5
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "prefered_radius": 2.5,
+       "vessel_elasticity": 1.0,
+       "viscosity": 0.1
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "rung1_fixed_boundary.composite.yaml": {
+  "schema": {},
+  "state": {
+   "actin": {
+    "energy": 0.0,
+    "particle_counts": {},
+    "positions": [],
+    "time": 0.0,
+    "total_particles": 0
+   },
+   "actin_sim": {
+    "_type": "process",
+    "address": "local:ReaDDyProcess",
+    "config": {
+     "box_size": [
+      4.0,
+      4.0,
+      4.0
+     ],
+     "initial_particles": {
+      "G": [
+       [
+        -0.6000000000000001,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        -0.2,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        0.2,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        0.6000000000000001,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        -0.6000000000000001,
+        -0.2,
+        -1.8
+       ],
+       [
+        -0.2,
+        -0.2,
+        -1.8
+       ],
+       [
+        0.2,
+        -0.2,
+        -1.8
+       ],
+       [
+        0.6000000000000001,
+        -0.2,
+        -1.8
+       ]
+      ]
+     },
+     "initial_topologies": [
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.4,
+         -0.4,
+         -1.5000000000000002
+        ],
+        [
+         -0.4,
+         -0.4,
+         -1.1
+        ],
+        [
+         -0.4,
+         -0.4,
+         -0.7
+        ],
+        [
+         -0.4,
+         -0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.4,
+         -0.4,
+         -1.5000000000000002
+        ],
+        [
+         0.4,
+         -0.4,
+         -1.1
+        ],
+        [
+         0.4,
+         -0.4,
+         -0.7
+        ],
+        [
+         0.4,
+         -0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.4,
+         0.4,
+         -1.5000000000000002
+        ],
+        [
+         -0.4,
+         0.4,
+         -1.1
+        ],
+        [
+         -0.4,
+         0.4,
+         -0.7
+        ],
+        [
+         -0.4,
+         0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.4,
+         0.4,
+         -1.5000000000000002
+        ],
+        [
+         0.4,
+         0.4,
+         -1.1
+        ],
+        [
+         0.4,
+         0.4,
+         -0.7
+        ],
+        [
+         0.4,
+         0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.4,
+         1.2000000000000002,
+         -1.5000000000000002
+        ],
+        [
+         -0.4,
+         1.2000000000000002,
+         -1.1
+        ],
+        [
+         -0.4,
+         1.2000000000000002,
+         -0.7
+        ],
+        [
+         -0.4,
+         1.2000000000000002,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.4,
+         1.2000000000000002,
+         -1.5000000000000002
+        ],
+        [
+         0.4,
+         1.2000000000000002,
+         -1.1
+        ],
+        [
+         0.4,
+         1.2000000000000002,
+         -0.7
+        ],
+        [
+         0.4,
+         1.2000000000000002,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      }
+     ],
+     "observe_stride": 10,
+     "periodic": [
+      false,
+      false,
+      false
+     ],
+     "potentials": [
+      {
+       "force_constant": 10.0,
+       "interaction_distance": 0.4,
+       "species1": "G",
+       "species2": "G",
+       "type": "harmonic_repulsion"
+      }
+     ],
+     "reactions": [],
+     "species": {
+      "G": 0.5
+     },
+     "timestep": 0.005,
+     "topology_angles": [
+      {
+       "equilibrium_angle": 3.14159,
+       "force_constant": 30.0,
+       "type1": "F",
+       "type2": "F",
+       "type3": "F"
+      }
+     ],
+     "topology_bonds": [
+      {
+       "force_constant": 200.0,
+       "length": 0.4,
+       "type1": "F",
+       "type2": "F"
+      }
+     ],
+     "topology_species": {
+      "F": 0.05
+     },
+     "topology_types": [
+      "filament"
+     ]
+    },
+    "inputs": {
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    },
+    "interval": 0.5,
+    "outputs": {
+     "energy": [
+      "actin",
+      "energy"
+     ],
+     "particle_counts": [
+      "actin",
+      "particle_counts"
+     ],
+     "positions": [
+      "actin",
+      "positions"
+     ],
+     "time": [
+      "actin",
+      "time"
+     ],
+     "total_particles": [
+      "actin",
+      "total_particles"
+     ]
+    }
+   },
+   "control": {
+    "osmotic_strength_offset": 0.0,
+    "wall_radius": null,
+    "wall_z": null
+   },
+   "coupler": {
+    "_type": "process",
+    "address": "local:BrownianRatchetCoupler",
+    "config": {
+     "barrier_drag": 5.0,
+     "barrier_initial_z": 0.0,
+     "barrier_kind": "fixed",
+     "closed_loop": true,
+     "contact_threshold": 0.4,
+     "coupling_mode": "planar",
+     "force_constant": 2.0,
+     "osmotic_force_scale": 0.02
+    },
+    "inputs": {
+     "actin_positions": [
+      "actin",
+      "positions"
+     ],
+     "membrane_surface_area": [
+      "membrane",
+      "surface_area"
+     ],
+     "membrane_vertices": [
+      "membrane",
+      "vertex_positions"
+     ]
+    },
+    "interval": 0.5,
+    "outputs": {
+     "actin_max_radius": [
+      "coupling",
+      "actin_max_radius"
+     ],
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "force_residual": [
+      "coupling",
+      "force_residual"
+     ],
+     "gap": [
+      "coupling",
+      "gap"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "membrane_min_radius": [
+      "coupling",
+      "membrane_min_radius"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "membrane_reaction_force": [
+      "coupling",
+      "membrane_reaction_force"
+     ],
+     "osmotic_strength_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    }
+   },
+   "coupling": {
+    "actin_max_radius": 0.0,
+    "actin_max_z": 0.0,
+    "barrier_velocity": 0.0,
+    "barrier_z": 0.0,
+    "contact_force": 0.0,
+    "force_residual": 0.0,
+    "gap": 0.0,
+    "mean_contact_force": 0.0,
+    "membrane_min_radius": 0.0,
+    "membrane_min_z": 0.0,
+    "membrane_reaction_force": 0.0,
+    "ratchet_steps": 0
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "actin_max_radius": "float",
+      "actin_max_z": "float",
+      "actin_positions": "list",
+      "actin_total": "integer",
+      "barrier_velocity": "float",
+      "barrier_z": "float",
+      "contact_force": "float",
+      "force_residual": "float",
+      "gap": "float",
+      "mean_contact_force": "float",
+      "membrane_energy": "float",
+      "membrane_min_radius": "float",
+      "membrane_min_z": "float",
+      "membrane_reaction_force": "float",
+      "membrane_vertex_positions": "list",
+      "membrane_volume": "float",
+      "osmotic_offset": "float",
+      "ratchet_steps": "integer",
+      "time": "float",
+      "wall_radius": "maybe[float]",
+      "wall_z": "maybe[float]"
+     }
+    },
+    "inputs": {
+     "actin_max_radius": [
+      "coupling",
+      "actin_max_radius"
+     ],
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "actin_positions": [
+      "actin",
+      "positions"
+     ],
+     "actin_total": [
+      "actin",
+      "total_particles"
+     ],
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "force_residual": [
+      "coupling",
+      "force_residual"
+     ],
+     "gap": [
+      "coupling",
+      "gap"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "membrane_energy": [
+      "membrane",
+      "total_energy"
+     ],
+     "membrane_min_radius": [
+      "coupling",
+      "membrane_min_radius"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "membrane_reaction_force": [
+      "coupling",
+      "membrane_reaction_force"
+     ],
+     "membrane_vertex_positions": [
+      "membrane",
+      "vertex_positions"
+     ],
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "osmotic_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    }
+   },
+   "membrane": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "volume": 0.0
+   },
+   "stores": {
+    "viz_backpressure_html": "",
+    "viz_barrier_kinematics_html": "",
+    "viz_coupling_html": "",
+    "viz_energy_budget_html": "",
+    "viz_fv_scatter_html": "",
+    "viz_population_html": "",
+    "viz_ratchet_rate_html": "",
+    "viz_volume_strain_html": ""
+   },
+   "viz_backpressure": {
+    "_type": "step",
+    "address": "local:BackpressureTrace",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "BackpressureTrace \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "osmotic_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_backpressure_html"
+     ]
+    }
+   },
+   "viz_barrier_kinematics": {
+    "_type": "step",
+    "address": "local:BarrierKinematics",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "BarrierKinematics \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_barrier_kinematics_html"
+     ]
+    }
+   },
+   "viz_coupling": {
+    "_type": "step",
+    "address": "local:CouplingTrace",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "CouplingTrace \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_coupling_html"
+     ]
+    }
+   },
+   "viz_energy_budget": {
+    "_type": "step",
+    "address": "local:EnergyBudget",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "EnergyBudget \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "bending_energy": [
+      "membrane",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "membrane",
+      "pressure_energy"
+     ],
+     "surface_energy": [
+      "membrane",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_energy_budget_html"
+     ]
+    }
+   },
+   "viz_fv_scatter": {
+    "_type": "step",
+    "address": "local:ForceVelocityScatter",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "ForceVelocityScatter \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_fv_scatter_html"
+     ]
+    }
+   },
+   "viz_population": {
+    "_type": "step",
+    "address": "local:PopulationTrace",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "PopulationTrace \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "actin_total": [
+      "actin",
+      "total_particles"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_population_html"
+     ]
+    }
+   },
+   "viz_ratchet_rate": {
+    "_type": "step",
+    "address": "local:RatchetEventRate",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "RatchetEventRate \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_ratchet_rate_html"
+     ]
+    }
+   },
+   "viz_volume_strain": {
+    "_type": "step",
+    "address": "local:MembraneVolumeStrain",
+    "config": {
+     "accent": "#94a3b8",
+     "title": "MembraneVolumeStrain \u2014 Rung 1 \u2014 Fixed boundary"
+    },
+    "inputs": {
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_volume_strain_html"
+     ]
+    }
+   }
+  }
+ },
+ "rung2_rigid_movable_boundary.composite.yaml": {
+  "schema": {},
+  "state": {
+   "actin": {
+    "energy": 0.0,
+    "particle_counts": {},
+    "positions": [],
+    "time": 0.0,
+    "total_particles": 0
+   },
+   "actin_sim": {
+    "_type": "process",
+    "address": "local:ReaDDyProcess",
+    "config": {
+     "box_size": [
+      4.0,
+      4.0,
+      4.0
+     ],
+     "initial_particles": {
+      "G": [
+       [
+        -0.6000000000000001,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        -0.2,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        0.2,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        0.6000000000000001,
+        -0.6000000000000001,
+        -1.8
+       ],
+       [
+        -0.6000000000000001,
+        -0.2,
+        -1.8
+       ],
+       [
+        -0.2,
+        -0.2,
+        -1.8
+       ],
+       [
+        0.2,
+        -0.2,
+        -1.8
+       ],
+       [
+        0.6000000000000001,
+        -0.2,
+        -1.8
+       ]
+      ]
+     },
+     "initial_topologies": [
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.4,
+         -0.4,
+         -1.5000000000000002
+        ],
+        [
+         -0.4,
+         -0.4,
+         -1.1
+        ],
+        [
+         -0.4,
+         -0.4,
+         -0.7
+        ],
+        [
+         -0.4,
+         -0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.4,
+         -0.4,
+         -1.5000000000000002
+        ],
+        [
+         0.4,
+         -0.4,
+         -1.1
+        ],
+        [
+         0.4,
+         -0.4,
+         -0.7
+        ],
+        [
+         0.4,
+         -0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.4,
+         0.4,
+         -1.5000000000000002
+        ],
+        [
+         -0.4,
+         0.4,
+         -1.1
+        ],
+        [
+         -0.4,
+         0.4,
+         -0.7
+        ],
+        [
+         -0.4,
+         0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.4,
+         0.4,
+         -1.5000000000000002
+        ],
+        [
+         0.4,
+         0.4,
+         -1.1
+        ],
+        [
+         0.4,
+         0.4,
+         -0.7
+        ],
+        [
+         0.4,
+         0.4,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.4,
+         1.2000000000000002,
+         -1.5000000000000002
+        ],
+        [
+         -0.4,
+         1.2000000000000002,
+         -1.1
+        ],
+        [
+         -0.4,
+         1.2000000000000002,
+         -0.7
+        ],
+        [
+         -0.4,
+         1.2000000000000002,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.4,
+         1.2000000000000002,
+         -1.5000000000000002
+        ],
+        [
+         0.4,
+         1.2000000000000002,
+         -1.1
+        ],
+        [
+         0.4,
+         1.2000000000000002,
+         -0.7
+        ],
+        [
+         0.4,
+         1.2000000000000002,
+         -0.3
+        ]
+       ],
+       "type": "filament"
+      }
+     ],
+     "observe_stride": 10,
+     "periodic": [
+      false,
+      false,
+      false
+     ],
+     "potentials": [
+      {
+       "force_constant": 10.0,
+       "interaction_distance": 0.4,
+       "species1": "G",
+       "species2": "G",
+       "type": "harmonic_repulsion"
+      }
+     ],
+     "reactions": [],
+     "species": {
+      "G": 0.5
+     },
+     "timestep": 0.005,
+     "topology_angles": [
+      {
+       "equilibrium_angle": 3.14159,
+       "force_constant": 30.0,
+       "type1": "F",
+       "type2": "F",
+       "type3": "F"
+      }
+     ],
+     "topology_bonds": [
+      {
+       "force_constant": 200.0,
+       "length": 0.4,
+       "type1": "F",
+       "type2": "F"
+      }
+     ],
+     "topology_species": {
+      "F": 0.05
+     },
+     "topology_types": [
+      "filament"
+     ]
+    },
+    "inputs": {
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    },
+    "interval": 0.5,
+    "outputs": {
+     "energy": [
+      "actin",
+      "energy"
+     ],
+     "particle_counts": [
+      "actin",
+      "particle_counts"
+     ],
+     "positions": [
+      "actin",
+      "positions"
+     ],
+     "time": [
+      "actin",
+      "time"
+     ],
+     "total_particles": [
+      "actin",
+      "total_particles"
+     ]
+    }
+   },
+   "control": {
+    "osmotic_strength_offset": 0.0,
+    "wall_radius": null,
+    "wall_z": null
+   },
+   "coupler": {
+    "_type": "process",
+    "address": "local:BrownianRatchetCoupler",
+    "config": {
+     "barrier_drag": 8.0,
+     "barrier_initial_z": 0.0,
+     "barrier_kind": "rigid_movable",
+     "closed_loop": true,
+     "contact_threshold": 0.4,
+     "coupling_mode": "planar",
+     "force_constant": 2.0,
+     "osmotic_force_scale": 0.02
+    },
+    "inputs": {
+     "actin_positions": [
+      "actin",
+      "positions"
+     ],
+     "membrane_surface_area": [
+      "membrane",
+      "surface_area"
+     ],
+     "membrane_vertices": [
+      "membrane",
+      "vertex_positions"
+     ]
+    },
+    "interval": 0.5,
+    "outputs": {
+     "actin_max_radius": [
+      "coupling",
+      "actin_max_radius"
+     ],
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "force_residual": [
+      "coupling",
+      "force_residual"
+     ],
+     "gap": [
+      "coupling",
+      "gap"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "membrane_min_radius": [
+      "coupling",
+      "membrane_min_radius"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "membrane_reaction_force": [
+      "coupling",
+      "membrane_reaction_force"
+     ],
+     "osmotic_strength_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    }
+   },
+   "coupling": {
+    "actin_max_radius": 0.0,
+    "actin_max_z": 0.0,
+    "barrier_velocity": 0.0,
+    "barrier_z": 0.0,
+    "contact_force": 0.0,
+    "force_residual": 0.0,
+    "gap": 0.0,
+    "mean_contact_force": 0.0,
+    "membrane_min_radius": 0.0,
+    "membrane_min_z": 0.0,
+    "membrane_reaction_force": 0.0,
+    "ratchet_steps": 0
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "actin_max_radius": "float",
+      "actin_max_z": "float",
+      "actin_positions": "list",
+      "actin_total": "integer",
+      "barrier_velocity": "float",
+      "barrier_z": "float",
+      "contact_force": "float",
+      "force_residual": "float",
+      "gap": "float",
+      "mean_contact_force": "float",
+      "membrane_energy": "float",
+      "membrane_min_radius": "float",
+      "membrane_min_z": "float",
+      "membrane_reaction_force": "float",
+      "membrane_vertex_positions": "list",
+      "membrane_volume": "float",
+      "osmotic_offset": "float",
+      "ratchet_steps": "integer",
+      "time": "float",
+      "wall_radius": "maybe[float]",
+      "wall_z": "maybe[float]"
+     }
+    },
+    "inputs": {
+     "actin_max_radius": [
+      "coupling",
+      "actin_max_radius"
+     ],
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "actin_positions": [
+      "actin",
+      "positions"
+     ],
+     "actin_total": [
+      "actin",
+      "total_particles"
+     ],
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "force_residual": [
+      "coupling",
+      "force_residual"
+     ],
+     "gap": [
+      "coupling",
+      "gap"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "membrane_energy": [
+      "membrane",
+      "total_energy"
+     ],
+     "membrane_min_radius": [
+      "coupling",
+      "membrane_min_radius"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "membrane_reaction_force": [
+      "coupling",
+      "membrane_reaction_force"
+     ],
+     "membrane_vertex_positions": [
+      "membrane",
+      "vertex_positions"
+     ],
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "osmotic_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    }
+   },
+   "membrane": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "volume": 0.0
+   },
+   "stores": {
+    "viz_backpressure_html": "",
+    "viz_barrier_kinematics_html": "",
+    "viz_coupling_html": "",
+    "viz_energy_budget_html": "",
+    "viz_fv_scatter_html": "",
+    "viz_population_html": "",
+    "viz_ratchet_rate_html": "",
+    "viz_volume_strain_html": ""
+   },
+   "viz_backpressure": {
+    "_type": "step",
+    "address": "local:BackpressureTrace",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "BackpressureTrace \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "osmotic_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_backpressure_html"
+     ]
+    }
+   },
+   "viz_barrier_kinematics": {
+    "_type": "step",
+    "address": "local:BarrierKinematics",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "BarrierKinematics \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_barrier_kinematics_html"
+     ]
+    }
+   },
+   "viz_coupling": {
+    "_type": "step",
+    "address": "local:CouplingTrace",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "CouplingTrace \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_coupling_html"
+     ]
+    }
+   },
+   "viz_energy_budget": {
+    "_type": "step",
+    "address": "local:EnergyBudget",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "EnergyBudget \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "bending_energy": [
+      "membrane",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "membrane",
+      "pressure_energy"
+     ],
+     "surface_energy": [
+      "membrane",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_energy_budget_html"
+     ]
+    }
+   },
+   "viz_fv_scatter": {
+    "_type": "step",
+    "address": "local:ForceVelocityScatter",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "ForceVelocityScatter \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_fv_scatter_html"
+     ]
+    }
+   },
+   "viz_population": {
+    "_type": "step",
+    "address": "local:PopulationTrace",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "PopulationTrace \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "actin_total": [
+      "actin",
+      "total_particles"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_population_html"
+     ]
+    }
+   },
+   "viz_ratchet_rate": {
+    "_type": "step",
+    "address": "local:RatchetEventRate",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "RatchetEventRate \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_ratchet_rate_html"
+     ]
+    }
+   },
+   "viz_volume_strain": {
+    "_type": "step",
+    "address": "local:MembraneVolumeStrain",
+    "config": {
+     "accent": "#0ea5e9",
+     "title": "MembraneVolumeStrain \u2014 Rung 2 \u2014 Movable rigid boundary (Peskin 1993)"
+    },
+    "inputs": {
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_volume_strain_html"
+     ]
+    }
+   }
+  }
+ },
+ "rung3_flexible_mem3dg_boundary.composite.yaml": {
+  "schema": {},
+  "state": {
+   "actin": {
+    "energy": 0.0,
+    "particle_counts": {},
+    "positions": [],
+    "time": 0.0,
+    "total_particles": 0
+   },
+   "actin_sim": {
+    "_type": "process",
+    "address": "local:ReaDDyProcess",
+    "config": {
+     "box_size": [
+      8.0,
+      8.0,
+      8.0
+     ],
+     "initial_particles": {
+      "G": [
+       [
+        -0.44999999999999996,
+        -0.44999999999999996,
+        -0.15
+       ],
+       [
+        -0.15,
+        -0.44999999999999996,
+        -0.15
+       ],
+       [
+        0.15,
+        -0.44999999999999996,
+        -0.15
+       ],
+       [
+        0.44999999999999996,
+        -0.44999999999999996,
+        -0.15
+       ],
+       [
+        -0.44999999999999996,
+        -0.15,
+        -0.15
+       ],
+       [
+        -0.15,
+        -0.15,
+        -0.15
+       ],
+       [
+        0.15,
+        -0.15,
+        -0.15
+       ],
+       [
+        0.44999999999999996,
+        -0.15,
+        -0.15
+       ]
+      ]
+     },
+     "initial_topologies": [
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.11055415967851333,
+         0.16666666666666669,
+         0.0
+        ],
+        [
+         0.33166247903554,
+         0.5000000000000001,
+         0.0
+        ],
+        [
+         0.5527707983925666,
+         0.8333333333333334,
+         0.0
+        ],
+        [
+         0.7738791177495933,
+         1.1666666666666667,
+         0.0
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.12771603607517107,
+         0.1,
+         0.11699835096806109
+        ],
+        [
+         -0.3831481082255132,
+         0.30000000000000004,
+         0.3509950529041833
+        ],
+        [
+         -0.6385801803758553,
+         0.5,
+         0.5849917548403054
+        ],
+        [
+         -0.8940122525261975,
+         0.7000000000000001,
+         0.8189884567764276
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.01724058541736129,
+         0.03333333333333335,
+         -0.19644757851232364
+        ],
+        [
+         0.051721756252083875,
+         0.10000000000000006,
+         -0.589342735536971
+        ],
+        [
+         0.08620292708680645,
+         0.16666666666666674,
+         -0.9822378925616182
+        ],
+        [
+         0.12068409792152904,
+         0.23333333333333345,
+         -1.3751330495862657
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.11998576148964023,
+         -0.033333333333333305,
+         0.15650017868564897
+        ],
+        [
+         0.3599572844689207,
+         -0.09999999999999992,
+         0.46950053605694697
+        ],
+        [
+         0.5999288074482011,
+         -0.16666666666666652,
+         0.7825008934282448
+        ],
+        [
+         0.8399003304274816,
+         -0.23333333333333314,
+         1.0955012507995427
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         -0.1705573787464552,
+         -0.1,
+         -0.030169198781840885
+        ],
+        [
+         -0.5116721362393657,
+         -0.30000000000000004,
+         -0.09050759634552266
+        ],
+        [
+         -0.852786893732276,
+         -0.5,
+         -0.15084599390920442
+        ],
+        [
+         -1.1939016512251865,
+         -0.7000000000000001,
+         -0.2111843914728862
+        ]
+       ],
+       "type": "filament"
+      },
+      {
+       "particle_types": [
+        "F",
+        "F",
+        "F",
+        "F"
+       ],
+       "positions": [
+        [
+         0.09328065759228087,
+         -0.16666666666666666,
+         -0.059337518833987996
+        ],
+        [
+         0.27984197277684264,
+         -0.5,
+         -0.178012556501964
+        ],
+        [
+         0.4664032879614043,
+         -0.8333333333333333,
+         -0.29668759416993995
+        ],
+        [
+         0.652964603145966,
+         -1.1666666666666667,
+         -0.415362631837916
+        ]
+       ],
+       "type": "filament"
+      }
+     ],
+     "observe_stride": 10,
+     "periodic": [
+      false,
+      false,
+      false
+     ],
+     "potentials": [
+      {
+       "force_constant": 10.0,
+       "interaction_distance": 0.4,
+       "species1": "G",
+       "species2": "G",
+       "type": "harmonic_repulsion"
+      }
+     ],
+     "reactions": [],
+     "species": {
+      "G": 0.5
+     },
+     "timestep": 0.005,
+     "topology_angles": [
+      {
+       "equilibrium_angle": 3.14159,
+       "force_constant": 30.0,
+       "type1": "F",
+       "type2": "F",
+       "type3": "F"
+      }
+     ],
+     "topology_bonds": [
+      {
+       "force_constant": 200.0,
+       "length": 0.4,
+       "type1": "F",
+       "type2": "F"
+      }
+     ],
+     "topology_species": {
+      "F": 0.05
+     },
+     "topology_types": [
+      "filament"
+     ]
+    },
+    "inputs": {
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    },
+    "interval": 0.5,
+    "outputs": {
+     "energy": [
+      "actin",
+      "energy"
+     ],
+     "particle_counts": [
+      "actin",
+      "particle_counts"
+     ],
+     "positions": [
+      "actin",
+      "positions"
+     ],
+     "time": [
+      "actin",
+      "time"
+     ],
+     "total_particles": [
+      "actin",
+      "total_particles"
+     ]
+    }
+   },
+   "control": {
+    "osmotic_strength_offset": 0.0,
+    "wall_radius": null,
+    "wall_z": null
+   },
+   "coupler": {
+    "_type": "process",
+    "address": "local:BrownianRatchetCoupler",
+    "config": {
+     "barrier_drag": 5.0,
+     "barrier_initial_z": 2.5,
+     "barrier_kind": "flexible",
+     "closed_loop": true,
+     "contact_threshold": 0.3,
+     "coupling_mode": "spherical",
+     "force_constant": 5.0,
+     "osmotic_force_scale": 0.05
+    },
+    "inputs": {
+     "actin_positions": [
+      "actin",
+      "positions"
+     ],
+     "membrane_surface_area": [
+      "membrane",
+      "surface_area"
+     ],
+     "membrane_vertices": [
+      "membrane",
+      "vertex_positions"
+     ]
+    },
+    "interval": 0.5,
+    "outputs": {
+     "actin_max_radius": [
+      "coupling",
+      "actin_max_radius"
+     ],
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "force_residual": [
+      "coupling",
+      "force_residual"
+     ],
+     "gap": [
+      "coupling",
+      "gap"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "membrane_min_radius": [
+      "coupling",
+      "membrane_min_radius"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "membrane_reaction_force": [
+      "coupling",
+      "membrane_reaction_force"
+     ],
+     "osmotic_strength_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    }
+   },
+   "coupling": {
+    "actin_max_radius": 0.0,
+    "actin_max_z": 0.0,
+    "barrier_velocity": 0.0,
+    "barrier_z": 2.5,
+    "contact_force": 0.0,
+    "force_residual": 0.0,
+    "gap": 0.0,
+    "mean_contact_force": 0.0,
+    "membrane_min_radius": 0.0,
+    "membrane_min_z": 0.0,
+    "membrane_reaction_force": 0.0,
+    "ratchet_steps": 0
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "actin_max_radius": "float",
+      "actin_max_z": "float",
+      "actin_positions": "list",
+      "actin_total": "integer",
+      "barrier_velocity": "float",
+      "barrier_z": "float",
+      "contact_force": "float",
+      "force_residual": "float",
+      "gap": "float",
+      "mean_contact_force": "float",
+      "membrane_energy": "float",
+      "membrane_min_radius": "float",
+      "membrane_min_z": "float",
+      "membrane_reaction_force": "float",
+      "membrane_vertex_positions": "list",
+      "membrane_volume": "float",
+      "osmotic_offset": "float",
+      "ratchet_steps": "integer",
+      "time": "float",
+      "wall_radius": "maybe[float]",
+      "wall_z": "maybe[float]"
+     }
+    },
+    "inputs": {
+     "actin_max_radius": [
+      "coupling",
+      "actin_max_radius"
+     ],
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "actin_positions": [
+      "actin",
+      "positions"
+     ],
+     "actin_total": [
+      "actin",
+      "total_particles"
+     ],
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "force_residual": [
+      "coupling",
+      "force_residual"
+     ],
+     "gap": [
+      "coupling",
+      "gap"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "membrane_energy": [
+      "membrane",
+      "total_energy"
+     ],
+     "membrane_min_radius": [
+      "coupling",
+      "membrane_min_radius"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "membrane_reaction_force": [
+      "coupling",
+      "membrane_reaction_force"
+     ],
+     "membrane_vertex_positions": [
+      "membrane",
+      "vertex_positions"
+     ],
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "osmotic_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "wall_radius": [
+      "control",
+      "wall_radius"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    }
+   },
+   "membrane": {
+    "bending_energy": 0.0,
+    "converged": false,
+    "mean_curvatures": [],
+    "pressure_energy": 0.0,
+    "surface_area": 0.0,
+    "surface_energy": 0.0,
+    "total_energy": 0.0,
+    "vertex_positions": [],
+    "volume": 0.0
+   },
+   "membrane_sim": {
+    "_type": "process",
+    "address": "local:Mem3DGProcess",
+    "config": {
+     "characteristic_timestep": 0.5,
+     "mesh_type": "icosphere",
+     "osmotic_model": "constant",
+     "osmotic_pressure": 0.0,
+     "preferred_area_scale": 1.0,
+     "radius": 2.0,
+     "subdivision": 2,
+     "tension_modulus": 1.0,
+     "tolerance": 1e-09
+    },
+    "inputs": {
+     "osmotic_strength_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ]
+    },
+    "interval": 0.5,
+    "outputs": {
+     "bending_energy": [
+      "membrane",
+      "bending_energy"
+     ],
+     "converged": [
+      "membrane",
+      "converged"
+     ],
+     "mean_curvatures": [
+      "membrane",
+      "mean_curvatures"
+     ],
+     "pressure_energy": [
+      "membrane",
+      "pressure_energy"
+     ],
+     "surface_area": [
+      "membrane",
+      "surface_area"
+     ],
+     "surface_energy": [
+      "membrane",
+      "surface_energy"
+     ],
+     "total_energy": [
+      "membrane",
+      "total_energy"
+     ],
+     "vertex_positions": [
+      "membrane",
+      "vertex_positions"
+     ],
+     "volume": [
+      "membrane",
+      "volume"
+     ]
+    }
+   },
+   "stores": {
+    "viz_backpressure_html": "",
+    "viz_barrier_kinematics_html": "",
+    "viz_coupling_html": "",
+    "viz_energy_budget_html": "",
+    "viz_fv_scatter_html": "",
+    "viz_population_html": "",
+    "viz_ratchet_rate_html": "",
+    "viz_volume_strain_html": ""
+   },
+   "viz_backpressure": {
+    "_type": "step",
+    "address": "local:BackpressureTrace",
+    "config": {
+     "accent": "#10b981",
+     "title": "BackpressureTrace \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "osmotic_offset": [
+      "control",
+      "osmotic_strength_offset"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "wall_z": [
+      "control",
+      "wall_z"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_backpressure_html"
+     ]
+    }
+   },
+   "viz_barrier_kinematics": {
+    "_type": "step",
+    "address": "local:BarrierKinematics",
+    "config": {
+     "accent": "#10b981",
+     "title": "BarrierKinematics \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "barrier_z": [
+      "coupling",
+      "barrier_z"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_barrier_kinematics_html"
+     ]
+    }
+   },
+   "viz_coupling": {
+    "_type": "step",
+    "address": "local:CouplingTrace",
+    "config": {
+     "accent": "#10b981",
+     "title": "CouplingTrace \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "actin_max_z": [
+      "coupling",
+      "actin_max_z"
+     ],
+     "contact_force": [
+      "coupling",
+      "contact_force"
+     ],
+     "membrane_min_z": [
+      "coupling",
+      "membrane_min_z"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_coupling_html"
+     ]
+    }
+   },
+   "viz_energy_budget": {
+    "_type": "step",
+    "address": "local:EnergyBudget",
+    "config": {
+     "accent": "#10b981",
+     "title": "EnergyBudget \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "bending_energy": [
+      "membrane",
+      "bending_energy"
+     ],
+     "pressure_energy": [
+      "membrane",
+      "pressure_energy"
+     ],
+     "surface_energy": [
+      "membrane",
+      "surface_energy"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_energy_budget_html"
+     ]
+    }
+   },
+   "viz_fv_scatter": {
+    "_type": "step",
+    "address": "local:ForceVelocityScatter",
+    "config": {
+     "accent": "#10b981",
+     "title": "ForceVelocityScatter \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "barrier_velocity": [
+      "coupling",
+      "barrier_velocity"
+     ],
+     "mean_contact_force": [
+      "coupling",
+      "mean_contact_force"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_fv_scatter_html"
+     ]
+    }
+   },
+   "viz_population": {
+    "_type": "step",
+    "address": "local:PopulationTrace",
+    "config": {
+     "accent": "#10b981",
+     "title": "PopulationTrace \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "actin_total": [
+      "actin",
+      "total_particles"
+     ],
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_population_html"
+     ]
+    }
+   },
+   "viz_ratchet_rate": {
+    "_type": "step",
+    "address": "local:RatchetEventRate",
+    "config": {
+     "accent": "#10b981",
+     "title": "RatchetEventRate \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "ratchet_steps": [
+      "coupling",
+      "ratchet_steps"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_ratchet_rate_html"
+     ]
+    }
+   },
+   "viz_volume_strain": {
+    "_type": "step",
+    "address": "local:MembraneVolumeStrain",
+    "config": {
+     "accent": "#10b981",
+     "title": "MembraneVolumeStrain \u2014 Rung 3 \u2014 Flexible Mem3DG membrane"
+    },
+    "inputs": {
+     "membrane_volume": [
+      "membrane",
+      "volume"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_volume_strain_html"
+     ]
+    }
+   }
+  }
+ },
+ "spatial-containment.composite.yaml": {
+  "schema": {},
+  "state": {
+   "concentration": [
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    2.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0,
+    0.0
+   ],
+   "containment": 1.0,
+   "membrane": 10.0,
+   "spatial": {
+    "_type": "process",
+    "address": "local:SpatialContainment",
+    "config": {
+     "fed": true,
+     "membrane_on": true
+    },
+    "inputs": {
+     "concentration": [
+      "concentration"
+     ],
+     "containment": [
+      "containment"
+     ],
+     "membrane": [
+      "membrane"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "concentration": [
+      "concentration"
+     ],
+     "containment": [
+      "containment"
+     ],
+     "membrane": [
+      "membrane"
+     ]
+    }
+   }
+  }
+ },
+ "spheres-demo-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "n_packed": "integer",
+      "packing_fraction": "float"
+     }
+    },
+    "inputs": {
+     "n_packed": [
+      "stores",
+      "n_packed"
+     ],
+     "packing_fraction": [
+      "stores",
+      "packing_fraction"
+     ]
+    }
+   },
+   "packer": {
+    "_type": "step",
+    "address": "local:CellPackStep",
+    "config": {
+     "place_method": "jitter",
+     "recipe": {
+      "bounding_box": [
+       [
+        0,
+        0,
+        0
+       ],
+       [
+        300,
+        300,
+        300
+       ]
+      ],
+      "composition": {
+       "A": {
+        "count": 8,
+        "object": "sphere_a"
+       },
+       "B": {
+        "count": 12,
+        "object": "sphere_b"
+       },
+       "space": {
+        "regions": {
+         "interior": [
+          "A",
+          "B"
+         ]
+        }
+       }
+      },
+      "format_version": "2.0",
+      "name": "spheres_demo",
+      "objects": {
+       "base": {
+        "jitter_attempts": 10,
+        "max_jitter": [
+         1,
+         1,
+         1
+        ],
+        "packing_mode": "random",
+        "place_method": "jitter",
+        "type": "single_sphere"
+       },
+       "sphere_a": {
+        "color": [
+         0.2,
+         0.7,
+         0.4
+        ],
+        "inherit": "base",
+        "radius": 25,
+        "type": "single_sphere"
+       },
+       "sphere_b": {
+        "color": [
+         0.9,
+         0.3,
+         0.2
+        ],
+        "inherit": "base",
+        "radius": 18,
+        "type": "single_sphere"
+       }
+      },
+      "version": "1.0.0"
+     }
+    },
+    "inputs": {
+     "seed": [
+      "stores",
+      "seed"
+     ]
+    },
+    "outputs": {
+     "ingredient_colors": [
+      "stores",
+      "ingredient_colors"
+     ],
+     "ingredient_names": [
+      "stores",
+      "ingredient_names"
+     ],
+     "n_packed": [
+      "stores",
+      "n_packed"
+     ],
+     "packing_fraction": [
+      "stores",
+      "packing_fraction"
+     ],
+     "positions": [
+      "stores",
+      "positions"
+     ],
+     "radii": [
+      "stores",
+      "radii"
+     ]
+    }
+   },
+   "stores": {
+    "ingredient_colors": [],
+    "ingredient_names": [],
+    "n_packed": 0,
+    "packing_fraction": 0.0,
+    "positions": [],
+    "radii": [],
+    "seed": 42,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:PackingPlots",
+    "config": {
+     "title": "cellPACK packing"
+    },
+    "inputs": {
+     "ingredient_colors": [
+      "stores",
+      "ingredient_colors"
+     ],
+     "ingredient_names": [
+      "stores",
+      "ingredient_names"
+     ],
+     "n_packed": [
+      "stores",
+      "n_packed"
+     ],
+     "packing_fraction": [
+      "stores",
+      "packing_fraction"
+     ],
+     "positions": [
+      "stores",
+      "positions"
+     ],
+     "radii": [
+      "stores",
+      "radii"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   }
+  }
+ },
+ "spheres-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "n_packed": "integer",
+      "packing_fraction": "float"
+     }
+    },
+    "inputs": {
+     "n_packed": [
+      "stores",
+      "n_packed"
+     ],
+     "packing_fraction": [
+      "stores",
+      "packing_fraction"
+     ]
+    }
+   },
+   "packer": {
+    "_type": "step",
+    "address": "local:CellPackStep",
+    "config": {
+     "place_method": "jitter",
+     "recipe": {
+      "bounding_box": [
+       [
+        0,
+        0,
+        0
+       ],
+       [
+        300,
+        300,
+        300
+       ]
+      ],
+      "composition": {
+       "A": {
+        "count": 8,
+        "object": "sphere_a"
+       },
+       "space": {
+        "regions": {
+         "interior": [
+          "A"
+         ]
+        }
+       }
+      },
+      "format_version": "2.0",
+      "name": "spheres_demo",
+      "objects": {
+       "base": {
+        "jitter_attempts": 10,
+        "max_jitter": [
+         1,
+         1,
+         1
+        ],
+        "packing_mode": "random",
+        "place_method": "jitter",
+        "type": "single_sphere"
+       },
+       "sphere_a": {
+        "color": [
+         0.2,
+         0.7,
+         0.4
+        ],
+        "inherit": "base",
+        "radius": 25,
+        "type": "single_sphere"
+       }
+      },
+      "version": "1.0.0"
+     }
+    },
+    "inputs": {
+     "seed": [
+      "stores",
+      "seed"
+     ]
+    },
+    "outputs": {
+     "ingredient_colors": [
+      "stores",
+      "ingredient_colors"
+     ],
+     "ingredient_names": [
+      "stores",
+      "ingredient_names"
+     ],
+     "n_packed": [
+      "stores",
+      "n_packed"
+     ],
+     "packing_fraction": [
+      "stores",
+      "packing_fraction"
+     ],
+     "positions": [
+      "stores",
+      "positions"
+     ],
+     "radii": [
+      "stores",
+      "radii"
+     ]
+    }
+   },
+   "stores": {
+    "ingredient_colors": [],
+    "ingredient_names": [],
+    "n_packed": 0,
+    "packing_fraction": 0.0,
+    "positions": [],
+    "radii": [],
+    "seed": 42
+   }
+  }
+ },
+ "steady-state.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "concentrations": "map[float]"
+     }
+    },
+    "inputs": {
+     "concentrations": [
+      "ss_results",
+      "concentrations"
+     ]
+    }
+   },
+   "ss_results": {
+    "concentrations": {}
+   },
+   "steady_state": {
+    "_type": "step",
+    "address": "local:TelluriumSteadyStateStep",
+    "config": {
+     "model": "model decay\n  S1 = 10; S2 = 0\n  S1 -> S2; k*S1; k = 0.3\nend\n",
+     "model_format": "antimony"
+    },
+    "inputs": {},
+    "outputs": {
+     "steady_state_concentrations": [
+      "ss_results",
+      "concentrations"
+     ]
+    }
+   }
+  }
+ },
+ "stochastic.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "Stochastic": {
+    "_type": "process",
+    "address": "local:StochasticLineTension",
+    "config": {
+     "sigma": 0.1,
+     "tau": 0.2
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ]
+    }
+   },
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/test_square.hf5",
+     "factory": "model_factory_bound",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "name": "Test Square",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "is_alive": 1.0,
+       "migration_strength": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.1,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+       ],
+       "mx": 1.0,
+       "my": 1.0,
+       "mz": 0.0,
+       "perimeter_elasticity": 0.1,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.6
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "substeps": 1,
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.1,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   }
+  }
+ },
+ "tumor.composite.yaml": {
+  "schema": {},
+  "state": {
+   "Behaviors": {},
+   "Network Changed": false,
+   "TumorCoupling": {
+    "_type": "process",
+    "address": "local:TumorCoupling",
+    "config": {
+     "apoptosis_crit": 2.0,
+     "birth_fluxes": {
+      "healthy": "Increase in the healthy cell in the system",
+      "stem": "Formation of Stem cell",
+      "tumor": "Induction of tumor cell"
+     },
+     "copasi_intervals": 10,
+     "copasi_time": 1.0,
+     "death_fluxes": {
+      "healthy": "Decrase of healthy cell due to cancer",
+      "stem": "Removal of stem cell from the system",
+      "tumor": "Removal of tumor cell y immune cell and other immune response"
+     },
+     "division_crit": 2.0,
+     "dt": 1.0,
+     "geom": "SheetGeometry",
+     "growth_rate": 0.1,
+     "model_source": "workspace/datasets/BIOMD0000000903.xml",
+     "scales": {
+      "healthy_births": 6e-08,
+      "healthy_deaths": 1.2e-07,
+      "stem_births": 6e-07,
+      "stem_deaths": 2e-05,
+      "tumor_births": 2e-06,
+      "tumor_deaths": 8e-07
+     },
+     "seed": {
+      "stem": 0,
+      "tumor": 1
+     },
+     "shrink_rate": 0.1,
+     "topology_ops": true
+    },
+    "inputs": {
+     "datasets": [
+      "Datasets"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.01,
+    "outputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "dead_count": [
+      "dead_count"
+     ],
+     "healthy_births": [
+      "healthy_births"
+     ],
+     "healthy_count": [
+      "healthy_count"
+     ],
+     "healthy_deaths": [
+      "healthy_deaths"
+     ],
+     "healthy_fraction": [
+      "healthy_fraction"
+     ],
+     "stem_births": [
+      "stem_births"
+     ],
+     "stem_count": [
+      "stem_count"
+     ],
+     "stem_deaths": [
+      "stem_deaths"
+     ],
+     "total_count": [
+      "total_count"
+     ],
+     "tumor_births": [
+      "tumor_births"
+     ],
+     "tumor_count": [
+      "tumor_count"
+     ],
+     "tumor_deaths": [
+      "tumor_deaths"
+     ]
+    }
+   },
+   "Tyssue": {
+    "_type": "process",
+    "address": "local:EulerSolver",
+    "config": {
+     "auto_reconnect": true,
+     "backend": "rust",
+     "bounds": {},
+     "effectors": [
+      "LineTension",
+      "FaceAreaElasticity",
+      "PerimeterElasticity"
+     ],
+     "eptm": "workspace/datasets/test_square.hf5",
+     "factory": "model_factory",
+     "geom": "SheetGeometry",
+     "maps": {},
+     "name": "Tumor Epithelium 2D",
+     "output_columns": {},
+     "parameters": {
+      "edge_df": {
+       "is_active": 1.0,
+       "line_tension": 0.0
+      },
+      "face_df": {
+       "area_elasticity": 1.0,
+       "cell_type": "healthy",
+       "is_alive": 1.0,
+       "perimeter_elasticity": 0.1,
+       "prefered_area": 1.0,
+       "prefered_perimeter": 3.6
+      },
+      "vert_df": {
+       "is_alive": 1.0,
+       "viscosity": 1.0
+      }
+     },
+     "ref_effector": "FaceAreaElasticity",
+     "settings": {
+      "threshold_length": 0.03
+     },
+     "tissue_type": "Sheet"
+    },
+    "inputs": {
+     "behaviors": [
+      "Behaviors"
+     ],
+     "global_time": [
+      "global_time"
+     ]
+    },
+    "interval": 0.01,
+    "outputs": {
+     "behaviors_update": [
+      "Behaviors"
+     ],
+     "datasets": [
+      "Datasets"
+     ],
+     "network_changed": [
+      "Network Changed"
+     ]
+    }
+   },
+   "dead_count": 0.0,
+   "healthy_births": 0.0,
+   "healthy_count": 0.0,
+   "healthy_deaths": 0.0,
+   "healthy_fraction": 0.0,
+   "stem_births": 0.0,
+   "stem_count": 0.0,
+   "stem_deaths": 0.0,
+   "total_count": 0.0,
+   "tumor_births": 0.0,
+   "tumor_count": 0.0,
+   "tumor_deaths": 0.0
+  }
+ },
+ "utc-process.composite.yaml": {
+  "schema": {},
+  "state": {
+   "copasi_utc_process": {
+    "_type": "process",
+    "address": "local:CopasiUTCProcess",
+    "config": {
+     "intervals": 10,
+     "model_source": "${model_dir}/repressilator.xml",
+     "time": 1.0
+    },
+    "inputs": {
+     "species_concentrations": [
+      "stores",
+      "species_concentrations"
+     ],
+     "species_counts": [
+      "stores",
+      "species_counts"
+     ]
+    },
+    "interval": 1.0,
+    "outputs": {
+     "fluxes": [
+      "stores",
+      "fluxes"
+     ],
+     "species_concentrations": [
+      "stores",
+      "species_concentrations"
+     ],
+     "time": [
+      "stores",
+      "time"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "fluxes": "map[float]",
+      "species_concentrations": "map[float]"
+     }
+    },
+    "inputs": {
+     "fluxes": [
+      "stores",
+      "fluxes"
+     ],
+     "species_concentrations": [
+      "stores",
+      "species_concentrations"
+     ]
+    }
+   },
+   "stores": {
+    "fluxes": {},
+    "species_concentrations": {},
+    "species_counts": {},
+    "time": []
+   }
+  }
+ },
+ "utc-step.composite.yaml": {
+  "schema": {},
+  "state": {
+   "copasi_utc": {
+    "_type": "step",
+    "address": "local:CopasiUTCStep",
+    "config": {
+     "model_source": "${model_dir}/repressilator.xml",
+     "n_points": 11,
+     "time": 10.0
+    },
+    "inputs": {
+     "species_concentrations": [
+      "stores",
+      "species_concentrations"
+     ],
+     "species_counts": [
+      "stores",
+      "species_counts"
+     ]
+    },
+    "outputs": {
+     "result": [
+      "stores",
+      "result"
+     ]
+    }
+   },
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {}
+    },
+    "inputs": {
+     "result": [
+      "stores",
+      "result"
+     ]
+    }
+   },
+   "stores": {
+    "result": {},
+    "species_concentrations": {},
+    "species_counts": {}
+   }
+  }
+ },
+ "v2ecoli.structural.composite.parsimony-ecoli.json": {
+  "schema": {},
+  "state": {
+   "ecoli_structural": {
+    "_type": "step",
+    "address": "local:EcoliStructuralStep",
+    "config": {
+     "out_dir": "out/ecoli3d",
+     "scale": 1.0,
+     "state_source": "snapshot",
+     "top_n": 40
+    },
+    "inputs": {},
+    "outputs": {
+     "pack": [
+      "pack"
+     ]
+    }
+   },
+   "pack": {}
+  }
+ },
+ "yalla-real-springs.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "gyration_radius": "float",
+      "mean_neighbor_distance": "float",
+      "n_cells": "integer",
+      "sorting_score": "float",
+      "time": "float",
+      "type_radial_spread": "float"
+     }
+    },
+    "inputs": {
+     "gyration_radius": [
+      "stores",
+      "gyration_radius"
+     ],
+     "mean_neighbor_distance": [
+      "stores",
+      "mean_neighbor_distance"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "sorting_score": [
+      "stores",
+      "sorting_score"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "type_radial_spread": [
+      "stores",
+      "type_radial_spread"
+     ]
+    }
+   },
+   "stores": {
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "center_z": 0.0,
+    "gyration_radius": 0.0,
+    "mean_neighbor_distance": 0.0,
+    "n_cells": 0,
+    "sorting_score": 0.0,
+    "type_radial_spread": 0.0
+   },
+   "yalla": {
+    "_type": "process",
+    "address": "local:YallaProcess",
+    "config": {
+     "L_0": 0.5,
+     "cuda_arch": "sm_60",
+     "dt": 0.001,
+     "force_kernel": "spring",
+     "init": "random_sphere",
+     "init_dist": 0.5,
+     "n_cells": 200,
+     "seed": 1
+    },
+    "inputs": {},
+    "interval": 0.05,
+    "outputs": {
+     "center_x": [
+      "stores",
+      "center_x"
+     ],
+     "center_y": [
+      "stores",
+      "center_y"
+     ],
+     "center_z": [
+      "stores",
+      "center_z"
+     ],
+     "gyration_radius": [
+      "stores",
+      "gyration_radius"
+     ],
+     "mean_neighbor_distance": [
+      "stores",
+      "mean_neighbor_distance"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "sorting_score": [
+      "stores",
+      "sorting_score"
+     ],
+     "type_radial_spread": [
+      "stores",
+      "type_radial_spread"
+     ]
+    }
+   }
+  }
+ },
+ "yalla-springs-demo.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "gyration_radius": "float",
+      "mean_neighbor_distance": "float",
+      "n_cells": "integer",
+      "sorting_score": "float",
+      "time": "float",
+      "type_radial_spread": "float"
+     }
+    },
+    "inputs": {
+     "gyration_radius": [
+      "stores",
+      "gyration_radius"
+     ],
+     "mean_neighbor_distance": [
+      "stores",
+      "mean_neighbor_distance"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "sorting_score": [
+      "stores",
+      "sorting_score"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "type_radial_spread": [
+      "stores",
+      "type_radial_spread"
+     ]
+    }
+   },
+   "stores": {
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "center_z": 0.0,
+    "gyration_radius": 0.0,
+    "mean_neighbor_distance": 0.0,
+    "n_cells": 0,
+    "sorting_score": 0.0,
+    "type_radial_spread": 0.0
+   },
+   "yalla": {
+    "_type": "process",
+    "address": "local:YallaReproductionProcess",
+    "config": {
+     "L_0": 0.5,
+     "dt": 0.02,
+     "force_kernel": "spring",
+     "init": "random_sphere",
+     "init_dist": 0.5,
+     "n_cells": 40,
+     "seed": 1
+    },
+    "inputs": {},
+    "interval": 0.5,
+    "outputs": {
+     "center_x": [
+      "stores",
+      "center_x"
+     ],
+     "center_y": [
+      "stores",
+      "center_y"
+     ],
+     "center_z": [
+      "stores",
+      "center_z"
+     ],
+     "gyration_radius": [
+      "stores",
+      "gyration_radius"
+     ],
+     "mean_neighbor_distance": [
+      "stores",
+      "mean_neighbor_distance"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "sorting_score": [
+      "stores",
+      "sorting_score"
+     ],
+     "type_radial_spread": [
+      "stores",
+      "type_radial_spread"
+     ]
+    }
+   }
+  }
+ },
+ "yalla-springs-with-viz.composite.yaml": {
+  "schema": {},
+  "state": {
+   "emitter": {
+    "_type": "step",
+    "address": "local:RAMEmitter",
+    "config": {
+     "emit": {
+      "gyration_radius": "float",
+      "mean_neighbor_distance": "float",
+      "n_cells": "integer",
+      "sorting_score": "float",
+      "time": "float",
+      "type_radial_spread": "float"
+     }
+    },
+    "inputs": {
+     "gyration_radius": [
+      "stores",
+      "gyration_radius"
+     ],
+     "mean_neighbor_distance": [
+      "stores",
+      "mean_neighbor_distance"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "sorting_score": [
+      "stores",
+      "sorting_score"
+     ],
+     "time": [
+      "global_time"
+     ],
+     "type_radial_spread": [
+      "stores",
+      "type_radial_spread"
+     ]
+    }
+   },
+   "stores": {
+    "center_x": 0.0,
+    "center_y": 0.0,
+    "center_z": 0.0,
+    "gyration_radius": 0.0,
+    "mean_neighbor_distance": 0.0,
+    "n_cells": 0,
+    "sorting_score": 0.0,
+    "type_radial_spread": 0.0,
+    "viz_html": ""
+   },
+   "viz": {
+    "_type": "step",
+    "address": "local:YallaSummaryPlots",
+    "config": {
+     "title": "yalla ABM summary"
+    },
+    "inputs": {
+     "gyration_radius": [
+      "stores",
+      "gyration_radius"
+     ],
+     "mean_neighbor_distance": [
+      "stores",
+      "mean_neighbor_distance"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "sorting_score": [
+      "stores",
+      "sorting_score"
+     ],
+     "time": [
+      "global_time"
+     ]
+    },
+    "outputs": {
+     "html": [
+      "stores",
+      "viz_html"
+     ]
+    }
+   },
+   "yalla": {
+    "_type": "process",
+    "address": "local:YallaReproductionProcess",
+    "config": {
+     "L_0": 0.5,
+     "dt": 0.02,
+     "force_kernel": "spring",
+     "init": "random_sphere",
+     "init_dist": 0.5,
+     "n_cells": 40,
+     "seed": 1
+    },
+    "inputs": {},
+    "interval": 0.5,
+    "outputs": {
+     "center_x": [
+      "stores",
+      "center_x"
+     ],
+     "center_y": [
+      "stores",
+      "center_y"
+     ],
+     "center_z": [
+      "stores",
+      "center_z"
+     ],
+     "gyration_radius": [
+      "stores",
+      "gyration_radius"
+     ],
+     "mean_neighbor_distance": [
+      "stores",
+      "mean_neighbor_distance"
+     ],
+     "n_cells": [
+      "stores",
+      "n_cells"
+     ],
+     "sorting_score": [
+      "stores",
+      "sorting_score"
+     ],
+     "type_radial_spread": [
+      "stores",
+      "type_radial_spread"
+     ]
+    }
+   }
+  }
+ }
+}
