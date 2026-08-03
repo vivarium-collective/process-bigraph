@@ -27,8 +27,12 @@ from process_bigraph.bundle import load_bundle  # noqa: F401
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state  # noqa: F401
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink  # noqa: F401
 from process_bigraph import core_introspection  # noqa: F401
+# NOTE: do NOT re-export the `composite_generator` decorator here — that name
+# is the submodule `process_bigraph.composite_generator`, and exporting the
+# same-named function shadows it (breaks `import process_bigraph.composite_generator`).
+# Get the decorator via `from process_bigraph.composite_generator import composite_generator`.
 from process_bigraph.composite_generator import (  # noqa: F401
-    composite_generator, discover_generators, build_generator,
+    discover_generators, build_generator,
     install_default_emitters, emitter_defaults,
 )
 from process_bigraph.composite_discovery import discover_all  # noqa: F401
