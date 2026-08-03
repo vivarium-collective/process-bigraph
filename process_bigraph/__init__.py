@@ -27,6 +27,10 @@ from process_bigraph.bundle import load_bundle  # noqa: F401
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state  # noqa: F401
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink  # noqa: F401
 from process_bigraph import core_introspection  # noqa: F401
+from process_bigraph.composite_generator import (  # noqa: F401
+    composite_generator, discover_generators, build_generator,
+    install_default_emitters, emitter_defaults,
+)
 
 
 import pprint
