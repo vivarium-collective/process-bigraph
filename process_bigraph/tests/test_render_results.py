@@ -1,4 +1,4 @@
-"""Tests for process_bigraph.visualization.render_results (moved from viva_superpowers).
+"""Tests for process_bigraph.visualization.render_results (moved from viva-superpowers).
 
 Mirrors the shape of ``process_bigraph.emitter.gather_emitter_results``:
 returns a path-keyed dict whose values are the per-viz ``{'html': str}`` dicts.

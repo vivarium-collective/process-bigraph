@@ -526,48 +526,70 @@ def _import_bigraph_packages(extra_packages: list[str] | None = None) -> None:
         pkg_path = getattr(top, "__path__", None)
         if not pkg_path:
             continue  # single-file module — nothing to walk
-        # pkgutil.walk_packages imports each subpackage during descent;
-        # without `onerror`, any subpackage that raises at top level
-        # (e.g. ecoli.analysis.antibiotics_colony's data-file probe)
-        # would abort the whole walk. Swallow + warn via the same path
-        # the per-import try/except below uses.
-        def _walk_onerror(name, _e=None):
-            warnings.warn(
-                f"discover_generators: skipping subpackage {name!r} "
-                f"(walk failed during import)",
-                stacklevel=2,
-            )
-        for finder, sub_name, is_pkg in pkgutil.walk_packages(
-            pkg_path, prefix=mod_name + ".", onerror=_walk_onerror,
-        ):
-            # v2ecoli friction #4: skip subpaths that look like CLI scripts
-            # (e.g. `<pkg>.scripts.compare_runs`). Discovery should walk the
-            # library, not the CLI tool layer — and CLI scripts commonly
-            # have module-level `sys.exit()` / argparse / etc. that crash
-            # under import.
-            tail = sub_name.split(".")
-            if any(seg == "scripts" for seg in tail):
-                continue
-            try:
-                importlib.import_module(sub_name)
-            except SystemExit as e:  # noqa: BLE001
-                # `sys.exit(N)` at module level is NOT a subclass of
-                # Exception; without this branch it would propagate out of
-                # discover_generators and crash the dashboard. v2ecoli's
-                # `scripts/compare-runs.py` had a top-level sys.exit(0)
-                # that took the whole subprocess down before this catch.
-                warnings.warn(
-                    f"discover_generators: subpackage {sub_name!r} called "
-                    f"sys.exit({e.code!r}) at import time; skipping. "
-                    "Wrap top-level CLI logic in `if __name__ == \"__main__\":`.",
-                    stacklevel=2,
-                )
-            except Exception as e:  # noqa: BLE001
-                warnings.warn(
-                    f"discover_generators: skipping subpackage {sub_name!r}: "
-                    f"{type(e).__name__}: {e}",
-                    stacklevel=2,
-                )
+
+        # v2ecoli friction #4: skip subpaths that look like CLI scripts
+        # (e.g. `<pkg>.scripts.compare_runs`). Discovery should walk the
+        # library, not the CLI tool layer — and CLI scripts commonly have
+        # module-level `sys.exit()` / argparse / etc. that crash under
+        # import.
+        #
+        # Also skip `tests` subpackages. process-bigraph itself declares
+        # `bigraph-schema` as a dependency, so its own distribution is
+        # always one of `_import_bigraph_packages`'s walk targets — and in
+        # this repo (unlike viva-superpowers, whose tests/ sits *outside*
+        # the viva-superpowers/ package) tests live *inside* the package at
+        # `process_bigraph/tests/`. Without this skip, every call to
+        # `discover_generators()` — from any test, in any installed package
+        # that colocates tests this way — would import the whole test suite
+        # as a side effect: firing module-level decorators (registry
+        # pollution) and running expensive/stateful test-only code (e.g.
+        # subprocess-driven fixtures) purely as a byproduct of composite
+        # discovery.
+        #
+        # This has to be a pre-descent filter, not a post-hoc skip of
+        # pkgutil.walk_packages's yielded items: walk_packages auto-imports
+        # (and recurses into) every package-like entry it finds *before*
+        # a caller's loop body gets a chance to react, so a `continue` on
+        # the yielded `<pkg>.tests` item does not stop it from already
+        # having imported `<pkg>.tests` and descended into e.g.
+        # `<pkg>.tests.fixtures.some_pkg`. Walking the tree ourselves lets
+        # us drop an excluded subpackage before it (or anything beneath it)
+        # is ever imported.
+        _SKIP_SEGMENTS = ("scripts", "tests")
+
+        def _walk(path, prefix):
+            for _finder, name, is_pkg in pkgutil.iter_modules(path, prefix=prefix):
+                if name.rsplit(".", 1)[-1] in _SKIP_SEGMENTS:
+                    continue
+                try:
+                    mod = importlib.import_module(name)
+                except SystemExit as e:  # noqa: BLE001
+                    # `sys.exit(N)` at module level is NOT a subclass of
+                    # Exception; without this branch it would propagate out
+                    # of discover_generators and crash the dashboard.
+                    # v2ecoli's `scripts/compare-runs.py` had a top-level
+                    # sys.exit(0) that took the whole subprocess down before
+                    # this catch.
+                    warnings.warn(
+                        f"discover_generators: subpackage {name!r} called "
+                        f"sys.exit({e.code!r}) at import time; skipping. "
+                        "Wrap top-level CLI logic in `if __name__ == \"__main__\":`.",
+                        stacklevel=2,
+                    )
+                    continue
+                except Exception as e:  # noqa: BLE001
+                    warnings.warn(
+                        f"discover_generators: skipping subpackage {name!r}: "
+                        f"{type(e).__name__}: {e}",
+                        stacklevel=2,
+                    )
+                    continue
+                if is_pkg:
+                    sub_path = getattr(mod, "__path__", None)
+                    if sub_path:
+                        _walk(sub_path, name + ".")
+
+        _walk(pkg_path, mod_name + ".")
 
 
 def discover_generators(

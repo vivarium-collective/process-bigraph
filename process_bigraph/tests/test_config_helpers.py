@@ -1,5 +1,5 @@
 """Tests for process_bigraph.config_helpers.normalize_config_list (moved from
-viva_superpowers; v2ecoli #3)."""
+viva-superpowers; v2ecoli #3)."""
 import pytest
 
 from process_bigraph.config_helpers import normalize_config_list

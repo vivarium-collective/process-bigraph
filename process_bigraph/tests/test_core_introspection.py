@@ -1,4 +1,4 @@
-"""Tests for process_bigraph.core_introspection (moved from viva_superpowers)."""
+"""Tests for process_bigraph.core_introspection (moved from viva-superpowers)."""
 import pytest
 
 from process_bigraph.core_introspection import (

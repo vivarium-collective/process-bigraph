@@ -1,4 +1,4 @@
-"""Tests for process_bigraph.visualization.Visualization (moved from viva_superpowers).
+"""Tests for process_bigraph.visualization.Visualization (moved from viva-superpowers).
 
 The baseclass now orchestrates accumulate/render with ``render_mode='end'``
 as the default. Subclasses MAY override ``update(state)`` directly to keep

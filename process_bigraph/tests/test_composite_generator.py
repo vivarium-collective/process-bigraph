@@ -1,4 +1,4 @@
-"""Tests for process_bigraph.composite_generator (moved from viva_superpowers)."""
+"""Tests for process_bigraph.composite_generator (moved from viva-superpowers)."""
 import shutil
 import subprocess
 import sys
@@ -648,3 +648,86 @@ def test_discover_generators_skips_scripts_subpackage(tmp_path):
                 del sys.modules[k]
         _REGISTRY.clear()
         importlib.invalidate_caches()
+
+
+def test_discover_generators_skips_tests_subpackage_before_import(tmp_path):
+    """process-bigraph itself declares `bigraph-schema` as a dependency, so
+    its own distribution is always a walk target — and (unlike
+    viva-superpowers, whose tests/ sits *outside* the package) this repo
+    keeps tests *inside* the package at process_bigraph/tests/. A naive
+    walk would import the whole test suite (and anything nested under
+    tests/fixtures/) as an uncontrolled side effect of composite discovery.
+
+    This mirrors test_discover_generators_skips_scripts_subpackage, but for
+    a `tests/` subpackage, and additionally proves the skip happens BEFORE
+    any import is attempted (not just a post-hoc skip of an already-walked
+    entry) by nesting a decorator-bearing module two levels under tests/ —
+    exactly the shape of tests/fixtures/fake_generator_pkg/fake_generator_pkg/.
+    """
+    import sys
+    import importlib
+    from process_bigraph.composite_generator import (
+        _REGISTRY, discover_generators, composite_generator,
+    )
+
+    pkg_dir = tmp_path / "_libtests_demo"
+    tests_dir = pkg_dir / "tests"
+    nested_dir = tests_dir / "fixtures" / "would_be_pkg"
+    nested_dir.mkdir(parents=True)
+    (pkg_dir / "__init__.py").write_text("")
+    # A generator in the LIBRARY half — must be discovered.
+    (pkg_dir / "lib_module.py").write_text(
+        "from process_bigraph.composite_generator import composite_generator\n"
+        "\n"
+        "@composite_generator(name='libtests_demo_baseline')\n"
+        "def libtests_demo_baseline():\n"
+        "    return {'state': {}}\n"
+    )
+    # A would-be generator nested under tests/ — must be SKIPPED, and the
+    # skip must happen before any of these modules are ever imported.
+    (tests_dir / "__init__.py").write_text(
+        "raise RuntimeError('tests/__init__.py must never be imported by discovery')\n"
+    )
+    (nested_dir / "__init__.py").write_text(
+        "from process_bigraph.composite_generator import composite_generator\n"
+        "\n"
+        "@composite_generator(name='libtests_demo_should_be_skipped')\n"
+        "def libtests_demo_should_be_skipped():\n"
+        "    return {'state': {}}\n"
+    )
+
+    sys.path.insert(0, str(tmp_path))
+    _REGISTRY.clear()
+    try:
+        # Must not raise — proves tests/__init__.py (which raises on import)
+        # was never imported, i.e. the skip happens before descent, not
+        # merely after pkgutil has already recursed into it.
+        found = discover_generators(extra_packages=["_libtests_demo"])
+        libs = [k for k in found if "libtests_demo" in k]
+        assert any("baseline" in k for k in libs)
+        assert not any("should_be_skipped" in k for k in libs)
+        assert "_libtests_demo.tests" not in sys.modules
+        assert "_libtests_demo.tests.fixtures.would_be_pkg" not in sys.modules
+    finally:
+        sys.path.remove(str(tmp_path))
+        for k in list(sys.modules):
+            if k == "_libtests_demo" or k.startswith("_libtests_demo."):
+                del sys.modules[k]
+        _REGISTRY.clear()
+        importlib.invalidate_caches()
+
+
+def test_discover_generators_does_not_walk_process_bigraph_own_tests():
+    """Regression for a full-suite-only flaky failure: discover_generators()
+    walks every installed bigraph-schema-dependent distribution, and
+    process-bigraph's own distribution always qualifies (it declares
+    bigraph-schema as a dependency). In an editable/dev install, that
+    self-walk would otherwise recurse into process_bigraph/tests/ — this
+    asserts none of process-bigraph's own test modules end up registered
+    as discovered generators."""
+    from process_bigraph.composite_generator import discover_generators
+    found = discover_generators()
+    assert not any("process_bigraph.tests" in sid for sid in found), (
+        f"discover_generators walked into process_bigraph's own test suite: "
+        f"{[sid for sid in found if 'process_bigraph.tests' in sid]}"
+    )
