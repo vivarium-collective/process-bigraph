@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "process-bigraph"
-version = "1.8.0"
+version = "1.8.1"
 description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -93,4 +93,5 @@ packages = [
     "process_bigraph.server",
     "process_bigraph.experiments",
     "process_bigraph.types",
+    "process_bigraph.visualizations",
 ]
