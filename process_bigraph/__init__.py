@@ -33,6 +33,7 @@ from process_bigraph.composite_generator import (  # noqa: F401
 )
 from process_bigraph.composite_discovery import discover_all  # noqa: F401
 from process_bigraph.config_helpers import normalize_config_list  # noqa: F401
+from process_bigraph.visualization import Visualization, as_visualization, render_results  # noqa: F401
 
 
 import pprint
