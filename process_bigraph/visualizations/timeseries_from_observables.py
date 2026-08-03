@@ -43,8 +43,6 @@ import json
 import sqlite3
 from pathlib import Path
 
-import yaml
-
 from process_bigraph.visualization import Visualization
 
 
@@ -123,6 +121,10 @@ def _load_study_observable_meta(study_yaml_path: str | None) -> dict[str, dict]:
     p = Path(study_yaml_path)
     if not p.is_file():
         return {}
+    # PyYAML is not a hard process-bigraph dependency (same convention as
+    # composite_spec.py); import lazily so importing this module never
+    # requires it unless a caller actually supplies a study_yaml_path.
+    import yaml
     try:
         # study.yaml is UTF-8 (often non-ASCII prose); decode explicitly so a
         # bare-CLI render under an ASCII locale doesn't crash on read.
