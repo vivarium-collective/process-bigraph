@@ -31,6 +31,8 @@ from process_bigraph.composite_generator import (  # noqa: F401
     composite_generator, discover_generators, build_generator,
     install_default_emitters, emitter_defaults,
 )
+from process_bigraph.composite_discovery import discover_all  # noqa: F401
+from process_bigraph.config_helpers import normalize_config_list  # noqa: F401
 
 
 import pprint
