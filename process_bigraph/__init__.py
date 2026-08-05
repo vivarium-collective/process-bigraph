@@ -24,6 +24,7 @@ from process_bigraph.composite_spec import (  # noqa: F401
     normalize_type, CANONICAL_TYPES,
 )
 from process_bigraph.bundle import load_bundle  # noqa: F401
+from process_bigraph.draft_process import DraftProcess, draft_process  # noqa: F401
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state  # noqa: F401
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink  # noqa: F401
 from process_bigraph import core_introspection  # noqa: F401
