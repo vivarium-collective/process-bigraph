@@ -106,12 +106,51 @@ def generate_emitter_state(composite, emitter_mode='all', address='local:RAMEmit
     return emitter_from_wires(input_ports, address=address)
 
 
+def _known_emitter_addresses(registered):
+    '''The registered link names that look like emitters (for error text).
+
+    Falls back to *all* registered names when none end in ``Emitter`` so the
+    message is never empty.
+    '''
+    emitters = sorted(
+        key for key in registered
+        if isinstance(key, str) and key.endswith('Emitter'))
+    if emitters:
+        return emitters
+    return sorted(key for key in registered if isinstance(key, str))
+
+
+def _resolve_declared_address(address, name, registered, fallback, on_unknown_address):
+    '''Resolve a declared emitter address against the core's link registry.
+
+    When ``name`` is registered, returns it unchanged. When it is *not*, policy
+    decides: ``"raise"`` (default) fails loud, naming the bad address and the
+    known registered emitter addresses; ``"ram"`` restores the historical
+    silent degrade to ``fallback`` (``local:RAMEmitter``) so the composite
+    still builds.
+    '''
+    if on_unknown_address not in ('raise', 'ram'):
+        raise ValueError(
+            "on_unknown_address must be 'raise' or 'ram', "
+            f"got {on_unknown_address!r}")
+    if registered is None or name in registered:
+        return address, name
+    if on_unknown_address == 'ram':
+        return fallback, fallback.split(':', 1)[-1]
+    raise ValueError(
+        f"unknown emitter address {address!r}: {name!r} is not registered in "
+        f"the core's link registry. Known emitter addresses: "
+        f"{_known_emitter_addresses(registered)}. Pass on_unknown_address='ram' "
+        f"to fall back to {fallback!r} instead.")
+
+
 def emitter_node_from_declaration(
         decl,
         run_id=None,
         out_dir=None,
         core=None,
-        fallback='local:RAMEmitter'):
+        fallback='local:RAMEmitter',
+        on_unknown_address='raise'):
     '''Materialize one declared emitter (``{address, config?, paths?}``) into
     a step node.
 
@@ -122,15 +161,19 @@ def emitter_node_from_declaration(
 
     The node itself comes from :func:`emitter_from_wires` — the one emitter
     constructor — so a declared sink and a generated one are the same shape.
-    An address the core does not know degrades to ``fallback`` so the
-    composite still builds.
+
+    ``on_unknown_address`` sets the policy when the declared address is not in
+    the core's link registry: ``"raise"`` (the default) fails loud at build
+    time, naming the bad address and the known emitter addresses; ``"ram"`` is
+    the explicit opt-in to the historical silent degrade to ``fallback``
+    (``local:RAMEmitter``) so the composite still builds. With no ``core`` the
+    registry is unknown and neither branch fires.
     '''
     address = decl.get('address') or fallback
     name = address.split(':', 1)[-1]
     registered = getattr(core, 'link_registry', None) if core is not None else None
-    if registered is not None and name not in registered:
-        address = fallback
-        name = address.split(':', 1)[-1]
+    address, name = _resolve_declared_address(
+        address, name, registered, fallback, on_unknown_address)
 
     wires = {}
     for path in decl.get('paths') or []:
@@ -199,13 +242,18 @@ def document_has_emitter(state, core=None):
     return False
 
 
-def install_emitters(state, declarations, run_id=None, out_dir=None, core=None):
+def install_emitters(state, declarations, run_id=None, out_dir=None, core=None,
+                     on_unknown_address='raise'):
     '''Return a copy of ``state`` with the declared emitter(s) installed.
 
     Emitters land at the conventional ``emitter`` / ``emitter_<i>`` keys.
     Because those keys are deterministic, installing twice rewrites the same
     slots rather than adding a second sink — so a caller may invoke this
     unconditionally without risking a composite that emits everything twice.
+
+    ``on_unknown_address`` (``"raise"`` default, or ``"ram"`` to opt into the
+    silent RAMEmitter fallback) is threaded to
+    :func:`emitter_node_from_declaration`.
 
     Returns ``state`` unchanged when nothing is declared.
     '''
@@ -217,7 +265,8 @@ def install_emitters(state, declarations, run_id=None, out_dir=None, core=None):
     for index, decl in enumerate(declarations):
         key = 'emitter' if index == 0 else f'emitter_{index}'
         installed[key] = emitter_node_from_declaration(
-            decl, run_id=run_id, out_dir=out_dir, core=core)
+            decl, run_id=run_id, out_dir=out_dir, core=core,
+            on_unknown_address=on_unknown_address)
 
     return installed
 

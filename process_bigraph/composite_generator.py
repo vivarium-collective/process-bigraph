@@ -329,86 +329,37 @@ def emitter_defaults(fn_or_entry: Any) -> list[dict]:
     return list(getattr(entry, "emitters", []) or [])
 
 
-def _emitter_node_from_decl(decl: dict, *, run_id: str | None = None,
-                            out_dir: Any = None, registered=None,
-                            fallback: str = "local:RAMEmitter") -> dict:
-    """Materialise one ``emitters=`` declaration into a process-bigraph step node.
-
-    The declaration is the lightweight ``{address, config?, paths?}`` form; the
-    emit-schema + topology are computed here (they depend on the composite's
-    shape, so they aren't part of the declaration). Each ``paths`` entry (slash-
-    or dot-joined) becomes one ``config.emit`` column wired to that store;
-    ``global_time`` is always emitted so trajectories have a time axis and the
-    Step re-fires every tick. When the declared ``address`` isn't in
-    ``registered`` (the core's link registry), it degrades to ``fallback`` so
-    the composite still builds — the convention's RAMEmitter safety net.
-    """
-    address = decl.get("address") or fallback
-    name = address.split(":", 1)[-1]
-    if registered is not None and name not in registered:
-        address = fallback
-        name = address.split(":", 1)[-1]
-
-    emit_schema: dict = {}
-    inputs: dict = {}
-    for p in decl.get("paths") or []:
-        parts = [seg for seg in str(p).replace(".", "/").split("/") if seg]
-        if not parts:
-            continue
-        key = "_".join(parts)
-        emit_schema[key] = "node"
-        inputs[key] = parts
-    if "global_time" not in inputs:
-        inputs["global_time"] = ["global_time"]
-        emit_schema["global_time"] = "node"
-
-    config = dict(decl.get("config") or {})
-    config["emit"] = emit_schema
-    # Run-specific layering for hive-partitioned parquet sinks: a per-run out_dir
-    # + experiment_id partition. Applied to any *ParquetEmitter (the generic
-    # ParquetEmitter and workspace variants like DataFrameParquetEmitter), which
-    # understand these keys; other sinks keep their declared base config.
-    if name.endswith("ParquetEmitter"):
-        if out_dir is not None:
-            config["out_dir"] = str(out_dir)
-        if run_id is not None:
-            config.setdefault("partitioning_keys", ["experiment_id"])
-            md = dict(config.get("metadata") or {})
-            md.setdefault("experiment_id", run_id)
-            config["metadata"] = md
-
-    return {"_type": "step", "address": address, "config": config, "inputs": inputs}
-
-
 def install_default_emitters(state: dict, source: Any, *, run_id: str | None = None,
-                             out_dir: Any = None, core: Any = None) -> dict:
+                             out_dir: Any = None, core: Any = None,
+                             on_unknown_address: str = "raise") -> dict:
     """Return a copy of ``state`` with the composite's declared default
     emitter(s) installed as ``emitter`` / ``emitter_<i>`` step nodes.
 
     ``source`` is a generator fn/entry or a parsed static-spec dict — whatever
     :func:`emitter_defaults` understands. This is the convention's install step:
     a composite built outside the dashboard's observable-injection flow still
-    gets its declared sink. Resolution order (declared → RAMEmitter fallback) is
-    handled per-node by :func:`_emitter_node_from_decl`; external overrides are
-    layered by the caller before this call.
+    gets its declared sink.
+
+    The declaration→node materialization is delegated to the single canonical
+    implementation in :mod:`process_bigraph.emitter`
+    (:func:`~process_bigraph.emitter.install_emitters` /
+    :func:`~process_bigraph.emitter.emitter_node_from_declaration`) so this path
+    and ``CompositeSpec.to_document`` build identical emitter nodes from the same
+    declaration.
 
     ``run_id`` / ``out_dir`` are run-specific parquet parameters (ignored by
-    non-parquet sinks). ``core`` (when given) lets the installer degrade an
-    unregistered declared address to RAMEmitter. Returns ``state`` unchanged
-    when nothing is declared, so callers can invoke it unconditionally.
+    non-parquet sinks). ``core`` (when given) lets the installer resolve declared
+    addresses against the core's link registry. ``on_unknown_address`` selects
+    the policy for an address the core doesn't know: ``"raise"`` (default) fails
+    loud at build time; ``"ram"`` is the explicit opt-in to the historical
+    silent degrade to ``local:RAMEmitter``. Returns ``state`` unchanged when
+    nothing is declared, so callers can invoke it unconditionally.
     """
-    decls = emitter_defaults(source)
-    if not decls:
-        return dict(state)
-    registered = getattr(core, "link_registry", None) if core is not None else None
-    new_state = dict(state)
-    for i, decl in enumerate(decls):
-        if not isinstance(decl, dict):
-            continue
-        key = "emitter" if i == 0 else f"emitter_{i}"
-        new_state[key] = _emitter_node_from_decl(
-            decl, run_id=run_id, out_dir=out_dir, registered=registered)
-    return new_state
+    from process_bigraph.emitter import install_emitters
+
+    return install_emitters(
+        state, emitter_defaults(source), run_id=run_id, out_dir=out_dir,
+        core=core, on_unknown_address=on_unknown_address)
 
 
 def apply_core_extensions(entry: GeneratorEntry, core: Any) -> Any:
