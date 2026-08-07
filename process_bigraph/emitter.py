@@ -402,10 +402,18 @@ class RAMEmitter(Emitter):
     state (large fields, many agents) to keep RAM bounded — the
     saved time-series still reflects the simulation's true cadence
     via each row's ``global_time`` field.
+
+    ``max_len`` optionally bounds ``history`` to the most recent N
+    recorded rows (a ring buffer): once the cap is reached each new
+    record drops the oldest. Default ``None`` = unbounded (the
+    historical behaviour — consumers such as v2ecoli that read the
+    full ``history`` are unaffected unless they opt in). ``max_len``
+    counts *recorded* rows (i.e. post-``subsample``).
     '''
     config_schema = {
         **Emitter.config_schema,
         'subsample': {'_type': 'integer', '_default': 1},
+        'max_len': {'_type': 'maybe[integer]', '_default': None},
     }
 
     def __init__(self, config, core):
@@ -416,6 +424,12 @@ class RAMEmitter(Emitter):
             raise ValueError(
                 f'RAMEmitter subsample must be >= 1, got {self.subsample}'
             )
+        max_len = config.get('max_len')
+        self.max_len = None if max_len is None else int(max_len)
+        if self.max_len is not None and self.max_len < 1:
+            raise ValueError(
+                f'RAMEmitter max_len must be >= 1 (or None), got {self.max_len}'
+            )
         self.history = []
         self._step = 0
 
@@ -425,6 +439,11 @@ class RAMEmitter(Emitter):
         if step % self.subsample != 0:
             return {}
         self.history.append(tree_copy(state))
+        # Ring-buffer: keep only the most recent ``max_len`` rows. ``history``
+        # stays a plain list (slicing/indexing preserved for consumers) — the
+        # trim only runs when a cap is configured.
+        if self.max_len is not None and len(self.history) > self.max_len:
+            del self.history[:len(self.history) - self.max_len]
         return {}
 
     def query(self, paths=None, schema=None, query=None):
@@ -443,7 +462,17 @@ class RAMEmitter(Emitter):
 
 
 class JSONEmitter(Emitter):
-    '''Append simulation state to a persistent JSON file each timestep.'''
+    '''Append simulation state to a persistent JSON Lines file each timestep.
+
+    Each recorded tick is one JSON object on its own line (``.json`` file in
+    JSON Lines / ``jsonl`` form). This is an append-only O(1)-per-tick write:
+    the previous behaviour re-read and re-serialized the entire history on
+    every tick (O(n) per tick -> O(n^2) per run), which dominated long runs.
+
+    ``query`` transparently reads BOTH the current line-delimited format and
+    the legacy single JSON-array format, so files written by older versions
+    remain readable.
+    '''
     config_schema = {
         **Emitter.config_schema,
         'file_path': {'_type': 'string', '_default': './out'},
@@ -456,30 +485,46 @@ class JSONEmitter(Emitter):
         self.file_path = config.get('file_path', './out')
         os.makedirs(self.file_path, exist_ok=True)
         self.filepath = os.path.join(self.file_path, f'history_{self.simulation_id}.json')
-        if not os.path.exists(self.filepath):
-            with open(self.filepath, 'w') as f:
-                json.dump([], f)
 
     def update(self, state) -> dict:
-        with open(self.filepath, 'r+') as f:
-            try:
-                data = json.load(f)
-            except json.JSONDecodeError:
-                data = []
-            data.append(copy.deepcopy(state))
-            f.seek(0)
-            json.dump(data, f, indent=4)
+        # Append-only: one JSON record per line. No read-modify-write.
+        with open(self.filepath, 'a') as f:
+            f.write(json.dumps(copy.deepcopy(state)))
+            f.write('\n')
         return {}
 
-    def query(self, paths=None, query=None):
-        paths = _resolve_query_paths(paths, query)
+    def _load_history(self):
+        '''Read the history file, supporting the current JSON Lines format
+        and the legacy single-JSON-array format.'''
         if not os.path.exists(self.filepath):
             return []
         with open(self.filepath, 'r') as f:
+            text = f.read()
+        stripped = text.lstrip()
+        if not stripped:
+            return []
+        if stripped[0] == '[':
+            # Legacy single-array format written by older JSONEmitter versions.
             try:
-                data = json.load(f)
+                return json.loads(text)
             except json.JSONDecodeError:
                 return []
+        rows = []
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rows.append(json.loads(line))
+            except json.JSONDecodeError:
+                continue  # tolerate a partial trailing write
+        return rows
+
+    def query(self, paths=None, query=None):
+        paths = _resolve_query_paths(paths, query)
+        data = self._load_history()
+        if not data:
+            return []
 
         if isinstance(paths, list):
             results = []
