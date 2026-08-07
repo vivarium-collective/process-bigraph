@@ -3869,14 +3869,77 @@ def test_declaration_uses_the_one_emitter_constructor():
     assert declared == generated
 
 
-def test_unregistered_emitter_address_degrades_to_ram():
+def test_unknown_emitter_address_raises_by_default():
+    """Locked decision: an unresolvable emitter address fails loud at build
+    time (naming the bad address + the known emitter addresses) rather than
+    silently degrading to RAMEmitter."""
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    with pytest.raises(ValueError) as excinfo:
+        emitter_node_from_declaration(
+            {'address': 'local:NoSuchEmitter', 'paths': ['level']},
+            core=allocate_core())
+
+    message = str(excinfo.value)
+    assert 'local:NoSuchEmitter' in message      # names the offending address
+    assert 'RAMEmitter' in message               # names a known address
+
+
+def test_unknown_emitter_address_opt_in_falls_back_to_ram():
+    """The explicit opt-in restores the historical silent fallback."""
     from process_bigraph.emitter import emitter_node_from_declaration
 
     node = emitter_node_from_declaration(
         {'address': 'local:NoSuchEmitter', 'paths': ['level']},
+        core=allocate_core(), on_unknown_address='ram')
+
+    assert node['address'] == 'local:RAMEmitter'
+
+
+def test_valid_default_address_resolves_without_raising():
+    """The default `local:RAMEmitter` address must still resolve normally
+    under the raise policy."""
+    from process_bigraph.emitter import emitter_node_from_declaration
+
+    node = emitter_node_from_declaration(
+        {'address': 'local:RAMEmitter', 'paths': ['level']},
         core=allocate_core())
 
     assert node['address'] == 'local:RAMEmitter'
+
+
+def test_both_call_paths_materialize_equivalent_nodes():
+    """The two declaration→node paths — `emitter.install_emitters` (used by
+    `CompositeSpec.to_document`) and `composite_generator.install_default_emitters`
+    — now share one canonical materializer, so a valid declaration yields
+    identical emitter nodes through either entry point."""
+    from process_bigraph.emitter import install_emitters
+    from process_bigraph.composite_generator import install_default_emitters
+
+    decl = [{'address': 'local:RAMEmitter',
+             'config': {'subsample': 3},
+             'paths': ['cell/mass']}]
+    core = allocate_core()
+
+    via_emitter = install_emitters({'level': 1.0}, decl, core=core)
+    # install_default_emitters reads a declaration list off a parsed static
+    # spec dict (its `emitters:` key), then delegates to the same materializer.
+    via_generator = install_default_emitters(
+        {'level': 1.0}, {'emitters': decl}, core=core)
+
+    assert via_emitter['emitter'] == via_generator['emitter']
+    assert via_emitter['emitter']['config']['subsample'] == 3
+
+
+def test_install_default_emitters_raises_on_unknown_address():
+    """The unified `install_default_emitters` inherits the fail-loud default."""
+    from process_bigraph.composite_generator import install_default_emitters
+
+    with pytest.raises(ValueError):
+        install_default_emitters(
+            {'level': 1.0},
+            {'emitters': [{'address': 'local:NoSuchEmitter', 'paths': ['level']}]},
+            core=allocate_core())
 
 
 def test_declared_emitter_config_is_preserved():
