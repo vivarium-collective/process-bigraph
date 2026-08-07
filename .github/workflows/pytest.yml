@@ -10,6 +10,23 @@ on:
   workflow_call:
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up uv and Python
+        uses: astral-sh/setup-uv@v5
+        with:
+          python-version: '3.12'
+          enable-cache: true
+          cache-dependency-glob: "**/uv.lock"
+
+      - name: Run ruff (F + E722 gate)
+        # Fails the build on undefined names, unused imports, f-string bugs,
+        # and bare `except:` — configured under [tool.ruff] in pyproject.toml.
+        run: uvx ruff check
+
   test:
     runs-on: ubuntu-latest
     steps:

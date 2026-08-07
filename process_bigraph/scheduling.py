@@ -11,7 +11,7 @@ them for back-compat (external callers use e.g.
 ``from process_bigraph import wire_step_layers``).
 """
 from typing import (
-    Any, Dict, List, Mapping, MutableMapping, Optional, Sequence, Set, Tuple, Union)
+    Any, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple, Union)
 
 from bigraph_schema import resolve_path
 
@@ -369,7 +369,6 @@ def build_step_network(steps):
             nodes[path]['after'].add(step_key)
 
         for output_path in output_paths:
-            output_tuple = tuple(output_path)
             exploded_path = explode_path(output_path)[1:]
             for explode in exploded_path:
                 # Skip self-loops: don't register this step as a

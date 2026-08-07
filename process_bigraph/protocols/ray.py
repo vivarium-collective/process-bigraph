@@ -425,7 +425,6 @@ class RayProcess(Process):
 import threading
 from collections import defaultdict
 from dataclasses import dataclass, field
-from typing import Iterable
 
 try:
     from plum import dispatch as _plum_dispatch  # noqa: F401
@@ -823,8 +822,6 @@ def _build_shadow_class(target_name: str, target_cls: Any,
     # processes whose __init__ is expensive (e.g. cobra Model load),
     # this is paid once per address binding, regardless of how many
     # cells reference it.
-    from process_bigraph import allocate_core
-    tmpl = target_cls({}, core=allocate_core()) if False else None
     # Most processes need a real config to instantiate. Defer the
     # schema query to first use, where the shadow has its actual config.
     template_inputs: Any = None

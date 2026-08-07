@@ -55,7 +55,7 @@ import importlib
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Tuple
+from typing import Any, Dict, Iterable, Optional
 
 
 def _resolve_class(fq_name: str) -> type:

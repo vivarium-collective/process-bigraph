@@ -22,13 +22,13 @@ import pstats
 import io
 import argparse
 from dataclasses import dataclass, field, asdict
-from typing import Dict, List, Any, Optional
+from typing import Dict, Any
 
 # Add project root to path so we can import properly
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from bigraph_schema import allocate_core
-from process_bigraph.composite import Process, Step, Composite
+from process_bigraph.composite import Process, Composite
 
 
 # =====================

@@ -18,7 +18,7 @@ import random
 from process_bigraph.composite import Process
 
 from bigraph_schema.assembly import (
-    ReactionRule, find_matches, fire_rule)
+    find_matches, fire_rule)
 
 
 class BigraphicalReactiveSystem(Process):

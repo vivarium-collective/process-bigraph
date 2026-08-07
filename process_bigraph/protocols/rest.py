@@ -5,18 +5,10 @@ python multiprocessing
 ===============================================
 """
 
-import sys
-import json
-import time
-import uuid
-import pstats
-import socket
 
-from pathlib import Path
-from typing import Any, Dict, Optional, Union, List, Tuple
+from typing import Any, Dict
 
-from plum import dispatch
-from dataclasses import dataclass, is_dataclass, field
+from dataclasses import dataclass, field
 
 from urllib.parse import urlparse, urlunparse
 import requests
@@ -24,7 +16,7 @@ import requests
 from bigraph_schema.schema import Node, String, Protocol
 from bigraph_schema.methods import load_protocol
 
-from process_bigraph.composite import Process, SyncUpdate
+from process_bigraph.composite import Process
 
 
 def rest_get(url, parameters=None):

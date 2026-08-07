@@ -10,7 +10,7 @@ general stochastic transcription.
 
 import numpy as np
 
-from process_bigraph.composite import Step, Process, Composite, ProcessEnsemble
+from process_bigraph.composite import Step, Process, ProcessEnsemble
 
 
 class GillespieInterval(Step):

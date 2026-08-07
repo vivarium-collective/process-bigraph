@@ -43,11 +43,8 @@ import random
 from process_bigraph.composite import Step
 
 from bigraph_schema.assembly import (
-    ReactionRule,
     find_matches,
     fire_rule,
-    run_reactions,
-    ACTIVE, PASSIVE, ATOMIC,
 )
 
 

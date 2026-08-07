@@ -1,7 +1,7 @@
 import pytest
 import json
 import textwrap
-from process_bigraph.composite_spec import CompositeSpec, normalize_type, CANONICAL_TYPES, substitute_parameters
+from process_bigraph.composite_spec import CompositeSpec, normalize_type, substitute_parameters
 import process_bigraph.composite_spec as cs
 
 

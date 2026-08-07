@@ -54,12 +54,11 @@ clearly rather than silently importing nothing).
 """
 from __future__ import annotations
 
-import os
 import re
 import shlex
 import time
 import urllib.request
-from typing import Any, Optional
+from typing import Optional
 
 
 def _require_boto3():
@@ -823,7 +822,7 @@ class EC2SSMRayCluster:
                 print(f"  ray status nodes seen: {len(ids)} "
                       f"(need {self._n_workers + 1})")
                 if len(ids) >= self._n_workers + 1:
-                    print(f"  ✓ all nodes registered")
+                    print("  ✓ all nodes registered")
                     return
             except Exception as e:
                 print(f"  ray status query failed: {e}")

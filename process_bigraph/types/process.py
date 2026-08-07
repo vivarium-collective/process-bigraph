@@ -11,11 +11,11 @@ import threading
 import typing
 import numpy as np
 from plum import dispatch
-from dataclasses import dataclass, is_dataclass, field
+from dataclasses import dataclass, field
 
 from bigraph_schema import capture_object_state, restore_object_value
-from bigraph_schema.schema import Node, Empty, Float, Wires, Link, Schema, is_schema_field
-from bigraph_schema.methods import resolve, realize, realize_link, default, default_link, render, render_config, wrap_default
+from bigraph_schema.schema import Node, Float, Wires, Link, Schema, is_schema_field
+from bigraph_schema.methods import realize, realize_link, default, default_link, render, render_config, wrap_default
 from bigraph_schema.methods import reify_schema
 from bigraph_schema.methods.handle_parameters import reify_schema_link
 from bigraph_schema.methods import serialize, divide, bundle, apply
@@ -541,7 +541,7 @@ def realize(core, schema: SharedProcess, state, path=()):
 
 
 @dispatch
-def serialize(schema: SharedProcess, state):
+def serialize(schema: SharedProcess, state):  # noqa: F811 (plum @dispatch extends the imported dispatcher)
     """Serialize a SharedProcess back to its declaration dict."""
     if isinstance(state, tuple) and len(state) > 0:
         instance = state[0]
@@ -601,7 +601,7 @@ def divide(schema: SharedProcess, state, context=None, path=(), rng=None):
 
 
 @dispatch
-def bundle(schema: SharedProcess, state, context: typing.Optional[BundleContext] = None):
+def bundle(schema: SharedProcess, state, context: typing.Optional[BundleContext] = None):  # noqa: F811 (plum @dispatch extends the imported dispatcher)
     """Bundle a SharedProcess: produce the declaration dict, bundling
     arrays inside the config through the process's config_schema so
     save_bundle externalizes large arrays to Parquet."""
@@ -665,7 +665,7 @@ def _lookup_shared_process_id(state):
 
 
 @dispatch
-def serialize(schema: SharedProcessRef, state):
+def serialize(schema: SharedProcessRef, state):  # noqa: F811 (plum @dispatch extends the imported dispatcher)
     """Serialize a SharedProcessRef: the process name (or bare id)."""
     if isinstance(state, str):
         return state

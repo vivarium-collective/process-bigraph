@@ -74,7 +74,7 @@ def collect_input_ports(state, path=None):
             input_ports[full_key] = list(full_path)
     return input_ports
 
-def generate_emitter_state(composite, emitter_mode='all', address='local:ram-emitter'):
+def generate_emitter_state(composite, emitter_mode='all', address='local:RAMEmitter'):
     '''
     Generate emitter state for a given composite and mode.
     Modes:
@@ -232,7 +232,7 @@ def gather_emitter_results(composite, queries=None):
         results[path] = emitter['instance'].query(query)
     return results
 
-def add_emitter_to_composite(composite, core, emitter_mode='all', address='local:ram-emitter'):
+def add_emitter_to_composite(composite, core, emitter_mode='all', address='local:RAMEmitter'):
     '''Insert an emitter into a composite and rebuild the step network.'''
     path = ('emitter',)
     emitter_state = generate_emitter_state(composite, emitter_mode=emitter_mode, address=address)

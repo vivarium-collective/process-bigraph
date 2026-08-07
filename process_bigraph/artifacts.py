@@ -22,7 +22,7 @@ import hashlib
 import json
 import os
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Callable
 
 # ── content address ─────────────────────────────────────────────────
 #

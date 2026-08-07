@@ -1,5 +1,4 @@
 """Tests for process_bigraph.composite_discovery (moved from viva-superpowers)."""
-from pathlib import Path
 
 import pytest
 
