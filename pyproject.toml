@@ -84,6 +84,17 @@ dev = [
 #[tool.uv.sources]
 #bigraph-schema = { path = "../bigraph-schema", editable = true }
 
+[tool.ruff]
+# Lint gate: F = pyflakes (undefined names, unused imports, f-string bugs),
+# E722 = bare `except:`. Kept deliberately narrow so the gate catches real
+# bugs without churning on style.
+# Tutorial notebooks and generated docs are illustrative content (re-imports
+# across cells, placeholder f-strings) and are not part of the shipped gate.
+extend-exclude = ["notebooks", "docs", "doc"]
+
+[tool.ruff.lint]
+select = ["F", "E722"]
+
 [tool.setuptools]
 packages = [
     "process_bigraph",

@@ -1,7 +1,7 @@
 import random
 
 from bigraph_schema import make_default
-from process_bigraph.composite import Process, Step, Composite
+from process_bigraph.composite import Process, Step
 
 
 class IncreaseProcess(Process):
@@ -90,7 +90,6 @@ class SimpleCompartment(Process):
         choice = random.random()
         update = {}
 
-        outer = state['outer']
         inner = state['inner']
 
         # TODO: implement divide_state(_)
@@ -126,6 +125,9 @@ class SimpleCompartment(Process):
             #                         'wires': {
             #                             'outer': ['..']}}
             #                     for daughter_config, daughter_inner in zip(daughter_configs, divisions)}}}}}
+
+            daughter_ids = [self.config['id'] + str(i)
+                for i in range(len(divisions))]
 
             update = {
                 'outer': {

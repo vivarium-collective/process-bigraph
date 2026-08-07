@@ -13,7 +13,6 @@ Used as part of the Vivarium 2.0 ecosystem for modular biological modeling.
 """
 
 import os
-import copy
 import json
 import math
 import time as _time
@@ -105,15 +104,12 @@ def _trace_invoke(path, instance, state, interval, update):
 
 from dataclasses import dataclass, field
 from typing import (
-    Any, Dict, List, Optional, Set, Tuple, Union,
-    Mapping, MutableMapping, Sequence,
-    Callable, Type
+    Any, Dict, List, Optional, Set, Tuple, Union
 )
-import collections
 
 from bigraph_schema import (
     Edge,
-    get_path, set_path, resolve_path, hierarchy_depth,
+    get_path, set_path, hierarchy_depth,
     is_schema_key, strip_schema_keys)
 
 from bigraph_schema.protocols import local_lookup_module
@@ -1015,6 +1011,12 @@ def match_star_path(
         match_star_path(('cells', 'A', 'growth'), ('cells', '*', 'growth'))  # True
         match_star_path(('cells', 'A'), ('cells', '*', 'growth'))            # False
     """
+    # ``zip`` stops at the shorter sequence, so without a length check a
+    # shorter ``path`` (e.g. ('cells', 'A')) would spuriously match a longer
+    # ``star_path`` (e.g. ('cells', '*', 'growth')) by matching only the
+    # overlapping prefix. The paths must have the same number of segments.
+    if len(path) != len(star_path):
+        return False
     for element, star_element in zip(path, star_path):
         if star_element != "*" and element != star_element:
             return False
@@ -1484,7 +1486,7 @@ class Composite(Process):
 
         for removed_key in front_paths.difference(all_paths):
             # do we want to do anything with these?
-            removed_front = self.front.pop(removed_key)
+            self.front.pop(removed_key)
 
         # Collect the deduped set of runtimes that batched-execution
         # protocols (Ray, REST-batching, …) attach to their shadow
@@ -2250,8 +2252,11 @@ class Composite(Process):
 
         for update_path in update_paths:
             for path in explode_path(update_path):
-                # Check direct trigger matches
-                step_paths = self.step_triggers.get(path, [])
+                # Check direct trigger matches. Copy the registry's list so
+                # the extend() below never mutates the persistent trigger
+                # registry (which would grow it unboundedly and cause
+                # spurious re-triggers on later ticks).
+                step_paths = list(self.step_triggers.get(path, []))
 
                 # Also handle wildcard (*) path matches
                 if self.star_triggers:

@@ -8,9 +8,7 @@ fixture proves the machinery (allow-list, resolve/pin/SHA, per-SHA venv
 materialization, stdio-RPC edge, conformance) without the weight.
 """
 
-import os
 import json
-import shutil
 import textwrap
 import subprocess
 

@@ -36,17 +36,15 @@ starts against a non-conforming address (contract 2).
 from __future__ import annotations
 
 import os
-import io
 import re
 import json
 import time
 import shutil
-import hashlib
 import pathlib
 import subprocess
 import warnings
 from dataclasses import dataclass, field, asdict
-from typing import Any, Dict, Optional, Callable, Tuple
+from typing import Any, Dict, Optional, Tuple
 
 from bigraph_schema.schema import Protocol, String
 from bigraph_schema.methods import load_protocol

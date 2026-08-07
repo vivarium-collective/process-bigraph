@@ -7,14 +7,13 @@ Tests for Process Bigraph
 import os
 import pathlib
 import sys
-import random
 import inspect
 import sqlite3
 import tempfile
 
 import numpy as np
 import pytest
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urlparse
 
 from bigraph_schema.schema import Path, make_default
 from bigraph_schema import set_path as bs_set_path
@@ -44,11 +43,11 @@ except ImportError:
     SQLiteEmitter = None
     save_simulation_metadata = mark_simulation_finished = None
     list_simulations = load_history = load_simulation_metadata = None
-from process_bigraph.protocols.rest import rest_get, rest_post
-from process_bigraph.types import ProcessLink, StepLink
+from process_bigraph.protocols.rest import rest_get
+from process_bigraph.types import ProcessLink
 
 from process_bigraph.processes.examples import IncreaseProcess
-from process_bigraph.processes.growth_division import grow_divide_agent, Grow, Divide
+from process_bigraph.processes.growth_division import grow_divide_agent
 from process_bigraph.processes.dynamic_structure import DynamicWorker
 
 
@@ -325,7 +324,7 @@ def burst_reaction(config):
 
 
 def test_reaction():
-    composite = {
+    _composite = {
         'state': {
             'environment': {
                 'concentrations': {},
@@ -404,7 +403,7 @@ def test_emitter(core):
         1000.0)
 
     # TODO: make this work
-    results = gather_emitter_results(gillespie)
+    gather_emitter_results(gillespie)
 
     assert 'mRNA' in updates[0]
     # TODO: support omit as well as emit
@@ -559,7 +558,7 @@ def test_grow_divide(core):
                 'environment': ['environment']}}},
         core=core)
 
-    updates = composite.update({
+    composite.update({
         'environment': {
             '0': {
                 'mass': 1.1}}},
@@ -644,7 +643,7 @@ def test_gillespie_composite(core):
         1000.0)
 
     # TODO: make this work
-    results = gather_emitter_results(gillespie)
+    gather_emitter_results(gillespie)
 
     assert 'mRNA' in updates[0]
 
@@ -743,7 +742,7 @@ def todo_test_shared_steps(core):
 
     shared.run(100)
 
-    results = gather_emitter_results(shared)
+    gather_emitter_results(shared)
 
     assert shared.state['increase']['shared']['accelerate']['instance'].instance.config['rate'] == shared.state['increase']['instance'].config['rate']
     assert shared.state['increase']['instance'].config['rate'] > initial_rate
@@ -1003,10 +1002,10 @@ def apply_non_negative_array(schema, current, update, top_schema, top_state, pat
 def todo_test_dfba_process(core):
     base_url = urlparse('http://localhost:22222')
     types_url = base_url._replace(path='/list-types')
-    types = rest_get(types_url)
+    rest_get(types_url)
 
     processes_url = base_url._replace(path='/list-processes')
-    processes = rest_get(processes_url)
+    rest_get(processes_url)
 
     # # TODO: import types from the server
     # core.register('positive_float', {
@@ -1025,7 +1024,7 @@ def todo_test_dfba_process(core):
 
     schema_url = base_url._replace(
         path=f'/process/{dfba_name}/config-schema')
-    dfba_config_schema = rest_get(schema_url)
+    rest_get(schema_url)
 
     dfba_config = {
         'model_file': 'textbook',
@@ -2669,7 +2668,7 @@ def test_actor_pool_reuses_actors_across_acquires():
     pytest.importorskip("ray")
     import ray as _ray
     from process_bigraph.protocols.pool import (
-        ActorPool, get_or_create_pool, shutdown_all_pools,
+        get_or_create_pool, shutdown_all_pools,
     )
 
     if not _ray.is_initialized():
@@ -4073,7 +4072,7 @@ def test_a_study_template_is_not_ground():
 def test_filling_the_model_site_yields_a_running_study():
     """The whole point: drop a conforming composite into the model site and
     the study builds, constructs and runs — no code."""
-    from process_bigraph.templates import template_document, is_ground_document
+    from process_bigraph.templates import template_document
 
     core = _study_core()
     template = core.access({'study': _study_region(threshold=2.0)})

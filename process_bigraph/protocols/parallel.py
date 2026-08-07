@@ -5,11 +5,11 @@ python multiprocessing
 ===============================================
 """
 
-import time
 import sys
+import cProfile
 import pstats
-from typing import Any, Dict, Optional, Union, List, Tuple
-from dataclasses import dataclass, is_dataclass, field
+from typing import Any, Dict, Optional, List, Tuple
+from dataclasses import dataclass, field
 
 import multiprocessing
 
@@ -123,8 +123,8 @@ class ParallelProcess(Process):
         mp_ctx = multiprocessing.get_context(start_method)
         self.parent, child = mp_ctx.Pipe()
 
-        agent_id = find_agent_id(process)
-        # print(f'{agent_id} - starting multiprocess')
+        _agent_id = find_agent_id(process)
+        # print(f'{_agent_id} - starting multiprocess')
 
         self.multiprocess = mp_ctx.Process( # type: ignore[attr-defined]
             target=_handle_parallel_process,
@@ -189,8 +189,7 @@ class ParallelProcess(Process):
     def get(self):
         return self.get_command_result()
 
-    @staticmethod
-    def generate_state(config=None):
+    def generate_state(self, config=None):
         """Generate static initial state for user configuration or inspection."""
         return type(self.process).generate_state(config)
 

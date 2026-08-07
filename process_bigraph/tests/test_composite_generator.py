@@ -606,7 +606,7 @@ def test_discover_generators_skips_scripts_subpackage(tmp_path):
     import sys
     import importlib
     from process_bigraph.composite_generator import (
-        _REGISTRY, discover_generators, composite_generator,
+        _REGISTRY, discover_generators,
     )
 
     pkg_dir = tmp_path / "_libscripts_demo"
@@ -667,7 +667,7 @@ def test_discover_generators_skips_tests_subpackage_before_import(tmp_path):
     import sys
     import importlib
     from process_bigraph.composite_generator import (
-        _REGISTRY, discover_generators, composite_generator,
+        _REGISTRY, discover_generators,
     )
 
     pkg_dir = tmp_path / "_libtests_demo"
