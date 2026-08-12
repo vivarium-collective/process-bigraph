@@ -289,23 +289,6 @@ def _config_hash(config: Any) -> str:
     return hashlib.sha1(s.encode()).hexdigest()[:12]
 
 
-def _config_hash_pool_key(config: Any) -> str:
-    """Hash for actor-pool keying. Excludes ``state`` so cells with
-    different state (e.g. mother + her daughters after divide) share
-    the same actor pool — each actor then holds many Composite
-    instances keyed by proc_id. Compared to ``_config_hash``, this
-    drops per-cell-only fields that don't affect actor lifecycle."""
-    if isinstance(config, dict):
-        pool_config = {k: v for k, v in config.items() if k != 'state'}
-    else:
-        pool_config = config
-    try:
-        s = json.dumps(pool_config, sort_keys=True, default=repr)
-    except TypeError:
-        s = repr(pool_config)
-    return hashlib.sha1(s.encode()).hexdigest()[:12]
-
-
 def _pool_key(class_name: str, config: Any) -> str:
     return f"{class_name}:{_config_hash(config)}"
 
