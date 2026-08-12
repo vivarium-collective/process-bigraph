@@ -12,6 +12,6 @@ you need:
 
     pip install process-bigraph[ec2-ssm]   # boto3 for EC2SSMRayCluster
 
-See ``doc/distributed_lifecycles.md`` for how clusters fit into the
+See ``docs/distributed_lifecycles.md`` for how clusters fit into the
 ``cluster ⊃ pool ⊃ session ⊃ tick`` layering.
 """

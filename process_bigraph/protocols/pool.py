@@ -7,7 +7,7 @@ multiple Composites with identical actor configs share one pool. This
 is the layer that makes per-Composite cold-start an artifact rather
 than a fundamental cost.
 
-See ``doc/distributed_lifecycles.md`` for the layering this fits into:
+See ``docs/distributed_lifecycles.md`` for the layering this fits into:
 
     cluster (EC2/Ray) ⊃ pool (this module) ⊃ session ⊃ tick
 

@@ -820,7 +820,7 @@ class Process(Open):
         expensive ones in place.
 
         Used by ``ActorPool`` + ``Session`` (see
-        ``doc/distributed_lifecycles.md``) to claim a pool actor for
+        ``docs/distributed_lifecycles.md``) to claim a pool actor for
         one Composite's sim and rebind its per-sim parameters
         (e.g. cell_keys for a sharded dFBA actor) without paying the
         cobra-Model load again. Without this hook, every

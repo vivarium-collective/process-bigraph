@@ -17,7 +17,7 @@ built with different formalisms—including ODEs, FBA, agent-based models, spati
 and machine-learning components—into a single coherent simulation.
 
 <p align="center">
-  <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/composition_framework.png?raw=true"
+  <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/docs/_static/composition_framework.png?raw=true"
        width="800"
        alt="Process Bigraph composition framework">
 </p>
@@ -100,20 +100,20 @@ More tutorials are added continuously and appear automatically in the index.
   what the objects are (documents, sites, handles), how they compose, the
   higher-order DAG, templates and gating, content-addressed artifacts, the
   `git:` protocol, and the laws everything else follows from.*
-  [doc/architecture.md](doc/architecture.md)
+  [docs/architecture.md](docs/architecture.md)
 
 ### Topic Guides
 
 - **Emitters — Recording Simulation Results**
   *Built-in emitters (RAM, console, JSON, SQLite), how to wire them, retrieve results, store runs long-term, and write your own.*
-  [doc/emitters.md](doc/emitters.md)
+  [docs/emitters.md](docs/emitters.md)
 
 - **Tick lifecycle** — *how a step network is ordered and advanced, and how a
   protocol runtime batches remote dispatch.*
-  [doc/tick_lifecycle.md](doc/tick_lifecycle.md)
+  [docs/tick_lifecycle.md](docs/tick_lifecycle.md)
 
 - **Distributed lifecycles** — *running parts of a composite off-process.*
-  [doc/distributed_lifecycles.md](doc/distributed_lifecycles.md)
+  [docs/distributed_lifecycles.md](docs/distributed_lifecycles.md)
 
 ---
 
