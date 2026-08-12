@@ -1800,7 +1800,6 @@ class Composite(Process):
             path: Path where merge should occur (default: root).
         """
         path = path or []
-        # self.schema, self.state = self.core.merge(
         self.schema, self.state = self.core.combine(
             self.schema,
             self.state,
@@ -1873,7 +1872,6 @@ class Composite(Process):
             A serialized schema representation.
         """
         return self.core.render(self.schema)
-        # return self.core.serialize('schema', self.schema)
 
     def nextflow(self, options: Optional[Dict[str, Any]] = None) -> str:
         """Render this composite as a Nextflow DSL2 workflow document.

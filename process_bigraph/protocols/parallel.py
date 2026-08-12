@@ -21,10 +21,6 @@ from bigraph_schema.methods import load_protocol, load_local_protocol
 from process_bigraph.composite import Process
 
 
-def find_agent_id(process):
-    return process.config['state']['divide']['config']['agent_id']
-
-
 def _handle_parallel_process(
         connection: Connection,
         process: Process,
@@ -61,7 +57,6 @@ def _handle_parallel_process(
             if command == 'end':
                 running = False
             else:
-                # print(f'{find_agent_id(process)} - handle running process command: {command} with args: {args} and kwargs: {kwargs}')
                 result = process.run_command(command, args, kwargs)
                 connection.send(result)
 
@@ -123,15 +118,10 @@ class ParallelProcess(Process):
         mp_ctx = multiprocessing.get_context(start_method)
         self.parent, child = mp_ctx.Pipe()
 
-        _agent_id = find_agent_id(process)
-        # print(f'{_agent_id} - starting multiprocess')
-
         self.multiprocess = mp_ctx.Process( # type: ignore[attr-defined]
             target=_handle_parallel_process,
             args=(child, process, self.profile))
         self.multiprocess.start()
-
-        # print(f'{find_agent_id(process)} - multiprocess started')
 
     def send_command(
             self, command: str, args: Optional[tuple] = None,
@@ -144,8 +134,6 @@ class ParallelProcess(Process):
         '''
         if run_pre_check:
             self.pre_send_command(command, args, kwargs)
-
-        # print(f'{find_agent_id(self.process)} - sending: {command} with args: {args} and kwargs: {kwargs}')
 
         if not self.parent.closed:
             try:
@@ -173,16 +161,12 @@ class ParallelProcess(Process):
                 self._pending_command = None
                 return self.result
             else:
-                # print(f'{find_agent_id(self.process)} - receiving {self._pending_command}')
-
                 self._pending_command = None
 
                 try:
                     self.result = self.parent.recv()
                 except EOFError:
                     return self.result
-
-                # print(f'{find_agent_id(self.process)} - received result! for {old_command}: {self.result}')
 
                 return self.result
 
@@ -228,7 +212,6 @@ class ParallelProcess(Process):
         Example:
             {'glucose': 'float', 'biomass': 'map[float]'}
         """
-        # return self.run_command('inputs', ())
         return self.process.inputs()
 
     def outputs(self):
@@ -239,7 +222,6 @@ class ParallelProcess(Process):
             {'growth_rate': 'float'}
         """
         return self.process.outputs()
-        # return self.run_command('outputs', ())
 
     def invoke(self, state, interval):
         self.send_command('update', (state, interval))
@@ -266,7 +248,6 @@ class ParallelProcess(Process):
             self._stats_objs.append(stats)
         self.multiprocess.terminate()
         self.multiprocess.join()
-        # self.multiprocess.close()
         self._ended = True
 
     def __del__(self) -> None:
