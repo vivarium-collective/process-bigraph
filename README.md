@@ -76,6 +76,11 @@ rendered to HTML and published automatically on GitHub Pages.
 
 ### Learning Path (Featured Tutorials)
 
+- **Tutorial 0 — A Process in 12 Lines (quickstart)**  
+  *The new front door: define a process with the `@process` decorator, wire and
+  run it end-to-end on one screen, and watch a `_units`-bearing port auto-convert*  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_0_quickstart.html
+
 - **Tutorial 1 — Process-Bigraph Basics**  
   *Processes, Steps, ports, Composites, workflows, and emitters*  
   https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_1.html
