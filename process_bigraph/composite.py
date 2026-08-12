@@ -48,6 +48,12 @@ def get_current_composite():
 _TRACE_PATH = os.environ.get('PROCESS_BIGRAPH_TRACE_FILE')
 _TRACE_FH = open(_TRACE_PATH, 'a', buffering=1) if _TRACE_PATH else None
 
+# Default for Composite._profile_per_process (per-path invoke attribution in
+# TimingSummary.per_process). Off by default — the write is on the hot path —
+# and flippable per-run via the env var without a code change.
+_PROFILE_PER_PROCESS_DEFAULT = bool(
+    os.environ.get('PROCESS_BIGRAPH_PROFILE_PROCESSES'))
+
 
 def _summarize_value(value, depth=0):
     """Lightweight, JSON-safe summary of an update fragment.
@@ -993,6 +999,24 @@ class Defer:
         return self.f(self.defer.get(), self.args)
 
 
+def _project_process_update(update_results: Any, args: Tuple[Any, str, Any]) -> Any:
+    """Project a resolved process update into global-state terms.
+
+    Module-level so ``process_update`` doesn't allocate a fresh closure per
+    invoke (76k–149k allocations on a moderate run). ``args`` carries the
+    everything the projection needs — ``(composite, ports_key, process_path)``
+    — since a module function can't close over ``self``. Behaviour is identical
+    to the previous per-call closure.
+    """
+    composite, ports_key, process_path = args
+    if not isinstance(update_results, list):
+        update_results = [update_results]
+    return [
+        composite._cached_project(process_path, update_result, ports_key)
+        for update_result in update_results
+    ]
+
+
 def match_star_path(
     path: Tuple[str, ...],
     star_path: Tuple[str, ...]
@@ -1270,6 +1294,16 @@ class Composite(Process):
         # share a single ``("<batched>", "<RuntimeClass>")`` key.
         self._per_process_time: Dict[Tuple[Any, ...], float] = {}
         self._last_run_total_time: float = 0.0
+        # Per-process invoke attribution costs a dict write on every invoke
+        # (the hot path). It is opt-in: the aggregate process/framework split
+        # (``process_update_time``/``framework_time``, hence
+        # ``TimingSummary.total``/``process_time``/``framework_time``) is always
+        # collected; ``TimingSummary.per_process`` is populated only when this
+        # is enabled. Set ``composite._profile_per_process = True`` before
+        # ``run()`` to get the per-path breakdown. Defaults to the
+        # ``PROCESS_BIGRAPH_PROFILE_PROCESSES`` env var so a run can be profiled
+        # without code changes.
+        self._profile_per_process: bool = _PROFILE_PER_PROCESS_DEFAULT
 
         # Precompile view/project operations for fast runtime access.
         self._compiled_links = {}
@@ -2805,10 +2839,13 @@ class Composite(Process):
         update = process['instance'].invoke(clean_state, interval)
         dt = _time.monotonic() - t0
         self.process_update_time += dt
-        # Per-process attribution. Same benign race as process_update_time
-        # under parallel dispatch — this is metric data only.
-        key = tuple(path) if isinstance(path, (list, tuple)) else (path,)
-        self._per_process_time[key] = self._per_process_time.get(key, 0.0) + dt
+        # Per-process attribution is opt-in (a dict write on the hot path);
+        # the aggregate ``process_update_time`` above is always collected.
+        # Same benign race as ``process_update_time`` under parallel dispatch —
+        # metric data only.
+        if self._profile_per_process:
+            key = tuple(path) if isinstance(path, (list, tuple)) else (path,)
+            self._per_process_time[key] = self._per_process_time.get(key, 0.0) + dt
         if _TRACE_FH is not None:
             # Resolve SyncUpdate / Defer to plain dict for the trace; the
             # invoke return is opaque (SyncUpdate wraps a dict). We only need
@@ -2818,20 +2855,11 @@ class Composite(Process):
             except Exception:
                 resolved = '<unresolvable>'
             _trace_invoke(path, process['instance'], clean_state, interval, resolved)
-        # This nested function projects the update into the global state at the given path
-        def defer_project(update_results: Any, args: Tuple[Any, Any, Union[str, Tuple[str, ...]]]) -> Any:
-            schema, state, process_path = args
 
-            if not isinstance(update_results, list):
-                update_results = [update_results]
-
-            return [self._cached_project(
-                process_path,
-                update_result,
-                ports_key) for update_result in update_results]
-
-        # Return a deferred object that will project the update when requested
-        return Defer(update, defer_project, (self.schema, self.state, path))
+        # Return a deferred object that will project the update when requested.
+        # The projector is the module-level ``_project_process_update`` (not a
+        # per-call closure) — ``args`` carries ``(self, ports_key, path)``.
+        return Defer(update, _project_process_update, (self, ports_key, path))
 
     def finalize(self) -> Dict[Tuple[str, ...], Any]:
         """Ask every edge that has results for its completion-time output.
