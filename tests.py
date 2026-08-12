@@ -3132,6 +3132,39 @@ def test_calculate_timestep_returning_zero_raises():
         sim.run(3.0)
 
 
+def _two_increasers():
+    """A fresh 2-process composite state; both drive the same ``level``."""
+    return {
+        'a': _increaser(1.0)['proc'],
+        'b': _increaser(1.0, rate=0.2)['proc'],
+        'level': 1.0,
+    }
+
+
+def test_per_process_timing_is_opt_in():
+    """Per-process invoke attribution is opt-in so the hot path stays lean.
+
+    The aggregate process/framework split (``process_time`` / ``framework_time``)
+    is always collected; ``TimingSummary.per_process`` is populated only when
+    ``_profile_per_process`` is set. Enabling it must not change results.
+    """
+    # Default: aggregate collected, per-process attribution empty.
+    off = Composite({'state': _two_increasers()}, core=allocate_core())
+    off.run(10.0)
+    off_ts = off.timing_summary()
+    assert off_ts.process_time >= 0.0          # aggregate split still works
+    assert off_ts.per_process == {}            # per-path breakdown withheld
+
+    # Opt-in: per-path breakdown populated (one key per process path).
+    on = Composite({'state': _two_increasers()}, core=allocate_core())
+    on._profile_per_process = True
+    on.run(10.0)
+    assert len(on.timing_summary().per_process) >= 2
+
+    # Profiling is a pure observation — it must not perturb the simulation.
+    assert on.state['level'] == off.state['level']
+
+
 def test_omitted_interval_takes_the_schema_default():
     """An omitted interval is not an error — it takes the `process` schema
     default of 1.0 and runs."""
