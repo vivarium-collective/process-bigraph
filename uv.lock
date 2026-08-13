@@ -166,20 +166,18 @@ wheels = [
 
 [[package]]
 name = "bigraph-schema"
-version = "1.4.5"
+version = "1.6.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "fire" },
     { name = "numpy" },
     { name = "pandas" },
     { name = "parsimonious" },
     { name = "pint" },
     { name = "plum-dispatch" },
-    { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/1f/3c/063a46cb058b675e1b2fec57a2a8b6e5e4f131b7846c45bb415cfe485d46/bigraph_schema-1.4.5.tar.gz", hash = "sha256:f36a3b97ba158d44e59355331bfc3a52bb11876566adb7ad0db58ad5f43ea69e", size = 145035, upload-time = "2026-07-31T02:10:05.852Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/5c/f2/bd6d2029b27aba06e9aed03ec00bc3461f12e8ad83efe738436fa788552c/bigraph_schema-1.6.0.tar.gz", hash = "sha256:2e3cd98cb6a17d1b7898a931623bdbd2b8996e314582e9c5f561373bf06876cf", size = 167253, upload-time = "2026-08-13T01:50:36.65Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/7a/34/232e3559e9fe17d120a72cdc27ba94dcf968f3f4c71c5972c875005e4daf/bigraph_schema-1.4.5-py3-none-any.whl", hash = "sha256:542abb9fd4d07ce433381ae297682f49f1a54be174b43c3c1962ea1b8a45e6ee", size = 159813, upload-time = "2026-07-31T02:10:04.511Z" },
+    { url = "https://files.pythonhosted.org/packages/fb/bb/b48c015d2c4b26754b0d3ad793af43c0c9a96c1f1dabab8d4f06dc9ea236/bigraph_schema-1.6.0-py3-none-any.whl", hash = "sha256:c6c855d0bbf851f949b15ddb24b608f7e1b1ef1f93af62d7eaf364c8a8ef6938", size = 172850, upload-time = "2026-08-13T01:50:35.403Z" },
 ]
 
 [[package]]
@@ -2067,7 +2065,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bigraph-schema", specifier = ">=1.4.5" },
+    { name = "bigraph-schema", specifier = ">=1.6.0" },
     { name = "boto3", marker = "extra == 'ec2-ssm'", specifier = ">=1.28" },
     { name = "fastapi", marker = "extra == 'server-rest'", specifier = ">=0.116.1" },
     { name = "fastapi-utils", marker = "extra == 'server-rest'", specifier = ">=0.8.0" },
