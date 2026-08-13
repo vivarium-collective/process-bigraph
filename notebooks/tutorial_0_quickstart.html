@@ -3,7 +3,7 @@
 <html lang="en">
 <head><meta charset="utf-8"/>
 <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-<title>process-bigraphs</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
+<title>tutorial_0_quickstart</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <style type="text/css">
     pre { line-height: 125%; }
 td.linenos .normal { color: inherit; background-color: transparent; padding-left: 5px; padding-right: 5px; }
@@ -7796,17 +7796,119 @@ a.anchor-link {
 <!-- End of mermaid configuration --></head>
 <body class="jp-Notebook" data-jp-theme-light="true" data-jp-theme-name="JupyterLab Light">
 <main>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=ec2070ab-6ed1-4d2b-bdc4-0844a7806e7e">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=a30e3b7f">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h1 id="Process-Bigraphs">Process-Bigraphs<a class="anchor-link" href="#Process-Bigraphs">¶</a></h1><p>The <code>process-bigraph</code> library is an extension of the <code>bigraph-schema</code> library, offering a computational framework that integrates processes into bigraphs.</p>
+<h1 id="Tutorial-0-%E2%80%94-A-Process-in-12-Lines">Tutorial 0 — A Process in 12 Lines<a class="anchor-link" href="#Tutorial-0-%E2%80%94-A-Process-in-12-Lines">¶</a></h1><p>The fastest possible tour of process-bigraph: define a process as a <strong>typed
+function</strong>, wire it, and run it — all on one screen.</p>
+<p>The <code>@process</code> decorator infers a process's <code>config_schema</code> from the decorated
+function's keyword-only parameters, so the config values <em>are</em> the function's
+arguments. No <code>config_schema</code> dict, no <code>initialize</code> recast. The class-based
+<code>Process</code> API stays available as the escape hatch for stateful processes.</p>
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=db2ec175-a886-41e7-9ba2-a43c235892f4">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=2bf9264d">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [1]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">process_bigraph</span><span class="w"> </span><span class="kn">import</span> <span class="n">allocate_core</span><span class="p">,</span> <span class="n">Composite</span><span class="p">,</span> <span class="n">process</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=e6ae8d0d">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="1.-Define-a-process">1. Define a process<a class="anchor-link" href="#1.-Define-a-process">¶</a></h2><p>A process is a typed function of <code>(state, interval)</code> plus keyword-only config.
+Here, exponential decay of a species <code>S</code> at some <code>rate</code>. The <code>rate: float = 0.1</code>
+keyword-only parameter becomes the process's config — its type and default are
+read straight off the signature.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=34170fe8">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [2]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="nd">@process</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="s2">"float"</span><span class="p">},</span> <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="s2">"float"</span><span class="p">})</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">decay</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">interval</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">rate</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">0.1</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="o">-</span><span class="n">rate</span> <span class="o">*</span> <span class="n">state</span><span class="p">[</span><span class="s2">"S"</span><span class="p">]</span> <span class="o">*</span> <span class="n">interval</span><span class="p">}</span>   <span class="c1"># additive delta</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=38d6173a">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p>The <code>config_schema</code> was inferred for you — <code>rate</code> is a <code>float</code> defaulting to
+<code>0.1</code>:</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=cf405db4">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [3]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython3"><pre><span></span><span class="n">decay</span><span class="o">.</span><span class="n">config_schema</span>
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[3]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>{'rate': {'_type': 'float', '_default': 0.1}}</pre>
+</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=6cd256f3">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="2.-Wire-and-run">2. Wire and run<a class="anchor-link" href="#2.-Wire-and-run">¶</a></h2><p>Register the process on a core, drop it into a <code>Composite</code> document wired to a
+shared store <code>S</code>, and run. The document is the same
+<code>{_type, address, config, inputs, outputs}</code> dict the engine consumes — the
+decorator changed only how the process is <em>authored</em>, not the wire format.
+Identity wires (<code>"S": ["S"]</code>) connect the <code>S</code> port to the top-level <code>S</code> store.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=97e59160">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -7814,10 +7916,22 @@ a.anchor-link {
 <div class="jp-InputPrompt jp-InputArea-prompt">In [4]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="c1"># !pip install bigraph-viz</span>
-<span class="c1"># !pip install bigraph-schema</span>
-<span class="c1"># !pip install process-bigraph</span>
-<span class="err">!</span><span class="n">pip</span> <span class="n">freeze</span> <span class="o">|</span> <span class="n">grep</span> <span class="n">bigraph</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="n">core</span> <span class="o">=</span> <span class="n">allocate_core</span><span class="p">()</span>
+<span class="n">core</span><span class="o">.</span><span class="n">register_link</span><span class="p">(</span><span class="s2">"decay"</span><span class="p">,</span> <span class="n">decay</span><span class="p">)</span>
+
+<span class="n">sim</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="s2">"state"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"S"</span><span class="p">:</span> <span class="mf">10.0</span><span class="p">,</span>
+    <span class="s2">"decay"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"_type"</span><span class="p">:</span> <span class="s2">"process"</span><span class="p">,</span>
+        <span class="s2">"address"</span><span class="p">:</span> <span class="s2">"local:decay"</span><span class="p">,</span>
+        <span class="s2">"config"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"rate"</span><span class="p">:</span> <span class="mf">0.2</span><span class="p">},</span>          <span class="c1"># override the inferred default</span>
+        <span class="s2">"inputs"</span><span class="p">:</span>  <span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"S"</span><span class="p">]},</span>
+        <span class="s2">"outputs"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"S"</span><span class="p">]},</span>
+    <span class="p">},</span>
+<span class="p">}},</span> <span class="n">core</span><span class="o">=</span><span class="n">core</span><span class="p">)</span>
+
+<span class="n">sim</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="mf">10.0</span><span class="p">)</span>                              <span class="c1"># advance 10 time units</span>
+<span class="n">sim</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="s2">"S"</span><span class="p">]</span>
 </pre></div>
 </div>
 </div>
@@ -7830,14 +7944,34 @@ a.anchor-link {
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>bigraph-schema==0.0.19
-bigraph-viz==0.0.30
+<pre>module `pbg_emitters.parquet_emitter` not found during dynamic import
 </pre>
 </div>
 </div>
+<div class="jp-OutputArea-child jp-OutputArea-executeResult">
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[4]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>1.0737418240000003</pre>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=d0aa6af4-0231-4ec0-b3b4-bafd93110392">
+</div>
+</div>
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=99d2ef6e">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<p>That is the whole loop: <strong>define → wire → run</strong>.</p>
+<h2 id="3.-Ports-carry-units">3. Ports carry units<a class="anchor-link" href="#3.-Ports-carry-units">¶</a></h2><p>A port can declare <code>_units</code>, and the engine auto-converts across a wire whenever
+two compatible-but-different units meet. Here a process emits <code>mass</code> in
+<strong>femtograms (fg)</strong> into a store declared in <strong>picograms (pg)</strong> — the engine
+scales <code>1000 fg → 1 pg</code> at the wire, with no code on your part.</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8e322e6b">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -7845,361 +7979,26 @@ bigraph-viz==0.0.30
 <div class="jp-InputPrompt jp-InputArea-prompt">In [5]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="c1">#some imports and set up</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">bigraph_viz</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_bigraph</span><span class="p">,</span> <span class="n">pf</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">bigraph_viz.dict_utils</span><span class="w"> </span><span class="kn">import</span> <span class="n">replace_regex_recursive</span>
+<div class="highlight hl-ipython3"><pre><span></span><span class="nd">@process</span><span class="p">(</span><span class="n">inputs</span><span class="o">=</span><span class="p">{},</span> <span class="n">outputs</span><span class="o">=</span><span class="p">{</span><span class="s2">"mass"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"_type"</span><span class="p">:</span> <span class="s2">"float"</span><span class="p">,</span> <span class="s2">"_units"</span><span class="p">:</span> <span class="s2">"fg"</span><span class="p">}})</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">emit_fg</span><span class="p">(</span><span class="n">state</span><span class="p">,</span> <span class="n">interval</span><span class="p">,</span> <span class="o">*</span><span class="p">,</span> <span class="n">amount</span><span class="p">:</span> <span class="nb">float</span> <span class="o">=</span> <span class="mf">1000.0</span><span class="p">):</span>
+    <span class="k">return</span> <span class="p">{</span><span class="s2">"mass"</span><span class="p">:</span> <span class="n">amount</span><span class="p">}</span>               <span class="c1"># 1000 femtograms</span>
 
-<span class="n">plot_settings</span> <span class="o">=</span> <span class="p">{</span><span class="s1">'remove_process_place_edges'</span><span class="p">:</span> <span class="kc">True</span><span class="p">}</span>
-<span class="n">save_images</span> <span class="o">=</span> <span class="kc">False</span>
-<span class="k">if</span> <span class="n">save_images</span><span class="p">:</span>
-    <span class="n">plot_settings</span><span class="o">.</span><span class="n">update</span><span class="p">({</span><span class="s1">'out_dir'</span><span class="p">:</span> <span class="s1">'out'</span><span class="p">,</span><span class="s1">'dpi'</span><span class="p">:</span> <span class="s1">'250'</span><span class="p">})</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=4c8aa30d-656b-4128-a11f-e14114a380e5">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h3 id="Bigraphs-Introduction">Bigraphs Introduction<a class="anchor-link" href="#Bigraphs-Introduction">¶</a></h3><p>Process Bigraphs are based on a mathematical formalism <a href="https://www.google.com/search?q=the+space+and+motion+of+communicating+agents+by+robin+milner">introduced by Robin Milner in 2009</a>, which was expanded in <a href="https://doi.org/10.1093/bioinformatics/btac049">Vivarium</a> with the addition of Processes, and standardized with the introduction of the Schema format. Bigraphs provide a powerful framework for compositional modeling due to their ability to represent complex systems through hierarchical structures and flexible reconfigurations, thus enabling the seamless composition and decomposition of system components.</p>
-<p>The bigraph combines two distinct graph structures: the place graph and the link graph.</p>
-<p><strong>Place graph</strong> (on the left): The place graph represents the spatial aspect of a system, capturing the hierarchical containment of entities within other entities. In the place graph, nodes represent entities, and edges represent the containment relationships between them -- these are shown as solid connections with outers above and inners below.</p>
-<p><strong>Link graph</strong> (on the right): The link graph represents the connectivity aspect of a system, capturing how entities link or interact with each other. In the link graph, nodes represent entities, while hyperedges capture the relationships between these entities. Unlike traditional graph edges, which connect two nodes, hyperedges can connect any number of nodes.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=e32e354f-e340-4350-8dcc-2296bf142aac">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [6]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">placegraph_spec</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">'v0'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'v1'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span>
-        <span class="s1">'v2'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'v3'</span><span class="p">:</span> <span class="s1">'Any'</span>
-        <span class="p">}</span>
-    <span class="p">},</span> 
-    <span class="s1">'v4'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'v5'</span><span class="p">:</span> <span class="s1">'Any'</span>
-    <span class="p">}</span>
-<span class="p">}</span>
-<span class="n">placegraph</span> <span class="o">=</span> <span class="n">plot_bigraph</span><span class="p">(</span><span class="n">placegraph_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">'placegraph'</span><span class="p">)</span>
+<span class="n">core</span> <span class="o">=</span> <span class="n">allocate_core</span><span class="p">()</span>
+<span class="n">core</span><span class="o">.</span><span class="n">register_link</span><span class="p">(</span><span class="s2">"emit_fg"</span><span class="p">,</span> <span class="n">emit_fg</span><span class="p">)</span>
 
-<span class="n">linkgraph_spec</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">'e0'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'wires'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'e0.0'</span><span class="p">:</span> <span class="s1">'v0'</span><span class="p">,</span>
-            <span class="s1">'e0.1'</span><span class="p">:</span> <span class="s1">'v1'</span><span class="p">,</span>
-            <span class="s1">'e0.2'</span><span class="p">:</span> <span class="s1">'v4'</span><span class="p">}},</span>
-    <span class="s1">'e1'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'wires'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'e0.0'</span><span class="p">:</span> <span class="s1">'v3'</span><span class="p">,</span>
-            <span class="s1">'e0.1'</span><span class="p">:</span> <span class="s1">'v1'</span><span class="p">}},</span>
-    <span class="s1">'e2'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'wires'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'e0.0'</span><span class="p">:</span> <span class="s1">'v3'</span><span class="p">,</span>
-            <span class="s1">'e0.1'</span><span class="p">:</span> <span class="s1">'v4'</span><span class="p">,</span>
-            <span class="s1">'e0.2'</span><span class="p">:</span> <span class="s1">'v5'</span>
-        <span class="p">}</span>
+<span class="n">sim</span> <span class="o">=</span> <span class="n">Composite</span><span class="p">({</span><span class="s2">"state"</span><span class="p">:</span> <span class="p">{</span>
+    <span class="s2">"mass"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"_type"</span><span class="p">:</span> <span class="s2">"float"</span><span class="p">,</span> <span class="s2">"_units"</span><span class="p">:</span> <span class="s2">"pg"</span><span class="p">},</span>   <span class="c1"># store reads picograms</span>
+    <span class="s2">"emitter"</span><span class="p">:</span> <span class="p">{</span>
+        <span class="s2">"_type"</span><span class="p">:</span> <span class="s2">"process"</span><span class="p">,</span>
+        <span class="s2">"address"</span><span class="p">:</span> <span class="s2">"local:emit_fg"</span><span class="p">,</span>
+        <span class="s2">"config"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"amount"</span><span class="p">:</span> <span class="mf">1000.0</span><span class="p">},</span>
+        <span class="s2">"inputs"</span><span class="p">:</span>  <span class="p">{},</span>
+        <span class="s2">"outputs"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"mass"</span><span class="p">:</span> <span class="p">[</span><span class="s2">"mass"</span><span class="p">]},</span>
     <span class="p">},</span>
-    <span class="s1">'v0'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span> <span class="s1">'v1'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span> <span class="s1">'v2'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span> <span class="s1">'v3'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span> <span class="s1">'v4'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span> <span class="s1">'v5'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span>
-<span class="p">}</span>
-<span class="n">node_groups</span> <span class="o">=</span> <span class="p">[</span>
-    <span class="p">[(</span><span class="s1">'v1'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'e0'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'v4'</span><span class="p">,)],</span>
-    <span class="p">[(</span><span class="s1">'e1'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'v5'</span><span class="p">,)],[(</span><span class="s1">'v3'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'e2'</span><span class="p">,)]]</span>
-<span class="n">linkgraph</span> <span class="o">=</span> <span class="n">plot_bigraph</span><span class="p">(</span>
-    <span class="n">linkgraph_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">rankdir</span><span class="o">=</span><span class="s1">'LR'</span><span class="p">,</span> <span class="n">collapse_processes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">node_groups</span><span class="o">=</span><span class="n">node_groups</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">'linkgraph'</span><span class="p">)</span>
+<span class="p">}},</span> <span class="n">core</span><span class="o">=</span><span class="n">core</span><span class="p">)</span>
 
-<span class="n">process_graph</span> <span class="o">=</span> <span class="n">plot_bigraph</span><span class="p">(</span>
-    <span class="n">linkgraph_spec</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">'process_graph'</span><span class="p">)</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=3e6a4893-a81d-4cfb-b4ac-b07113a2c4d8">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [7]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">IPython.display</span><span class="w"> </span><span class="kn">import</span> <span class="n">display</span><span class="p">,</span> <span class="n">HTML</span>
-
-<span class="c1"># Render both graphs to SVG</span>
-<span class="n">svg1</span> <span class="o">=</span> <span class="n">placegraph</span><span class="o">.</span><span class="n">pipe</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s1">'svg'</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">'utf-8'</span><span class="p">)</span>
-<span class="n">svg2</span> <span class="o">=</span> <span class="n">linkgraph</span><span class="o">.</span><span class="n">pipe</span><span class="p">(</span><span class="nb">format</span><span class="o">=</span><span class="s1">'svg'</span><span class="p">)</span><span class="o">.</span><span class="n">decode</span><span class="p">(</span><span class="s1">'utf-8'</span><span class="p">)</span>
-
-<span class="c1"># Combine SVGs side by side using an HTML table and display</span>
-<span class="n">html_code</span> <span class="o">=</span> <span class="sa">f</span><span class="s2">"""</span>
-<span class="s2">&lt;table&gt;</span>
-<span class="s2">    &lt;tr&gt;</span>
-<span class="s2">        &lt;td&gt;</span><span class="si">{</span><span class="n">svg1</span><span class="si">}</span><span class="s2">&lt;/td&gt;</span>
-<span class="s2">        &lt;td&gt;</span><span class="si">{</span><span class="n">svg2</span><span class="si">}</span><span class="s2">&lt;/td&gt;</span>
-<span class="s2">    &lt;/tr&gt;</span>
-<span class="s2">&lt;/table&gt;</span>
-<span class="s2">"""</span>
-<span class="n">display</span><span class="p">(</span><span class="n">HTML</span><span class="p">(</span><span class="n">html_code</span><span class="p">))</span>
-</pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedHTMLCommon jp-RenderedHTML jp-OutputArea-output" data-mime-type="text/html" tabindex="0">
-<table>
-<tr>
-<td><?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-
-<!-- Generated by graphviz version 8.1.0 (20230707.0739)
- -->
-<!-- Title: bigraph Pages: 1 -->
-<svg height="183pt" viewbox="0.00 0.00 152.00 188.00" width="148pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g class="graph" id="graph0" transform="scale(0.972222 0.972222) rotate(0) translate(4 184)">
-<title>bigraph</title>
-<polygon fill="white" points="-4,4 -4,-184 148,-184 148,4 -4,4" stroke="none"></polygon>
-<!-- (&#39;v0&#39;,) -->
-<g class="node" id="node1">
-<title>('v0',)</title>
-<ellipse cx="45" cy="-162" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="39" y="-157.72">v0</text>
-</g>
-<!-- (&#39;v0&#39;, &#39;v1&#39;) -->
-<g class="node" id="node2">
-<title>('v0', 'v1')</title>
-<ellipse cx="18" cy="-90" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="12" y="-85.72">v1</text>
-</g>
-<!-- (&#39;v0&#39;,)&#45;&gt;(&#39;v0&#39;, &#39;v1&#39;) -->
-<g class="edge" id="edge2">
-<title>('v0',)-&gt;('v0', 'v1')</title>
-<path d="M38.6,-144.41C34.3,-133.25 28.65,-118.6 24.35,-107.47" fill="none" stroke="black" stroke-width="2"></path>
-</g>
-<!-- (&#39;v0&#39;, &#39;v2&#39;) -->
-<g class="node" id="node3">
-<title>('v0', 'v2')</title>
-<ellipse cx="72" cy="-90" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="66" y="-85.72">v2</text>
-</g>
-<!-- (&#39;v0&#39;,)&#45;&gt;(&#39;v0&#39;, &#39;v2&#39;) -->
-<g class="edge" id="edge3">
-<title>('v0',)-&gt;('v0', 'v2')</title>
-<path d="M51.4,-144.41C55.7,-133.25 61.35,-118.6 65.65,-107.47" fill="none" stroke="black" stroke-width="2"></path>
-</g>
-<!-- (&#39;v0&#39;, &#39;v2&#39;, &#39;v3&#39;) -->
-<g class="node" id="node4">
-<title>('v0', 'v2', 'v3')</title>
-<ellipse cx="72" cy="-18" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="66" y="-13.72">v3</text>
-</g>
-<!-- (&#39;v0&#39;, &#39;v2&#39;)&#45;&gt;(&#39;v0&#39;, &#39;v2&#39;, &#39;v3&#39;) -->
-<g class="edge" id="edge1">
-<title>('v0', 'v2')-&gt;('v0', 'v2', 'v3')</title>
-<path d="M72,-71.34C72,-60.81 72,-47.47 72,-36.9" fill="none" stroke="black" stroke-width="2"></path>
-</g>
-<!-- (&#39;v4&#39;,) -->
-<g class="node" id="node5">
-<title>('v4',)</title>
-<ellipse cx="126" cy="-162" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="120" y="-157.72">v4</text>
-</g>
-<!-- (&#39;v4&#39;, &#39;v5&#39;) -->
-<g class="node" id="node6">
-<title>('v4', 'v5')</title>
-<ellipse cx="126" cy="-90" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="120" y="-85.72">v5</text>
-</g>
-<!-- (&#39;v4&#39;,)&#45;&gt;(&#39;v4&#39;, &#39;v5&#39;) -->
-<g class="edge" id="edge4">
-<title>('v4',)-&gt;('v4', 'v5')</title>
-<path d="M126,-143.34C126,-132.81 126,-119.47 126,-108.9" fill="none" stroke="black" stroke-width="2"></path>
-</g>
-</g>
-</svg>
-</td>
-<td><?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN"
- "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
-
-<!-- Generated by graphviz version 8.1.0 (20230707.0739)
- -->
-<!-- Title: bigraph Pages: 1 -->
-<svg height="156pt" viewbox="0.00 0.00 260.00 160.00" width="253pt" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-<g class="graph" id="graph0" transform="scale(0.972222 0.972222) rotate(0) translate(4 156)">
-<title>bigraph</title>
-<polygon fill="white" points="-4,4 -4,-156 256,-156 256,4 -4,4" stroke="none"></polygon>
-<!-- (&#39;v0&#39;,) -->
-<g class="node" id="node1">
-<title>('v0',)</title>
-<ellipse cx="18" cy="-80" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="12" y="-75.72">v0</text>
-</g>
-<!-- (&#39;e0&#39;,) -->
-<g class="node" id="node7">
-<title>('e0',)</title>
-<ellipse cx="90" cy="-80" fill="none" rx="0.72" ry="0.72" stroke="none" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="78.03" y="-67.88">e0</text>
-</g>
-<!-- (&#39;v0&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
-<g class="edge" id="edge1">
-<title>('v0',)-&gt;('e0',)</title>
-<path d="M36.66,-80C56.1,-80 85.09,-80 88.64,-80" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;v1&#39;,) -->
-<g class="node" id="node2">
-<title>('v1',)</title>
-<ellipse cx="90" cy="-117" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="84" y="-112.72">v1</text>
-</g>
-<!-- (&#39;v1&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
-<g class="edge" id="edge2">
-<title>('v1',)-&gt;('e0',)</title>
-<path d="M90.54,-98.11C90.53,-92.56 90.38,-87 90.08,-81.45" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;v1&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
-<!-- (&#39;e1&#39;,) -->
-<g class="node" id="node8">
-<title>('e1',)</title>
-<ellipse cx="162" cy="-97" fill="none" rx="0.72" ry="0.72" stroke="none" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="150.03" y="-84.88">e1</text>
-</g>
-<!-- (&#39;v1&#39;,)&#45;&gt;(&#39;e1&#39;,) -->
-<g class="edge" id="edge5">
-<title>('v1',)-&gt;('e1',)</title>
-<path d="M108.3,-112.06C127.74,-106.5 157.05,-98.13 160.64,-97.1" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;v2&#39;,) -->
-<g class="node" id="node3">
-<title>('v2',)</title>
-<ellipse cx="18" cy="-134" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="12" y="-129.72">v2</text>
-</g>
-<!-- (&#39;v3&#39;,) -->
-<g class="node" id="node4">
-<title>('v3',)</title>
-<ellipse cx="234" cy="-97" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="228" y="-92.72">v3</text>
-</g>
-<!-- (&#39;v3&#39;,)&#45;&gt;(&#39;e1&#39;,) -->
-<g class="edge" id="edge4">
-<title>('v3',)-&gt;('e1',)</title>
-<path d="M215.04,-97C195.75,-97 167.34,-97 163.45,-97" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;e2&#39;,) -->
-<g class="node" id="node9">
-<title>('e2',)</title>
-<ellipse cx="234" cy="-60" fill="none" rx="0.72" ry="0.72" stroke="none" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="222.03" y="-47.88">e2</text>
-</g>
-<!-- (&#39;v3&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
-<g class="edge" id="edge6">
-<title>('v3',)-&gt;('e2',)</title>
-<path d="M234.54,-78.11C234.53,-72.56 234.38,-67 234.08,-61.45" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;v3&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
-<!-- (&#39;v4&#39;,) -->
-<g class="node" id="node5">
-<title>('v4',)</title>
-<ellipse cx="90" cy="-43" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="84" y="-38.73">v4</text>
-</g>
-<!-- (&#39;v4&#39;,)&#45;&gt;(&#39;e0&#39;,) -->
-<g class="edge" id="edge3">
-<title>('v4',)-&gt;('e0',)</title>
-<path d="M102.66,-56.88C105.36,-64.28 101.57,-71.69 91.29,-79.1" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;v4&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
-<g class="edge" id="edge7">
-<title>('v4',)-&gt;('e2',)</title>
-<path d="M108.7,-45.12C144.98,-49.46 225.02,-59.04 232.45,-59.93" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;v5&#39;,) -->
-<g class="node" id="node6">
-<title>('v5',)</title>
-<ellipse cx="162" cy="-18" fill="none" rx="18" ry="18" stroke="black" stroke-width="2"></ellipse>
-<text font-family="Times,serif" font-size="12.00" text-anchor="start" x="156" y="-13.72">v5</text>
-</g>
-<!-- (&#39;v5&#39;,)&#45;&gt;(&#39;e2&#39;,) -->
-<g class="edge" id="edge8">
-<title>('v5',)-&gt;('e2',)</title>
-<path d="M178.54,-27.32C197.87,-38.92 228.82,-57.49 232.61,-59.77" fill="none" stroke="black" stroke-dasharray="5,2"></path>
-</g>
-<!-- (&#39;e0&#39;,)&#45;&gt;(&#39;v4&#39;,) -->
-<!-- (&#39;e1&#39;,)&#45;&gt;(&#39;v5&#39;,) -->
-</g>
-</svg>
-</td>
-</tr>
-</table>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=1bf11ee6-dec6-4273-97c2-a93a075aa323">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p><strong>Bigraph.</strong> The bigraph is formed by combining the place graph and the hypergraph in a way that maintains their respective structures while relating them through a shared set of nodes. In a bigraph, nodes are shared between the place graph and the hypergraph, thus capturing both spatial containment and connectivity relationships between entities.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=8c6ba21e-3fac-4105-8a79-7bcdff08bafa">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [8]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">bigraph</span> <span class="o">=</span> <span class="p">{</span>
-    <span class="s1">'v0'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'v1'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">,</span>
-        <span class="s1">'v2'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'v3'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">}},</span>
-    <span class="s1">'v4'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'v5'</span><span class="p">:</span> <span class="s1">'Any'</span><span class="p">},</span>
-    <span class="s1">'e0'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'_type'</span><span class="p">:</span> <span class="s1">'edge'</span><span class="p">,</span>
-        <span class="s1">'wires'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'e0.0'</span><span class="p">:</span> <span class="s1">'v0'</span><span class="p">,</span>
-            <span class="s1">'e0.1'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'v0'</span><span class="p">,</span> <span class="s1">'v1'</span><span class="p">),</span>
-            <span class="s1">'e0.2'</span><span class="p">:</span> <span class="s1">'v4'</span><span class="p">}},</span>
-    <span class="s1">'e1'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'_type'</span><span class="p">:</span> <span class="s1">'edge'</span><span class="p">,</span>
-        <span class="s1">'wires'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'e0.0'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'v0'</span><span class="p">,</span> <span class="s1">'v2'</span><span class="p">,</span> <span class="s1">'v3'</span><span class="p">),</span>
-            <span class="s1">'e0.1'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'v0'</span><span class="p">,</span> <span class="s1">'v1'</span><span class="p">)}},</span>
-    <span class="s1">'e2'</span><span class="p">:</span> <span class="p">{</span>
-        <span class="s1">'_type'</span><span class="p">:</span> <span class="s1">'edge'</span><span class="p">,</span>
-        <span class="s1">'wires'</span><span class="p">:</span> <span class="p">{</span>
-            <span class="s1">'e0.0'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'v0'</span><span class="p">,</span> <span class="s1">'v2'</span><span class="p">,</span> <span class="s1">'v3'</span><span class="p">),</span>
-            <span class="s1">'e0.1'</span><span class="p">:</span> <span class="s1">'v4'</span><span class="p">,</span>
-            <span class="s1">'e0.2'</span><span class="p">:</span> <span class="p">(</span><span class="s1">'v4'</span><span class="p">,</span> <span class="s1">'v5'</span><span class="p">)}}}</span>
-
-<span class="n">node_groups2</span> <span class="o">=</span> <span class="p">[</span> <span class="c1">#manually line up nodes in plotting tool to improve final image</span>
-    <span class="p">[(</span><span class="s1">'v0'</span><span class="p">,</span> <span class="s1">'v1'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'e0'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'v0'</span><span class="p">,</span> <span class="s1">'v2'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'e2'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'v4'</span><span class="p">,</span> <span class="s1">'v5'</span><span class="p">,)],</span> 
-    <span class="p">[(</span><span class="s1">'e1'</span><span class="p">,),</span> <span class="p">(</span><span class="s1">'v0'</span><span class="p">,</span> <span class="s1">'v2'</span><span class="p">,</span> <span class="s1">'v3'</span><span class="p">),]]</span>
-<span class="n">plot_bigraph</span><span class="p">(</span>
-    <span class="n">bigraph</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">node_groups</span><span class="o">=</span><span class="n">node_groups2</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">collapse_processes</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">'bigraph'</span><span class="p">)</span>
+<span class="n">sim</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+<span class="n">sim</span><span class="o">.</span><span class="n">state</span><span class="p">[</span><span class="s2">"mass"</span><span class="p">]</span>                          <span class="c1"># 1000 fg auto-converted to 1.0 pg</span>
 </pre></div>
 </div>
 </div>
@@ -8210,77 +8009,44 @@ bigraph-viz==0.0.30
 </div>
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[8]:</div>
-<div class="jp-RenderedSVG jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="image/svg+xml" tabindex="0">
-<img alt="No description has been provided for this image" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIKICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPgo8IS0tIEdlbmVyYXRlZCBieSBncmFwaHZpeiB2ZXJzaW9uIDguMS4wICgyMDIzMDcwNy4wNzM5KQogLS0+CjwhLS0gVGl0bGU6IGJpZ3JhcGggUGFnZXM6IDEgLS0+Cjxzdmcgd2lkdGg9IjE4N3B0IiBoZWlnaHQ9IjE4M3B0Igogdmlld0JveD0iMC4wMCAwLjAwIDE5Mi4wMCAxODguMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPgo8ZyBpZD0iZ3JhcGgwIiBjbGFzcz0iZ3JhcGgiIHRyYW5zZm9ybT0ic2NhbGUoMC45NzIyMjIgMC45NzIyMjIpIHJvdGF0ZSgwKSB0cmFuc2xhdGUoNCAxODQpIj4KPHRpdGxlPmJpZ3JhcGg8L3RpdGxlPgo8cG9seWdvbiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSJub25lIiBwb2ludHM9Ii00LDQgLTQsLTE4NCAxODgsLTE4NCAxODgsNCAtNCw0Ii8+CjwhLS0gKCYjMzk7djAmIzM5OywpIC0tPgo8ZyBpZD0ibm9kZTEiIGNsYXNzPSJub2RlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssKTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjU1IiBjeT0iLTE2MiIgcng9IjE4IiByeT0iMTgiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSI0OSIgeT0iLTE1Ny43MiIgZm9udC1mYW1pbHk9IlRpbWVzLHNlcmlmIiBmb250LXNpemU9IjEyLjAwIj52MDwvdGV4dD4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djEmIzM5OykgLS0+CjxnIGlkPSJub2RlMiIgY2xhc3M9Im5vZGUiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MSYjMzk7KTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjE4IiBjeT0iLTkwIiByeD0iMTgiIHJ5PSIxOCIvPgo8dGV4dCB0ZXh0LWFuY2hvcj0ic3RhcnQiIHg9IjEyIiB5PSItODUuNzIiIGZvbnQtZmFtaWx5PSJUaW1lcyxzZXJpZiIgZm9udC1zaXplPSIxMi4wMCI+djE8L3RleHQ+CjwvZz4KPCEtLSAoJiMzOTt2MCYjMzk7LCkmIzQ1OyZndDsoJiMzOTt2MCYjMzk7LCAmIzM5O3YxJiMzOTspIC0tPgo8ZyBpZD0iZWRnZTIiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssKSYjNDU7Jmd0OygmIzM5O3YwJiMzOTssICYjMzk7djEmIzM5Oyk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik00Ni42LC0xNDUuMTJDNDAuNTUsLTEzMy42NiAzMi40MSwtMTE4LjI2IDI2LjM2LC0xMDYuODIiLz4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OykgLS0+CjxnIGlkPSJub2RlMyIgY2xhc3M9Im5vZGUiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7KTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjkyIiBjeT0iLTkwIiByeD0iMTgiIHJ5PSIxOCIvPgo8dGV4dCB0ZXh0LWFuY2hvcj0ic3RhcnQiIHg9Ijg2IiB5PSItODUuNzIiIGZvbnQtZmFtaWx5PSJUaW1lcyxzZXJpZiIgZm9udC1zaXplPSIxMi4wMCI+djI8L3RleHQ+CjwvZz4KPCEtLSAoJiMzOTt2MCYjMzk7LCkmIzQ1OyZndDsoJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTspIC0tPgo8ZyBpZD0iZWRnZTMiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssKSYjNDU7Jmd0OygmIzM5O3YwJiMzOTssICYjMzk7djImIzM5Oyk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik02My40LC0xNDUuMTJDNjkuNDUsLTEzMy42NiA3Ny41OSwtMTE4LjI2IDgzLjY0LC0xMDYuODIiLz4KPC9nPgo8IS0tICgmIzM5O2UwJiMzOTssKSAtLT4KPGcgaWQ9Im5vZGU3IiBjbGFzcz0ibm9kZSI+Cjx0aXRsZT4oJiMzOTtlMCYjMzk7LCk8L3RpdGxlPgo8ZWxsaXBzZSBmaWxsPSJub25lIiBzdHJva2U9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgY3g9IjU1IiBjeT0iLTkwIiByeD0iMC43MiIgcnk9IjAuNzIiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSI0My4wMyIgeT0iLTkzLjU3IiBmb250LWZhbWlseT0iVGltZXMsc2VyaWYiIGZvbnQtc2l6ZT0iMTIuMDAiPmUwPC90ZXh0Pgo8L2c+CjwhLS0gKCYjMzk7djAmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7ZTAmIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTUiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssKSYjNDU7Jmd0OygmIzM5O2UwJiMzOTssKTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS1kYXNoYXJyYXk9IjUsMiIgZD0iTTU1LC0xNDMuMzRDNTUsLTEyMy45IDU1LC05NC45MSA1NSwtOTEuMzYiLz4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djEmIzM5OykmIzQ1OyZndDsoJiMzOTtlMCYjMzk7LCkgLS0+CjxnIGlkPSJlZGdlNiIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MSYjMzk7KSYjNDU7Jmd0OygmIzM5O2UwJiMzOTssKTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS1kYXNoYXJyYXk9IjUsMiIgZD0iTTMxLjg4LC03Ny4zNEMzOS4yOCwtNzQuNjQgNDYuNjksLTc4LjQzIDU0LjEsLTg4LjcxIi8+CjwvZz4KPCEtLSAoJiMzOTt2MCYjMzk7LCAmIzM5O3YxJiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTAmIzM5OywpIC0tPgo8IS0tICgmIzM5O2UxJiMzOTssKSAtLT4KPGcgaWQ9Im5vZGU4IiBjbGFzcz0ibm9kZSI+Cjx0aXRsZT4oJiMzOTtlMSYjMzk7LCk8L3RpdGxlPgo8ZWxsaXBzZSBmaWxsPSJub25lIiBzdHJva2U9Im5vbmUiIHN0cm9rZS13aWR0aD0iMiIgY3g9IjU1IiBjeT0iLTE4IiByeD0iMC43MiIgcnk9IjAuNzIiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSI0My4wMyIgeT0iLTIxLjU3IiBmb250LWZhbWlseT0iVGltZXMsc2VyaWYiIGZvbnQtc2l6ZT0iMTIuMDAiPmUxPC90ZXh0Pgo8L2c+CjwhLS0gKCYjMzk7djAmIzM5OywgJiMzOTt2MSYjMzk7KSYjNDU7Jmd0OygmIzM5O2UxJiMzOTssKSAtLT4KPGcgaWQ9ImVkZ2U5IiBjbGFzcz0iZWRnZSI+Cjx0aXRsZT4oJiMzOTt2MCYjMzk7LCAmIzM5O3YxJiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTEmIzM5OywpPC90aXRsZT4KPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLWRhc2hhcnJheT0iNSwyIiBkPSJNMjYuNCwtNzMuMTJDMzYuNjMsLTUzLjc1IDUyLjgyLC0yMy4xMyA1NC44LC0xOS4zOCIvPgo8L2c+CjwhLS0gKCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7LCAmIzM5O3YzJiMzOTspIC0tPgo8ZyBpZD0ibm9kZTQiIGNsYXNzPSJub2RlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OywgJiMzOTt2MyYjMzk7KTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjkyIiBjeT0iLTE4IiByeD0iMTgiIHJ5PSIxOCIvPgo8dGV4dCB0ZXh0LWFuY2hvcj0ic3RhcnQiIHg9Ijg2IiB5PSItMTMuNzIiIGZvbnQtZmFtaWx5PSJUaW1lcyxzZXJpZiIgZm9udC1zaXplPSIxMi4wMCI+djM8L3RleHQ+CjwvZz4KPCEtLSAoJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTspJiM0NTsmZ3Q7KCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7LCAmIzM5O3YzJiMzOTspIC0tPgo8ZyBpZD0iZWRnZTEiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OykmIzQ1OyZndDsoJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTssICYjMzk7djMmIzM5Oyk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik05MiwtNzEuMzRDOTIsLTYwLjgxIDkyLC00Ny40NyA5MiwtMzYuOSIvPgo8L2c+CjwhLS0gKCYjMzk7ZTImIzM5OywpIC0tPgo8ZyBpZD0ibm9kZTkiIGNsYXNzPSJub2RlIj4KPHRpdGxlPigmIzM5O2UyJiMzOTssKTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0ibm9uZSIgc3Ryb2tlLXdpZHRoPSIyIiBjeD0iMTI5IiBjeT0iLTkwIiByeD0iMC43MiIgcnk9IjAuNzIiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSIxMTcuMDMiIHk9Ii05My41NyIgZm9udC1mYW1pbHk9IlRpbWVzLHNlcmlmIiBmb250LXNpemU9IjEyLjAwIj5lMjwvdGV4dD4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OykmIzQ1OyZndDsoJiMzOTtlMiYjMzk7LCkgLS0+CjwhLS0gKCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7LCAmIzM5O3YzJiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTEmIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTgiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OywgJiMzOTt2MyYjMzk7KSYjNDU7Jmd0OygmIzM5O2UxJiMzOTssKTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS1kYXNoYXJyYXk9IjUsMiIgZD0iTTczLjExLC0xNy40NkM2Ny41NiwtMTcuNDcgNjIsLTE3LjYyIDU2LjQ1LC0xNy45MiIvPgo8L2c+CjwhLS0gKCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7LCAmIzM5O3YzJiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTImIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTEwIiBjbGFzcz0iZWRnZSI+Cjx0aXRsZT4oJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTssICYjMzk7djMmIzM5OykmIzQ1OyZndDsoJiMzOTtlMiYjMzk7LCk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2UtZGFzaGFycmF5PSI1LDIiIGQ9Ik0xMDAuNDIsLTM0LjkyQzExMC41OSwtNTQuMTggMTI2LjYzLC04NC41MiAxMjguNzYsLTg4LjU1Ii8+CjwvZz4KPCEtLSAoJiMzOTt2NCYjMzk7LCkgLS0+CjxnIGlkPSJub2RlNSIgY2xhc3M9Im5vZGUiPgo8dGl0bGU+KCYjMzk7djQmIzM5OywpPC90aXRsZT4KPGVsbGlwc2UgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBjeD0iMTI5IiBjeT0iLTE2MiIgcng9IjE4IiByeT0iMTgiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSIxMjMiIHk9Ii0xNTcuNzIiIGZvbnQtZmFtaWx5PSJUaW1lcyxzZXJpZiIgZm9udC1zaXplPSIxMi4wMCI+djQ8L3RleHQ+CjwvZz4KPCEtLSAoJiMzOTt2NCYjMzk7LCAmIzM5O3Y1JiMzOTspIC0tPgo8ZyBpZD0ibm9kZTYiIGNsYXNzPSJub2RlIj4KPHRpdGxlPigmIzM5O3Y0JiMzOTssICYjMzk7djUmIzM5Oyk8L3RpdGxlPgo8ZWxsaXBzZSBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIGN4PSIxNjYiIGN5PSItOTAiIHJ4PSIxOCIgcnk9IjE4Ii8+Cjx0ZXh0IHRleHQtYW5jaG9yPSJzdGFydCIgeD0iMTYwIiB5PSItODUuNzIiIGZvbnQtZmFtaWx5PSJUaW1lcyxzZXJpZiIgZm9udC1zaXplPSIxMi4wMCI+djU8L3RleHQ+CjwvZz4KPCEtLSAoJiMzOTt2NCYjMzk7LCkmIzQ1OyZndDsoJiMzOTt2NCYjMzk7LCAmIzM5O3Y1JiMzOTspIC0tPgo8ZyBpZD0iZWRnZTQiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3Y0JiMzOTssKSYjNDU7Jmd0OygmIzM5O3Y0JiMzOTssICYjMzk7djUmIzM5Oyk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik0xMzcuNCwtMTQ1LjEyQzE0My40NSwtMTMzLjY2IDE1MS41OSwtMTE4LjI2IDE1Ny42NCwtMTA2LjgyIi8+CjwvZz4KPCEtLSAoJiMzOTt2NCYjMzk7LCkmIzQ1OyZndDsoJiMzOTtlMCYjMzk7LCkgLS0+CjxnIGlkPSJlZGdlNyIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djQmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7ZTAmIzM5OywpPC90aXRsZT4KPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLWRhc2hhcnJheT0iNSwyIiBkPSJNMTEzLjc0LC0xNTAuNzFDOTkuOSwtMTQwLjg2IDc5LjUsLTEyNS4wMiA2NSwtMTA4IDYwLjAzLC0xMDIuMTYgNTYuMSwtOTMuNTIgNTUuMiwtOTEuNDYiLz4KPC9nPgo8IS0tICgmIzM5O3Y0JiMzOTssKSYjNDU7Jmd0OygmIzM5O2UyJiMzOTssKSAtLT4KPGcgaWQ9ImVkZ2UxMSIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djQmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7ZTImIzM5OywpPC90aXRsZT4KPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLWRhc2hhcnJheT0iNSwyIiBkPSJNMTI5LC0xNDMuMzRDMTI5LC0xMjMuOSAxMjksLTk0LjkxIDEyOSwtOTEuMzYiLz4KPC9nPgo8IS0tICgmIzM5O3Y0JiMzOTssICYjMzk7djUmIzM5OykmIzQ1OyZndDsoJiMzOTtlMiYjMzk7LCkgLS0+CjxnIGlkPSJlZGdlMTIiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3Y0JiMzOTssICYjMzk7djUmIzM5OykmIzQ1OyZndDsoJiMzOTtlMiYjMzk7LCk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2UtZGFzaGFycmF5PSI1LDIiIGQ9Ik0xNDcuMTEsLTg5LjQ2QzE0MS41NiwtODkuNDcgMTM2LC04OS42MiAxMzAuNDUsLTg5LjkyIi8+CjwvZz4KPCEtLSAoJiMzOTtlMCYjMzk7LCkmIzQ1OyZndDsoJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTspIC0tPgo8IS0tICgmIzM5O2UxJiMzOTssKSYjNDU7Jmd0OygmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OywgJiMzOTt2MyYjMzk7KSAtLT4KPCEtLSAoJiMzOTtlMiYjMzk7LCkmIzQ1OyZndDsoJiMzOTt2NCYjMzk7LCAmIzM5O3Y1JiMzOTspIC0tPgo8L2c+Cjwvc3ZnPgo="/>
+<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[5]:</div>
+<div class="jp-RenderedText jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="text/plain" tabindex="0">
+<pre>1.0</pre>
 </div>
 </div>
 </div>
 </div>
 </div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=0ed4812b-9a11-4264-9c4d-97f2953c9cf5">
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=f3c287b6">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p><strong>Process Bigraph.</strong> Process Bigraph Schema reimagines the bigraph with what we will call a <em>Process Bigraph</em>. Variables are contained in Stores (circles), which can be embedded in the place graph hierarchy, represented by the dark edges. Instead of hyperedges, this framework employs Processes (the rectangles) which have ports (solid black dots) connect via wires (dashed edges) to  variables within the Stores. Processes are functions that read and write to variables through their ports. They can be used to rewrite the bigraph by adding new structure and new processes.</p>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=9ab263dc-a73d-4f68-920c-6b0e90c12b54">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [9]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span><span class="n">plot_bigraph</span><span class="p">(</span><span class="n">bigraph</span><span class="p">,</span> <span class="o">**</span><span class="n">plot_settings</span><span class="p">,</span> <span class="n">port_labels</span><span class="o">=</span><span class="kc">False</span><span class="p">,</span> <span class="n">filename</span><span class="o">=</span><span class="s1">'process_bigraph'</span><span class="p">)</span>
+<h2 id="Escape-hatch:-the-class-based-API">Escape hatch: the class-based API<a class="anchor-link" href="#Escape-hatch:-the-class-based-API">¶</a></h2><p><code>@process</code> targets the ~70% of processes that are a pure typed function of
+<code>(state, interval)</code> + config. Stateful or <code>initialize</code>-heavy processes still use
+the class-based <code>Process</code>, which stays fully supported — the two forms
+interoperate freely in the same <code>Composite</code>:</p>
+<div class="highlight"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">process_bigraph</span><span class="w"> </span><span class="kn">import</span> <span class="n">Process</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">Decay</span><span class="p">(</span><span class="n">Process</span><span class="p">):</span>
+    <span class="n">config_schema</span> <span class="o">=</span> <span class="p">{</span><span class="s2">"rate"</span><span class="p">:</span> <span class="p">{</span><span class="s2">"_type"</span><span class="p">:</span> <span class="s2">"float"</span><span class="p">,</span> <span class="s2">"_default"</span><span class="p">:</span> <span class="mf">0.1</span><span class="p">}}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">initialize</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">config</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">rate</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">config</span><span class="p">[</span><span class="s2">"rate"</span><span class="p">])</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">inputs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>  <span class="k">return</span> <span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="s2">"float"</span><span class="p">}</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">outputs</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span> <span class="k">return</span> <span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="s2">"float"</span><span class="p">}</span>
+
+    <span class="k">def</span><span class="w"> </span><span class="nf">update</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">state</span><span class="p">,</span> <span class="n">interval</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"S"</span><span class="p">:</span> <span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">rate</span> <span class="o">*</span> <span class="n">state</span><span class="p">[</span><span class="s2">"S"</span><span class="p">]</span> <span class="o">*</span> <span class="n">interval</span><span class="p">}</span>
 </pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child jp-OutputArea-executeResult">
-<div class="jp-OutputPrompt jp-OutputArea-prompt">Out[9]:</div>
-<div class="jp-RenderedSVG jp-OutputArea-output jp-OutputArea-executeResult" data-mime-type="image/svg+xml" tabindex="0">
-<img alt="No description has been provided for this image" src="data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjwhRE9DVFlQRSBzdmcgUFVCTElDICItLy9XM0MvL0RURCBTVkcgMS4xLy9FTiIKICJodHRwOi8vd3d3LnczLm9yZy9HcmFwaGljcy9TVkcvMS4xL0RURC9zdmcxMS5kdGQiPgo8IS0tIEdlbmVyYXRlZCBieSBncmFwaHZpeiB2ZXJzaW9uIDguMS4wICgyMDIzMDcwNy4wNzM5KQogLS0+CjwhLS0gVGl0bGU6IGJpZ3JhcGggUGFnZXM6IDEgLS0+Cjxzdmcgd2lkdGg9IjIzNXB0IiBoZWlnaHQ9IjI1M3B0Igogdmlld0JveD0iMC4wMCAwLjAwIDI0Mi4wMCAyNjAuMDAiIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIgeG1sbnM6eGxpbms9Imh0dHA6Ly93d3cudzMub3JnLzE5OTkveGxpbmsiPgo8ZyBpZD0iZ3JhcGgwIiBjbGFzcz0iZ3JhcGgiIHRyYW5zZm9ybT0ic2NhbGUoMC45NzIyMjIgMC45NzIyMjIpIHJvdGF0ZSgwKSB0cmFuc2xhdGUoNCAyNTYpIj4KPHRpdGxlPmJpZ3JhcGg8L3RpdGxlPgo8cG9seWdvbiBmaWxsPSJ3aGl0ZSIgc3Ryb2tlPSJub25lIiBwb2ludHM9Ii00LDQgLTQsLTI1NiAyMzgsLTI1NiAyMzgsNCAtNCw0Ii8+CjwhLS0gKCYjMzk7djAmIzM5OywpIC0tPgo8ZyBpZD0ibm9kZTEiIGNsYXNzPSJub2RlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssKTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjY0IiBjeT0iLTIzNCIgcng9IjE4IiByeT0iMTgiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSI1OCIgeT0iLTIyOS43MiIgZm9udC1mYW1pbHk9IlRpbWVzLHNlcmlmIiBmb250LXNpemU9IjEyLjAwIj52MDwvdGV4dD4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djEmIzM5OykgLS0+CjxnIGlkPSJub2RlMiIgY2xhc3M9Im5vZGUiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MSYjMzk7KTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjE4IiBjeT0iLTE2MiIgcng9IjE4IiByeT0iMTgiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSIxMiIgeT0iLTE1Ny43MiIgZm9udC1mYW1pbHk9IlRpbWVzLHNlcmlmIiBmb250LXNpemU9IjEyLjAwIj52MTwvdGV4dD4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssKSYjNDU7Jmd0OygmIzM5O3YwJiMzOTssICYjMzk7djEmIzM5OykgLS0+CjxnIGlkPSJlZGdlMiIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7djAmIzM5OywgJiMzOTt2MSYjMzk7KTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgZD0iTTU0LjI0LC0yMTguMTVDNDYuNDQsLTIwNi4yOCAzNS41NCwtMTg5LjcgMjcuNzQsLTE3Ny44MiIvPgo8L2c+CjwhLS0gKCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7KSAtLT4KPGcgaWQ9Im5vZGUzIiBjbGFzcz0ibm9kZSI+Cjx0aXRsZT4oJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTspPC90aXRsZT4KPGVsbGlwc2UgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBjeD0iMTE0IiBjeT0iLTE2MiIgcng9IjE4IiByeT0iMTgiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSIxMDgiIHk9Ii0xNTcuNzIiIGZvbnQtZmFtaWx5PSJUaW1lcyxzZXJpZiIgZm9udC1zaXplPSIxMi4wMCI+djI8L3RleHQ+CjwvZz4KPCEtLSAoJiMzOTt2MCYjMzk7LCkmIzQ1OyZndDsoJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTspIC0tPgo8ZyBpZD0iZWRnZTMiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssKSYjNDU7Jmd0OygmIzM5O3YwJiMzOTssICYjMzk7djImIzM5Oyk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIGQ9Ik03NC4zNiwtMjE4LjVDODIuOTQsLTIwNi40OCA5NS4wOCwtMTg5LjQ5IDEwMy42NSwtMTc3LjQ5Ii8+CjwvZz4KPCEtLSAoJiMzOTtlMCYjMzk7LCkgLS0+CjxnIGlkPSJub2RlNyIgY2xhc3M9Im5vZGUiPgo8dGl0bGU+KCYjMzk7ZTAmIzM5OywpPC90aXRsZT4KPHBvbHlnb24gZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBwb2ludHM9Ijg4LC0xMDggMzQsLTEwOCAzNCwtNzIgODgsLTcyIDg4LC0xMDgiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSI1NS4zOCIgeT0iLTg1LjcyIiBmb250LWZhbWlseT0iVGltZXMsc2VyaWYiIGZvbnQtc2l6ZT0iMTIuMDAiPmUwPC90ZXh0Pgo8L2c+CjwhLS0gKCYjMzk7djAmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7ZTAmIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTUiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssKSYjNDU7Jmd0OygmIzM5O2UwJiMzOTssKTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS1kYXNoYXJyYXk9IjUsMiIgZD0iTTYzLjYyLC0yMTUuMDJDNjMuMDcsLTE4OS4yIDYyLjA3LC0xNDEuNjQgNjEuNDgsLTExMy41MiIvPgo8ZWxsaXBzZSBmaWxsPSJibGFjayIgc3Ryb2tlPSJibGFjayIgY3g9IjYxLjQzIiBjeT0iLTExMS4zNCIgcng9IjIiIHJ5PSIyIi8+CjwvZz4KPCEtLSAoJiMzOTt2MCYjMzk7LCAmIzM5O3YxJiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTAmIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTYiIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssICYjMzk7djEmIzM5OykmIzQ1OyZndDsoJiMzOTtlMCYjMzk7LCk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2UtZGFzaGFycmF5PSI1LDIiIGQ9Ik0yNy4zMywtMTQ1LjgxQzMzLjIyLC0xMzYuMjMgNDAuOTIsLTEyMy42OSA0Ny40NywtMTEzLjAyIi8+CjxlbGxpcHNlIGZpbGw9ImJsYWNrIiBzdHJva2U9ImJsYWNrIiBjeD0iNDguNzEiIGN5PSItMTExLjAxIiByeD0iMiIgcnk9IjIiLz4KPC9nPgo8IS0tICgmIzM5O2UxJiMzOTssKSAtLT4KPGcgaWQ9Im5vZGU4IiBjbGFzcz0ibm9kZSI+Cjx0aXRsZT4oJiMzOTtlMSYjMzk7LCk8L3RpdGxlPgo8cG9seWdvbiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIHBvaW50cz0iNzksLTM2IDI1LC0zNiAyNSwwIDc5LDAgNzksLTM2Ii8+Cjx0ZXh0IHRleHQtYW5jaG9yPSJzdGFydCIgeD0iNDYuMzgiIHk9Ii0xMy43MiIgZm9udC1mYW1pbHk9IlRpbWVzLHNlcmlmIiBmb250LXNpemU9IjEyLjAwIj5lMTwvdGV4dD4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djEmIzM5OykmIzQ1OyZndDsoJiMzOTtlMSYjMzk7LCkgLS0+CjxnIGlkPSJlZGdlOSIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MSYjMzk7KSYjNDU7Jmd0OygmIzM5O2UxJiMzOTssKTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS1kYXNoYXJyYXk9IjUsMiIgZD0iTTE3LjM4LC0xNDMuMjVDMTcuMjEsLTEyNS4wMyAxOC4yMywtOTYuMDIgMjUsLTcyIDI3Ljk5LC02MS40MSAzMy4xNiwtNTAuNDUgMzguMTksLTQxLjI3Ii8+CjxlbGxpcHNlIGZpbGw9ImJsYWNrIiBzdHJva2U9ImJsYWNrIiBjeD0iMzkuNDIiIGN5PSItMzkuMDkiIHJ4PSIyIiByeT0iMiIvPgo8L2c+CjwhLS0gKCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7LCAmIzM5O3YzJiMzOTspIC0tPgo8ZyBpZD0ibm9kZTQiIGNsYXNzPSJub2RlIj4KPHRpdGxlPigmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OywgJiMzOTt2MyYjMzk7KTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjEyNCIgY3k9Ii05MCIgcng9IjE4IiByeT0iMTgiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSIxMTgiIHk9Ii04NS43MiIgZm9udC1mYW1pbHk9IlRpbWVzLHNlcmlmIiBmb250LXNpemU9IjEyLjAwIj52MzwvdGV4dD4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OykmIzQ1OyZndDsoJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTssICYjMzk7djMmIzM5OykgLS0+CjxnIGlkPSJlZGdlMSIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7KSYjNDU7Jmd0OygmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OywgJiMzOTt2MyYjMzk7KTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgZD0iTTExNi41MiwtMTQzLjM0QzExOC4wNSwtMTMyLjY0IDExOS45OSwtMTE5LjA2IDEyMS41MSwtMTA4LjQyIi8+CjwvZz4KPCEtLSAoJiMzOTt2MCYjMzk7LCAmIzM5O3YyJiMzOTssICYjMzk7djMmIzM5OykmIzQ1OyZndDsoJiMzOTtlMSYjMzk7LCkgLS0+CjxnIGlkPSJlZGdlOCIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7LCAmIzM5O3YzJiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTEmIzM5OywpPC90aXRsZT4KPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLWRhc2hhcnJheT0iNSwyIiBkPSJNMTExLjEzLC03Ni40OUMxMDAuNzgsLTY2LjQyIDg2LC01Mi4wNSA3My44MSwtNDAuMiIvPgo8ZWxsaXBzZSBmaWxsPSJibGFjayIgc3Ryb2tlPSJibGFjayIgY3g9IjcyLjIzIiBjeT0iLTM4LjY3IiByeD0iMiIgcnk9IjIiLz4KPC9nPgo8IS0tICgmIzM5O2UyJiMzOTssKSAtLT4KPGcgaWQ9Im5vZGU5IiBjbGFzcz0ibm9kZSI+Cjx0aXRsZT4oJiMzOTtlMiYjMzk7LCk8L3RpdGxlPgo8cG9seWdvbiBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2Utd2lkdGg9IjIiIHBvaW50cz0iMTk3LC0zNiAxNDMsLTM2IDE0MywwIDE5NywwIDE5NywtMzYiLz4KPHRleHQgdGV4dC1hbmNob3I9InN0YXJ0IiB4PSIxNjQuMzgiIHk9Ii0xMy43MiIgZm9udC1mYW1pbHk9IlRpbWVzLHNlcmlmIiBmb250LXNpemU9IjEyLjAwIj5lMjwvdGV4dD4KPC9nPgo8IS0tICgmIzM5O3YwJiMzOTssICYjMzk7djImIzM5OywgJiMzOTt2MyYjMzk7KSYjNDU7Jmd0OygmIzM5O2UyJiMzOTssKSAtLT4KPGcgaWQ9ImVkZ2UxMCIgY2xhc3M9ImVkZ2UiPgo8dGl0bGU+KCYjMzk7djAmIzM5OywgJiMzOTt2MiYjMzk7LCAmIzM5O3YzJiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTImIzM5OywpPC90aXRsZT4KPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLWRhc2hhcnJheT0iNSwyIiBkPSJNMTMzLjc2LC03NC4xNUMxNDAuMTQsLTY0LjQzIDE0OC42LC01MS41NiAxNTUuNzQsLTQwLjciLz4KPGVsbGlwc2UgZmlsbD0iYmxhY2siIHN0cm9rZT0iYmxhY2siIGN4PSIxNTYuOTMiIGN5PSItMzguODkiIHJ4PSIyIiByeT0iMiIvPgo8L2c+CjwhLS0gKCYjMzk7djQmIzM5OywpIC0tPgo8ZyBpZD0ibm9kZTUiIGNsYXNzPSJub2RlIj4KPHRpdGxlPigmIzM5O3Y0JiMzOTssKTwvdGl0bGU+CjxlbGxpcHNlIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS13aWR0aD0iMiIgY3g9IjE3MCIgY3k9Ii0xNjIiIHJ4PSIxOCIgcnk9IjE4Ii8+Cjx0ZXh0IHRleHQtYW5jaG9yPSJzdGFydCIgeD0iMTY0IiB5PSItMTU3LjcyIiBmb250LWZhbWlseT0iVGltZXMsc2VyaWYiIGZvbnQtc2l6ZT0iMTIuMDAiPnY0PC90ZXh0Pgo8L2c+CjwhLS0gKCYjMzk7djQmIzM5OywgJiMzOTt2NSYjMzk7KSAtLT4KPGcgaWQ9Im5vZGU2IiBjbGFzcz0ibm9kZSI+Cjx0aXRsZT4oJiMzOTt2NCYjMzk7LCAmIzM5O3Y1JiMzOTspPC90aXRsZT4KPGVsbGlwc2UgZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBjeD0iMjE2IiBjeT0iLTkwIiByeD0iMTgiIHJ5PSIxOCIvPgo8dGV4dCB0ZXh0LWFuY2hvcj0ic3RhcnQiIHg9IjIxMCIgeT0iLTg1LjcyIiBmb250LWZhbWlseT0iVGltZXMsc2VyaWYiIGZvbnQtc2l6ZT0iMTIuMDAiPnY1PC90ZXh0Pgo8L2c+CjwhLS0gKCYjMzk7djQmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7djQmIzM5OywgJiMzOTt2NSYjMzk7KSAtLT4KPGcgaWQ9ImVkZ2U0IiBjbGFzcz0iZWRnZSI+Cjx0aXRsZT4oJiMzOTt2NCYjMzk7LCkmIzQ1OyZndDsoJiMzOTt2NCYjMzk7LCAmIzM5O3Y1JiMzOTspPC90aXRsZT4KPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLXdpZHRoPSIyIiBkPSJNMTc5Ljc2LC0xNDYuMTVDMTg3LjU2LC0xMzQuMjggMTk4LjQ2LC0xMTcuNyAyMDYuMjYsLTEwNS44MiIvPgo8L2c+CjwhLS0gKCYjMzk7djQmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7ZTAmIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTciIGNsYXNzPSJlZGdlIj4KPHRpdGxlPigmIzM5O3Y0JiMzOTssKSYjNDU7Jmd0OygmIzM5O2UwJiMzOTssKTwvdGl0bGU+CjxwYXRoIGZpbGw9Im5vbmUiIHN0cm9rZT0iYmxhY2siIHN0cm9rZS1kYXNoYXJyYXk9IjUsMiIgZD0iTTE1NC44NCwtMTUxLjI3QzEzOC44MywtMTQwLjk4IDExMy4xMSwtMTI0LjQ3IDkyLjY1LC0xMTEuMzIiLz4KPGVsbGlwc2UgZmlsbD0iYmxhY2siIHN0cm9rZT0iYmxhY2siIGN4PSI5MC43MyIgY3k9Ii0xMTAuMDkiIHJ4PSIyIiByeT0iMiIvPgo8L2c+CjwhLS0gKCYjMzk7djQmIzM5OywpJiM0NTsmZ3Q7KCYjMzk7ZTImIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTExIiBjbGFzcz0iZWRnZSI+Cjx0aXRsZT4oJiMzOTt2NCYjMzk7LCkmIzQ1OyZndDsoJiMzOTtlMiYjMzk7LCk8L3RpdGxlPgo8cGF0aCBmaWxsPSJub25lIiBzdHJva2U9ImJsYWNrIiBzdHJva2UtZGFzaGFycmF5PSI1LDIiIGQ9Ik0xNzAsLTE0My4wMkMxNzAsLTExNy4yIDE3MCwtNjkuNjQgMTcwLC00MS41MiIvPgo8ZWxsaXBzZSBmaWxsPSJibGFjayIgc3Ryb2tlPSJibGFjayIgY3g9IjE3MCIgY3k9Ii0zOS4zNCIgcng9IjIiIHJ5PSIyIi8+CjwvZz4KPCEtLSAoJiMzOTt2NCYjMzk7LCAmIzM5O3Y1JiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTImIzM5OywpIC0tPgo8ZyBpZD0iZWRnZTEyIiBjbGFzcz0iZWRnZSI+Cjx0aXRsZT4oJiMzOTt2NCYjMzk7LCAmIzM5O3Y1JiMzOTspJiM0NTsmZ3Q7KCYjMzk7ZTImIzM5OywpPC90aXRsZT4KPHBhdGggZmlsbD0ibm9uZSIgc3Ryb2tlPSJibGFjayIgc3Ryb2tlLWRhc2hhcnJheT0iNSwyIiBkPSJNMjA2LjI0LC03NC4xNUMxOTkuODYsLTY0LjQzIDE5MS40LC01MS41NiAxODQuMjYsLTQwLjciLz4KPGVsbGlwc2UgZmlsbD0iYmxhY2siIHN0cm9rZT0iYmxhY2siIGN4PSIxODMuMDciIGN5PSItMzguODkiIHJ4PSIyIiByeT0iMiIvPgo8L2c+CjwvZz4KPC9zdmc+Cg=="/>
-</div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=bb74d7a5-9dc3-4853-be6c-afbf71f15963">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
-</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<p>See more examples of process bigraphs:</p>
-<ul>
-<li><a href="https://vivarium-collective.github.io/bigraph-viz/notebooks/basics.html">Process Bigraph Basics</a></li>
-<li><a href="https://github.com/vivarium-collective/bigraph-viz/blob/main/doc/_static/ecoli.png?raw=true">E. coli Whole Cell Model Wiring Diagram</a></li>
-<li><a href="https://nbviewer.org/github/vivarium-collective/tumor-tcell/blob/master/jupyter_notebooks/diagrams.ipynb">Tumor/T cell multiscale simulation</a></li>
+<h2 id="Next-steps">Next steps<a class="anchor-link" href="#Next-steps">¶</a></h2><ul>
+<li><strong>Tutorial 1 — Process-Bigraph Basics</strong>: Steps, workflows, emitters.</li>
+<li><strong>Tutorial 2 — Wrapping an ODE Solver</strong>: expose an existing scientific API.</li>
+<li><strong>Tutorial 4 — Composing a Biological Model</strong>: the central dogma from four
+small processes over shared molecular state.</li>
 </ul>
-</div>
-</div>
-</div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=4dcb8c1a-dee6-493b-acc2-2b0d0f147fc9">
-<div class="jp-Cell-inputWrapper" tabindex="0">
-<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
-</div>
-<div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div>
-<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
-<div class="cm-editor cm-s-jupyter">
-<div class="highlight hl-ipython3"><pre><span></span> 
-</pre></div>
-</div>
 </div>
 </div>
 </div>
