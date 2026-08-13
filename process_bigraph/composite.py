@@ -15,6 +15,7 @@ Used as part of the Vivarium 2.0 ecosystem for modular biological modeling.
 import os
 import json
 import math
+import inspect
 import time as _time
 import contextvars
 import numpy as np
@@ -825,7 +826,7 @@ class Process(Open):
         expensive ones in place.
 
         Used by ``ActorPool`` + ``Session`` (see
-        ``doc/distributed_lifecycles.md``) to claim a pool actor for
+        ``docs/distributed_lifecycles.md``) to claim a pool actor for
         one Composite's sim and rebind its per-sim parameters
         (e.g. cell_keys for a sharded dFBA actor) without paying the
         cobra-Model load again. Without this hook, every
@@ -909,6 +910,207 @@ def as_process(inputs, outputs, name=None, aliases=None):
         FunctionProcess.__pb_wrapped__ = func
 
         return FunctionProcess
+    return decorator
+
+
+# ---------------------------------------------------------------------------
+# @process / @step — config_schema inferred from typed keyword-only defaults
+# ---------------------------------------------------------------------------
+#
+# The dominant real-world process re-declares every config value's type twice:
+# once in a ``config_schema`` dict, again as a ``float()``/``int()`` recast in
+# ``initialize``. ``@process`` collapses both: the config values ARE the
+# decorated function's keyword-only arguments, and their bigraph
+# ``config_schema`` is inferred from those parameters' type hints and defaults.
+#
+#   @process(inputs={"S": "float"}, outputs={"S": "float"})
+#   def decay(state, interval, *, rate: float = 0.1):
+#       return {"S": -rate * state["S"] * interval}
+#
+# The class-based ``Process``/``Step`` API stays the escape hatch for
+# ``initialize``-heavy or stateful edges; ``@process`` targets the ~70% of
+# processes that are a pure typed function of ``(state, interval)`` + config.
+
+# Python scalar annotation -> bigraph type-name. These four cover the common
+# config shapes; anything else raises a named error pointing at the class-based
+# escape hatch (see ``_infer_config_schema``).
+_PY_TYPE_TO_BIGRAPH = {
+    float: 'float',
+    int: 'integer',
+    bool: 'boolean',
+    str: 'string',
+}
+
+
+def _infer_config_schema(func):
+    """Infer a ``config_schema`` from a function's keyword-only parameters.
+
+    Each keyword-only parameter becomes one config field. Its type annotation
+    maps to a bigraph type (``float``->'float', ``int``->'integer',
+    ``bool``->'boolean', ``str``->'string'); a *string* annotation is taken
+    verbatim as a bigraph type name (the escape hatch for ``"map[float]"``
+    etc.); with no annotation the scalar default's Python type is used. The
+    parameter default, when present, becomes the field's ``_default``.
+
+    Returns ``(config_schema, config_keys)`` where ``config_keys`` is the
+    ordered list of keyword-only parameter names to forward from ``self.config``
+    into the wrapped function.
+
+    Raises ``TypeError`` naming the offending parameter when a type cannot be
+    inferred — the deliberate signal to reach for the class-based API.
+    """
+    import typing
+
+    sig = inspect.signature(func)
+    # get_type_hints resolves ``rate: float`` to the type ``float``; it raises
+    # for un-resolvable string annotations (e.g. a bigraph type name like
+    # "map[float]"), so fall back to the raw annotations in that case.
+    try:
+        hints = typing.get_type_hints(func)
+    except Exception:
+        hints = dict(getattr(func, '__annotations__', {}) or {})
+
+    schema = {}
+    config_keys = []
+    for pname, param in sig.parameters.items():
+        if param.kind is not inspect.Parameter.KEYWORD_ONLY:
+            continue
+        config_keys.append(pname)
+
+        annotation = hints.get(pname, param.annotation)
+        has_default = param.default is not inspect.Parameter.empty
+
+        if annotation in _PY_TYPE_TO_BIGRAPH:
+            declared = _PY_TYPE_TO_BIGRAPH[annotation]
+        elif isinstance(annotation, str):
+            # verbatim bigraph type name (e.g. "map[float]"); map the scalar
+            # aliases so "float" still lands on the canonical name.
+            declared = annotation
+        elif has_default and type(param.default) in _PY_TYPE_TO_BIGRAPH:
+            declared = _PY_TYPE_TO_BIGRAPH[type(param.default)]
+        else:
+            raise TypeError(
+                f"@process/@step cannot infer a config type for keyword-only "
+                f"parameter '{pname}' (annotation: {annotation!r}). "
+                f"Annotate it with float/int/bool/str, give it a scalar "
+                f"default, or use the class-based Process/Step API with an "
+                f"explicit config_schema.")
+
+        field = {'_type': declared}
+        if has_default:
+            field['_default'] = param.default
+        schema[pname] = field
+
+    return schema, config_keys
+
+
+def _coerce_config(config, config_schema, config_keys, core):
+    """Coerce each declared config value to its inferred type, reusing the
+    repo's own :func:`composite_spec._coerce` (which *refuses* a lossy or
+    meaningless override rather than silently mangling it). Returns the kwargs
+    dict forwarded into the wrapped function.
+    """
+    from process_bigraph.composite_spec import _coerce
+    return {
+        key: _coerce(config[key], config_schema[key]['_type'], name=key, core=core)
+        for key in config_keys
+    }
+
+
+def process(inputs, outputs, name=None, aliases=None):
+    """Decorator: turn a typed ``def f(state, interval, *, **config)`` into a
+    :class:`Process` subclass whose ``config_schema`` is inferred from the
+    keyword-only parameters.
+
+    The config values ARE the function's keyword arguments — no ``config_schema``
+    dict, no ``initialize`` recast::
+
+        @process(inputs={"S": "float"}, outputs={"S": "float"})
+        def decay(state, interval, *, rate: float = 0.1):
+            return {"S": -rate * state["S"] * interval}
+
+    ``inputs``/``outputs`` are the port schemas (same as ``Process.inputs``/
+    ``outputs``). Register the returned class like any process
+    (``core.register_process(name, DecoratedClass)``); it also carries the
+    ``__pb_kind__``/``__pb_aliases__`` discovery metadata the auto-registrar
+    reads. The class-based ``Process`` remains the escape hatch for stateful
+    edges.
+    """
+    def decorator(func):
+        config_schema, config_keys = _infer_config_schema(func)
+
+        proc_name = name or func.__name__
+        proc_aliases = list(aliases or [])
+        if proc_name not in proc_aliases:
+            proc_aliases.insert(0, proc_name)
+
+        class FunctionProcess(Process):
+            def inputs(self):
+                return inputs
+
+            def outputs(self):
+                return outputs
+
+            def initialize(self, config):
+                self._config_kwargs = _coerce_config(
+                    config, config_schema, config_keys, self.core)
+
+            def update(self, state, interval):
+                return func(state, interval, **self._config_kwargs)
+
+        FunctionProcess.config_schema = config_schema
+        FunctionProcess.__name__ = func.__name__
+        FunctionProcess.__qualname__ = func.__name__
+        FunctionProcess.__doc__ = func.__doc__
+        FunctionProcess.__module__ = func.__module__
+
+        FunctionProcess.__pb_kind__ = "process"
+        FunctionProcess.__pb_aliases__ = proc_aliases
+        FunctionProcess.__pb_wrapped__ = func
+
+        return FunctionProcess
+    return decorator
+
+
+def step(inputs, outputs, name=None, aliases=None):
+    """Decorator: turn a typed ``def f(state, *, **config)`` into a :class:`Step`
+    subclass whose ``config_schema`` is inferred from the keyword-only
+    parameters. The :class:`Step` analogue of :func:`process` (a step's
+    ``update`` takes only ``state``; there is no ``interval``).
+    """
+    def decorator(func):
+        config_schema, config_keys = _infer_config_schema(func)
+
+        step_name = name or func.__name__
+        step_aliases = list(aliases or [])
+        if step_name not in step_aliases:
+            step_aliases.insert(0, step_name)
+
+        class FunctionStep(Step):
+            def inputs(self):
+                return inputs
+
+            def outputs(self):
+                return outputs
+
+            def initialize(self, config):
+                self._config_kwargs = _coerce_config(
+                    config, config_schema, config_keys, self.core)
+
+            def update(self, state):
+                return func(state, **self._config_kwargs)
+
+        FunctionStep.config_schema = config_schema
+        FunctionStep.__name__ = func.__name__
+        FunctionStep.__qualname__ = func.__name__
+        FunctionStep.__doc__ = func.__doc__
+        FunctionStep.__module__ = func.__module__
+
+        FunctionStep.__pb_kind__ = "step"
+        FunctionStep.__pb_aliases__ = step_aliases
+        FunctionStep.__pb_wrapped__ = func
+
+        return FunctionStep
     return decorator
 
 
