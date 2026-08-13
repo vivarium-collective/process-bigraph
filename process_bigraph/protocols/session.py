@@ -9,7 +9,7 @@ scientific models, JIT caches, GPU contexts, persistent solver bases)
 is preserved across sessions so subsequent Composites pay no
 cold-start cost.
 
-See ``doc/distributed_lifecycles.md`` for the layering this fits into:
+See ``docs/distributed_lifecycles.md`` for the layering this fits into:
 
     cluster ⊃ pool ⊃ session ⊃ tick
 

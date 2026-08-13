@@ -17,7 +17,7 @@ built with different formalisms—including ODEs, FBA, agent-based models, spati
 and machine-learning components—into a single coherent simulation.
 
 <p align="center">
-  <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/doc/_static/composition_framework.png?raw=true"
+  <img src="https://github.com/vivarium-collective/process-bigraph/blob/main/docs/_static/composition_framework.png?raw=true"
        width="800"
        alt="Process Bigraph composition framework">
 </p>
@@ -76,6 +76,11 @@ rendered to HTML and published automatically on GitHub Pages.
 
 ### Learning Path (Featured Tutorials)
 
+- **Tutorial 0 — A Process in 12 Lines (quickstart)**  
+  *The new front door: define a process with the `@process` decorator, wire and
+  run it end-to-end on one screen, and watch a `_units`-bearing port auto-convert*  
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_0_quickstart.html
+
 - **Tutorial 1 — Process-Bigraph Basics**  
   *Processes, Steps, ports, Composites, workflows, and emitters*  
   https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_1.html
@@ -100,20 +105,20 @@ More tutorials are added continuously and appear automatically in the index.
   what the objects are (documents, sites, handles), how they compose, the
   higher-order DAG, templates and gating, content-addressed artifacts, the
   `git:` protocol, and the laws everything else follows from.*
-  [doc/architecture.md](doc/architecture.md)
+  [docs/architecture.md](docs/architecture.md)
 
 ### Topic Guides
 
 - **Emitters — Recording Simulation Results**
   *Built-in emitters (RAM, console, JSON, SQLite), how to wire them, retrieve results, store runs long-term, and write your own.*
-  [doc/emitters.md](doc/emitters.md)
+  [docs/emitters.md](docs/emitters.md)
 
 - **Tick lifecycle** — *how a step network is ordered and advanced, and how a
   protocol runtime batches remote dispatch.*
-  [doc/tick_lifecycle.md](doc/tick_lifecycle.md)
+  [docs/tick_lifecycle.md](docs/tick_lifecycle.md)
 
 - **Distributed lifecycles** — *running parts of a composite off-process.*
-  [doc/distributed_lifecycles.md](doc/distributed_lifecycles.md)
+  [docs/distributed_lifecycles.md](docs/distributed_lifecycles.md)
 
 ---
 

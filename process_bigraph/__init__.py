@@ -18,6 +18,7 @@ except ImportError:                   # pragma: no cover — py<3.8
 
 from process_bigraph.composite import (  # noqa: F401
     Process, Step, Composite, TimingSummary, interval_time_precision, wire_step_layers,
+    process, step, as_process, as_step,
 )
 from process_bigraph.composite_spec import (  # noqa: F401
     CompositeSpec, discover_specs, register_spec_generator, regenerate_default_state,
