@@ -282,3 +282,44 @@ def test_emitter_guard_allows_when_opted_in(tmp_path):
     task = CompositeTask(config, core=_core())
     update = task.invoke({'start': {'0': 1.0}}).get()
     assert '0' in update['results']
+
+
+# ── code_version: explicit '' (non-git workspace) must be honored verbatim ──
+
+def test_explicit_empty_code_version_is_honored_not_defaulted(tmp_path):
+    """``resolve_study`` passes ``commit=''`` straight through for a non-git
+    workspace. ``CompositeTask`` must compute the SAME address in that case
+    — an ``or``-fallback would falsy-coerce the explicit ``''`` into the
+    package-version default and silently diverge from ``resolve_study``'s
+    address for the same study.
+    """
+    from process_bigraph.artifacts import artifact_id
+    from process_bigraph.workflow.tasks import _default_code_version, _resolve_entry
+
+    config = {
+        'generator': 'ramp_toy_task', 'import': _IMPORT, 'overrides': {'rate': 3.0},
+        'artifact_params': {}, 'scatter_param': 'start', 'steps': 2.0,
+        'provision': [], 'allow_in_memory_emitter': True,
+        'artifact_root': str(tmp_path / '.pbg' / 'artifacts'),
+        'code_version': '',
+    }
+    task = CompositeTask(config, core=_core())
+    assert task._code_version() == ''
+
+    entry = _resolve_entry('ramp_toy_task', _IMPORT)
+    address = task._address(entry, 1.0, [])
+
+    expected = artifact_id(
+        composite_id='ramp_toy_task',
+        config={'rate': 3.0, 'start': 1.0, 'steps': 2.0, 'provision': []},
+        input_ids=[],
+        commit='')
+    assert address == expected
+
+    # And it must differ from what the (wrong) default-coerced address would be.
+    defaulted = artifact_id(
+        composite_id='ramp_toy_task',
+        config={'rate': 3.0, 'start': 1.0, 'steps': 2.0, 'provision': []},
+        input_ids=[],
+        commit=_default_code_version(_IMPORT))
+    assert address != defaulted

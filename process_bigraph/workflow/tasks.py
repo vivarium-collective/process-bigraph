@@ -237,8 +237,20 @@ class CompositeTask(Step):
         return os.path.join(self._workdir_root(), node, 'provenance.json')
 
     def _code_version(self) -> str:
-        return self.config.get('code_version') or _default_code_version(
-            self.config.get('import') or [])
+        """The ``commit`` component of the cache key (F1).
+
+        ``None`` (not provided at all) falls back to the framework/package
+        default. An explicit value — including ``''`` — is honored verbatim:
+        a non-git workspace's ``resolve_study`` passes ``commit=''`` straight
+        through to ``artifact_id``, and an ``or``-fallback here would
+        falsy-coerce that explicit ``''`` into the default, silently
+        diverging from the address ``resolve_study`` computes for the same
+        study.
+        """
+        cv = self.config.get('code_version')
+        if cv is None:
+            cv = _default_code_version(self.config.get('import') or [])
+        return cv
 
     # ── cache key (F1) ──────────────────────────────────────────────
 
