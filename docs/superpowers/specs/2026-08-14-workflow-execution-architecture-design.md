@@ -117,13 +117,58 @@ is the one public entry the workbench calls.
 - **Interop:** `to_cwl()` exports to external visual editors (Rabix/Galaxy) and round-trips back as a
   composite (a CWL→composite importer is a later nicety).
 
-### Workbench / study integration
-- A **Study/Investigation compiles to a composite**: baseline+variants → generators+overrides;
-  seeds → the `CompositeTask` scatter axis; analyses → downstream `Collect`+analysis Steps; a prerequisite
-  like ParCa → an upstream `ParcaBundleStep`. This is a pure function `study_to_composite(study) -> Composite`.
-- The workbench gains a **run-backend selector** (`local` | `ray` | `nextflow`) alongside its existing
-  run engines; "Run study" calls `run_workflow(study_to_composite(study), backend=…)` and tracks the
-  `RunResult` provenance. AI-free preserved — `run_workflow` is pure Python.
+## Studies and Investigations ARE workflow composites (the organizing principle)
+
+The unit everything standardizes on is the **Study**, and the hierarchy is **recursive**: a Study is a
+workflow composite; an Investigation is a workflow composite whose *nodes are Study-composites*. Both run
+through the one `run_workflow`. This is not a new abstraction bolted on — the workbench already sketched
+it and left it unwired:
+
+- **`study_interface(spec)`** (`lib/study_spec.py`) already returns `{composite, config, inputs:
+  [{from: <producer_study_slug>}], outputs: [<name>]}` — i.e. a study already declares *a generator
+  (`composite`), its overrides (`config`), its producer-study edges (`inputs[].from`), and its output*.
+- **`resolve_study`** (dead: `lib/artifacts/pipeline.py:91`, only its test imports it) already recurses
+  into producer studies first (the prerequisite DAG walk) and content-addresses each study's output via
+  `artifact_id(composite_id=iface.composite, config=iface.config, input_ids=sorted(producer ids),
+  commit=workspace_commit)` with pull-or-compute over an `ArtifactStore` — **the identical content
+  address our `CompositeTask` cache uses (F1).**
+
+So the standardization is: **replace `resolve_study`'s opaque `compute_fn` with `run_workflow` over a
+composite compiled from the spec.** The recursion becomes composite wiring; the pull-or-compute becomes
+the task model's fingerprint cache; the study DAG and the per-seed sim cache become one content-addressed
+mechanism (which is why the W1 hash lock-step fix is load-bearing).
+
+### The recursive model
+```
+Process ─▶ Composite ─▶ Study-composite ─▶ Investigation-composite      (all run_workflow-able)
+```
+- **Study = workflow composite.** `study_to_composite(study_spec) -> Composite`:
+  `iface.composite` + `iface.config` → the baseline/variant build; seeds/replicates → a `CompositeTask`
+  scatter axis; a prerequisite producer (e.g. ParCa) → an upstream `ParcaBundleStep`/producer node wired
+  from another study's output; evaluations (acceptance bands / report-card tests) → downstream analysis
+  Steps; the verdict/report → the composite's `bridge` output. The **Phase-3 ParCa→per-seed baseline DAG
+  is exactly a study's simulation core**, which is why the engine milestone is study-shaped without
+  needing the workbench.
+- **Investigation = workflow composite of Study-composites.** `investigation_to_composite(inv) ->
+  Composite`: each member study is a node (a nested study-composite — composite-as-node); the edges are
+  the `inputs[].from` prerequisites (producer study's output artifact → consumer study's input);
+  investigation-level aggregation/verdict is the outer bridge. `resolve_study`'s recursion is the
+  reference implementation of this wiring.
+
+### Responsibility split (keeps pbg general)
+- **process-bigraph (the engine):** `CompositeTask`, nested composites (composite-as-node), `run_workflow`,
+  the fingerprint cache. Knows *nothing* about studies/investigations — it runs recursive composites.
+  Under `LocalRunner` (tick + composite-as-node, which the native engine already supports) an
+  Investigation→Study→sim composite runs in-process today; on `NextflowBackend` the nested-composite case
+  needs the parked composite-node staging/topo fix (so Nextflow-of-investigations is Phase 6).
+- **vivarium-workbench (the vocabulary):** `study_to_composite` / `investigation_to_composite` (finishing
+  `resolve_study` on the pbg substrate); a **run-backend selector** (`local` | `nextflow` | `sms-api`);
+  "Run study"/"Run investigation" call `run_workflow(<compiled composite>, backend=…)` and land
+  `RunResult.provenance` in `runs_meta`. The detached-process shell (PID/heartbeat/durability/AI-free) is
+  kept; only the run *body* becomes `run_workflow`. Studies and investigations become the same verb.
+
+**AI-free preserved:** `run_workflow` is pure Python in pbg; the workbench already depends on
+process-bigraph the right direction. Nothing AI-facing enters the run path.
 
 ## What is preserved vs new
 - **Preserved:** everything on `nextflow-deploy` (the Nextflow renderer + `deploy`) becomes

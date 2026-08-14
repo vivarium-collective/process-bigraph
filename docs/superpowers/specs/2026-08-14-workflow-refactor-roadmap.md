@@ -50,7 +50,7 @@ markers, byte-identity source tests), and dead `lib/artifacts/pipeline.py:91` is
 | W2 | Replace `composite_subprocess` codegen (~450 L, `:187-472`) with `run_composite --build` docs; the build doc becomes the sidecar + manifest + cache key | high | Phase 5 (first) |
 | W3 | Move study runs onto the detached model (`run_runner` + `spawn_detached` + heartbeat/reconcile); kills 30-min-synchronous-HTTP + stuck-`running` + no-PID | high | Phase 5 |
 | W4 | Unify rerun on stored-build-doc replay; delete `cli_runs.rerun`'s self-described lossy variant | high | with W2 |
-| W5 | Build `study_to_composite` as the completion of dead `artifacts/pipeline.resolve_study`; then delete/reduce `pipeline.py` | high | Phase 5 |
+| W5 | **Standardize on Study/Investigation as workflow composites (the organizing goal).** Build `study_to_composite(spec)` (from `study_interface`: `composite`+`config`→build, seeds→`CompositeTask` scatter, `inputs[].from`→producer edges, evaluations→analysis Steps, verdict→bridge) AND `investigation_to_composite(inv)` (member studies as composite-as-node, wired by `inputs[].from` prerequisites). This finishes dead `resolve_study` on the pbg substrate: its recursion → composite wiring, its `compute_fn` → `run_workflow`, its `artifact_id` pull-or-compute → the task-model fingerprint cache. Then delete/reduce `pipeline.py`. | high (the unification) | Phase 5 |
 | W6 | Sweep/seeds variants (`composite_subprocess.py:101` `v2ecoli-workflow` shellout) → `CompositeTask` scatter; gains fingerprint-cached per-seed skip | med-high | Phase 5, after T8 |
 | W7 | `SmsApiBackend` behind `WorkflowBackend`; delete legacy `remote_run_jobs.py` after parity | med | Phase 5/6 |
 | W8 | Hygiene (anytime): dedupe `_ws_add_to_sys_path` ×3; extract migrate-block helper ×3; `run_study_variant` call `_run_post_run_flush` (kills 50 inlined dup lines); populate `runs_meta.emitter` on generator path; drop dead `detach=` params | med | anytime |
@@ -70,6 +70,13 @@ async/submit backend APIs; entry-point provisioning discovery; any backend-owned
 ## Phasing of the deferred work
 - **Phase 4 (pbg):** `deploy` → `NextflowBackend`; R6 promote `_topological_order`; finish renderer
   `per_match` scatter; forward `--provision` in rendered `run_step` (S4); cross-backend equivalence test.
-- **Phase 5 (workbench):** W2 → W3 → W4 → W5 → W6 → W7 (W2 first: independent of `study_to_composite`,
-  retires the riskiest engine while behavior pins are fresh).
+- **Phase 5 (workbench) — the Study/Investigation-as-workflow-composite unification.** The organizing
+  goal: a Study is a workflow composite, an Investigation is a workflow composite whose nodes are
+  Study-composites, both run via `run_workflow` (governing spec §"Studies and Investigations ARE workflow
+  composites"). Sequence: W2 (retire codegen → build docs) → W3 (detached study runs) → W4 (rerun unify)
+  → **W5 (`study_to_composite` + `investigation_to_composite`, completing `resolve_study`)** → W6
+  (sweep/seeds → `CompositeTask` scatter) → W7 (`SmsApiBackend`). W2 first: independent of the compilers,
+  retires the riskiest engine while behavior pins are fresh. A minimal Phase-5 milestone: compile a
+  1-study investigation → `run_workflow(backend='local')` → its report card renders from the composite's
+  bridge, with the study's sim cache and the investigation DAG sharing one content address.
 - **Anytime:** R5, W8, W9.

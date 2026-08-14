@@ -4,6 +4,8 @@
 
 **Goal:** Make a process-bigraph composite the authoritative workflow DAG, runnable through a pluggable **`WorkflowBackend`**. Milestone: `run_workflow(parca_sims_composite, backend='local')` runs a `ParCa(fixture) → per-seed E.coli baseline` DAG **locally, pure-Python, with content-hash caching** (second run cache-hits, a changed `steps` misses) — no Nextflow.
 
+**Standardization:** the unit is the **Study-as-workflow-composite**, with an Investigation a workflow composite of Study-composites (governing spec §"Studies and Investigations ARE workflow composites"). This plan builds the general engine those compile to; the Phase-3 `ParCa → per-seed baseline` DAG **is a study's simulation core**. The workbench `study_to_composite`/`investigation_to_composite` compilers (completing dead `resolve_study`) are Phase 5.
+
 **Architecture:** "Rebuild, don't rehydrate" task model (build recipe = `generator + overrides + sim_data ArtifactRef + code_version`), backend-agnostic. The composite (bigraph) is the source of truth; `LocalRunner` **ticks the composite** — the native engine already topo-schedules ready Steps at `run(0.0)` and parallelizes layers via `parallel_steps`; `CompositeTask` self-scatters its seed axis. No backend-owned scheduler (that is what NextflowBackend is for, Phase 4).
 
 **Tech Stack:** Python 3.12, process-bigraph, vivarium-workbench (Task 0 only), v2ecoli, pytest. Nextflow NOT required for this plan.
