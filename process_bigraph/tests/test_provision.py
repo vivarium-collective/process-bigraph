@@ -10,6 +10,13 @@ def mark_core(core):
     return core
 
 
+def swap_core(core):
+    """Provider that returns a NEW core object to prove return-honoring."""
+    new = allocate_core()
+    new._swapped = True
+    return new
+
+
 def test_string_provider():
     c = provision_core(allocate_core(), ['process_bigraph.tests.test_provision:mark_core'])
     assert getattr(c, '_prov', False)
@@ -23,6 +30,6 @@ def test_noop_empty():
 def test_ray_shim_delegates():
     from process_bigraph.protocols.ray import _apply_type_providers
     c = allocate_core()
-    _MARK['n'] = 0
-    _apply_type_providers(c, [('process_bigraph.tests.test_provision', 'mark_core', (), {})])
-    assert getattr(c, '_prov', False)  # ray path now honors the provider (and its return)
+    result = _apply_type_providers(c, [('process_bigraph.tests.test_provision', 'swap_core', (), {})])
+    assert getattr(result, '_swapped', False) is True  # provider's return was honored
+    assert result is not c  # result is a different object
