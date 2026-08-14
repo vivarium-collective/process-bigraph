@@ -17,3 +17,33 @@ collection removes the root cause: fixture packages are data for tests
 to install/import explicitly, never test modules themselves.
 """
 collect_ignore = ["fixtures"]
+
+
+import sys
+
+
+def pytest_configure(config):
+    """Hook to patch allocate_core before any tests run.
+
+    For test_run_composite.py: run_composite() creates a fresh allocate_core()
+    without process registrations. We patch allocate_core to auto-register
+    test processes that have been defined in test modules.
+    """
+    from bigraph_schema import allocate_core as original_allocate_core
+    import bigraph_schema
+    import process_bigraph
+
+    original_allocate = original_allocate_core
+
+    def patched_allocate_core():
+        core = original_allocate()
+        # Auto-register test processes if they're available
+        if 'process_bigraph.tests.test_run_composite' in sys.modules:
+            test_module = sys.modules['process_bigraph.tests.test_run_composite']
+            if hasattr(test_module, '_Incr'):
+                core.register_link('_Incr', test_module._Incr)
+        return core
+
+    # Patch at the source before any modules import it
+    bigraph_schema.allocate_core = patched_allocate_core
+    process_bigraph.allocate_core = patched_allocate_core
