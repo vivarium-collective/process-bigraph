@@ -411,7 +411,15 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
         composite: an initialized ``process_bigraph.Composite``.
         options: optional dict; recognized keys:
             ``workflow_name`` (default ``'main'``) — entry workflow name.
+                ``deploy()`` passes ``''`` (an unnamed entry workflow),
+                because ``main`` is reserved in Nextflow.
             ``header`` (default DSL2 declaration) — leading text.
+            ``python`` (default ``'python'``) — interpreter used in emitted
+                task scripts; ``deploy()`` pins this to ``sys.executable``.
+            ``composite_steps`` (default ``1000``) — steps to advance a
+                whole-Composite node (experimental path).
+            ``composite_documents`` (default ``{}``) — ``{step_name:
+                document_path}`` for whole-Composite nodes (experimental path).
 
     Returns:
         The rendered workflow document, ready to save as ``.nf``.
