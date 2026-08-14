@@ -153,24 +153,29 @@ def _apply_type_providers(core, providers: list) -> None:
     are lazy so the provider's module doesn't have to be installed
     where the protocol module loads. Legacy 2-tuple form
     ``(module, attr)`` is also accepted for back-compat."""
-    import importlib
+    # Lazy import to avoid circular dependency
+    from process_bigraph.workflow.provision import provision_core as prov_core
+    from process_bigraph.workflow.provision import _parse
+
+    # Convert legacy 2-tuple to 4-tuple format for provision_core
+    parsed_providers = []
     for entry in providers:
         if len(entry) == 2:
+            # Legacy form: (module, attr) -> (module, attr, (), {})
             module_name, attr_name = entry
-            args, kwargs = (), {}
+            parsed_providers.append((module_name, attr_name, (), {}))
         else:
-            module_name, attr_name, args, kwargs = entry
-        try:
-            mod = importlib.import_module(module_name)
-            fn = getattr(mod, attr_name)
-            fn(core, *args, **kwargs)
-        except Exception as e:
-            import sys
-            sys.stderr.write(
-                f'[ray-protocol] type provider {module_name}.{attr_name} '
-                f'failed: {type(e).__name__}: {e}\n')
-            sys.stderr.flush()
-            raise
+            # Already 4-tuple or 3-tuple
+            parsed_providers.append(entry)
+
+    try:
+        prov_core(core, parsed_providers)
+    except Exception as e:
+        import sys
+        sys.stderr.write(
+            f'[ray-protocol] type provider failed: {type(e).__name__}: {e}\n')
+        sys.stderr.flush()
+        raise
 
 
 def _make_state_writeable(config: dict) -> None:

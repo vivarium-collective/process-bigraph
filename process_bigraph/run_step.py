@@ -126,6 +126,7 @@ def run_step(
     state: Optional[Dict[str, Any]] = None,
     out_paths: Optional[Dict[str, str]] = None,
     update_json_path: Optional[str] = None,
+    provision: Optional[list] = None,
 ) -> Dict[str, Any]:
     """Instantiate the Step, run ``update(state)``, write outputs.
 
@@ -133,7 +134,10 @@ def run_step(
     path in ``out_paths`` and (if given) ``update_json_path``.
     """
     from bigraph_schema import allocate_core
+    from process_bigraph.workflow.provision import provision_core
+
     core = allocate_core()
+    core = provision_core(core, provision)
 
     cls = _resolve_class(fq_class)
     instance = cls(config or {}, core=core)
@@ -170,6 +174,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument('--out', dest='out_pairs', action='append', default=[],
                    metavar='PORT=PATH',
                    help='Per-port output destination; repeatable')
+    p.add_argument('--provision', dest='provision_specs', action='append', default=[],
+                   metavar='PROVIDER_SPEC',
+                   help='Provider spec for core provisioning (module:attr or JSON tuple); repeatable')
     p.add_argument('--update-json', dest='update_json_path',
                    help='Write the full update dict to this path')
     return p
@@ -184,6 +191,7 @@ def main(argv: Optional[list] = None) -> int:
         state.update(_load_json_file(args.state_path))
     state.update(_parse_in_args(args.in_pairs))
     out_paths = _parse_out_args(args.out_pairs)
+    provision = args.provision_specs if args.provision_specs else None
 
     run_step(
         fq_class=args.fq_class,
@@ -191,6 +199,7 @@ def main(argv: Optional[list] = None) -> int:
         state=state,
         out_paths=out_paths,
         update_json_path=args.update_json_path,
+        provision=provision,
     )
     return 0
 
