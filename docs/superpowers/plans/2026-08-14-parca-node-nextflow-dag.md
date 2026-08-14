@@ -1,5 +1,9 @@
 # ParCa-node Nextflow DAG — Implementation Plan (Phases 1–3)
 
+> **SUPERSEDED by `2026-08-14-workflow-execution-phases-1-3.md`.** The task model (Phases 1–2) is
+> unchanged, but the milestone is now a pure-Python `LocalRunner` behind a `WorkflowBackend` interface;
+> Nextflow is a later backend, not the Phase-3 deliverable. Do not execute this file — use the successor.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Run, on Nextflow, a `ParCa → per-seed E.coli baseline` DAG: an upstream Step produces a cached `sim_data` artifact, and downstream sim tasks fan out over seeds, each rebuilding the baseline from that artifact and running to completion. Milestone: `v2ecoli-nextflow --seeds 2 --parca-mode fixture --launch` runs it locally end-to-end with `-resume`.
