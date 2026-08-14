@@ -292,11 +292,16 @@ def _process_block(step_name: str,
                 port, step_inputs_schema.get(port, {}), class_overrides)
             lines.append(f'    {decl}')
 
+    uses_run_step = not hasattr(instance, 'nextflow_script')
+
     if outputs_wires:
         lines.append('    output:')
         for port in outputs_wires:
-            decl = _port_to_nextflow_decl(
-                port, step_outputs_schema.get(port, {}), class_overrides)
+            if port not in class_overrides and uses_run_step:
+                decl = f'path "{port}.json"'
+            else:
+                decl = _port_to_nextflow_decl(
+                    port, step_outputs_schema.get(port, {}), class_overrides)
             lines.append(f'    {decl}')
 
     lines.append('    script:')

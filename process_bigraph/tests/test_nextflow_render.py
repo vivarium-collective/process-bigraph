@@ -55,3 +55,33 @@ def test_render_composite_emits_composite_node():
     nf = render_composite(outer)
     assert 'process sim {' in nf
     assert 'run_composite' in nf
+
+
+from process_bigraph.nextflow import _process_block
+from process_bigraph.composite import Step
+
+
+class _OutStep(Step):
+    """A plain Step with a scalar output port and no nextflow_script/port_decls."""
+    def inputs(self):
+        return {'seed': 'integer'}
+
+    def outputs(self):
+        return {'value': 'integer'}
+
+    def update(self, state):
+        return {'value': int(state.get('seed', 0)) + 1}
+
+
+def test_plain_step_output_decl_matches_run_step_file():
+    from process_bigraph import allocate_core
+    inst = _OutStep({}, core=allocate_core())
+    block = _process_block('outstep', inst,
+                           inputs_wires={'seed': ['seed']},
+                           outputs_wires={'value': ['value']})
+    # run_step writes --out value=value.json, so the nextflow output decl
+    # MUST capture that exact file, not an unbound `val value`.
+    assert 'path "value.json"' in block
+    assert 'val value' not in block
+    # sanity: the script body still writes value.json
+    assert '--out value=value.json' in block
