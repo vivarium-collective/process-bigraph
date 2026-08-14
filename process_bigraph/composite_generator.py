@@ -329,6 +329,57 @@ def emitter_defaults(fn_or_entry: Any) -> list[dict]:
     return list(getattr(entry, "emitters", []) or [])
 
 
+def _emitter_node_from_decl(decl: dict, *, run_id: str | None = None,
+                            out_dir: Any = None, registered=None,
+                            fallback: str = "local:RAMEmitter") -> dict:
+    """Materialise one ``emitters=`` declaration into a process-bigraph step node.
+
+    The declaration is the lightweight ``{address, config?, paths?}`` form; the
+    emit-schema + topology are computed here (they depend on the composite's
+    shape, so they aren't part of the declaration). Each ``paths`` entry (slash-
+    or dot-joined) becomes one ``config.emit`` column wired to that store;
+    ``global_time`` is always emitted so trajectories have a time axis and the
+    Step re-fires every tick. When the declared ``address`` isn't in
+    ``registered`` (the core's link registry), it degrades to ``fallback`` so
+    the composite still builds — the convention's RAMEmitter safety net.
+    """
+    address = decl.get("address") or fallback
+    name = address.split(":", 1)[-1]
+    if registered is not None and name not in registered:
+        address = fallback
+        name = address.split(":", 1)[-1]
+
+    emit_schema: dict = {}
+    inputs: dict = {}
+    for p in decl.get("paths") or []:
+        parts = [seg for seg in str(p).replace(".", "/").split("/") if seg]
+        if not parts:
+            continue
+        key = "_".join(parts)
+        emit_schema[key] = "node"
+        inputs[key] = parts
+    if "global_time" not in inputs:
+        inputs["global_time"] = ["global_time"]
+        emit_schema["global_time"] = "node"
+
+    config = dict(decl.get("config") or {})
+    config["emit"] = emit_schema
+    # Run-specific layering for hive-partitioned parquet sinks: a per-run out_dir
+    # + experiment_id partition. Applied to any *ParquetEmitter (the generic
+    # ParquetEmitter and workspace variants like DataFrameParquetEmitter), which
+    # understand these keys; other sinks keep their declared base config.
+    if name.endswith("ParquetEmitter"):
+        if out_dir is not None:
+            config["out_dir"] = str(out_dir)
+        if run_id is not None:
+            config.setdefault("partitioning_keys", ["experiment_id"])
+            md = dict(config.get("metadata") or {})
+            md.setdefault("experiment_id", run_id)
+            config["metadata"] = md
+
+    return {"_type": "step", "address": address, "config": config, "inputs": inputs}
+
+
 def install_default_emitters(state: dict, source: Any, *, run_id: str | None = None,
                              out_dir: Any = None, core: Any = None,
                              on_unknown_address: str = "raise") -> dict:
