@@ -23,7 +23,7 @@ def provision_ramp(core):
 
 @composite_generator(name='ramp_toy', core_extensions=[provision_ramp])
 def ramp_toy(rate=2.0, start=1.0, cache_dir=''):
-    return {'state': {'level': start,
+    return {'state': {'level': start, 'cache_dir': cache_dir,
         'ramp': {'_type': 'process', 'address': 'local:_Ramp', 'config': {'rate': rate},
                  'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}}}}
 
@@ -51,3 +51,19 @@ def test_build_set_override(tmp_path):
     from process_bigraph.run_composite import run_composite
     run_composite(build_path=str(b), steps=0.0, sets={'start': 41.0}, state_out_path=str(out))
     assert float(json.loads(out.read_text())['state']['level']) == 41.0
+
+
+def test_build_artifact_injects_ref_store(tmp_path):
+    ref_path = tmp_path / 'ref.json'
+    ref_path.write_text(json.dumps(
+        {'kind': 'sim_data', 'store': '/some/dir', 'hash': 'h'}))
+    b = tmp_path / 'b.json'
+    b.write_text(json.dumps(
+        {'build': {'generator': 'ramp_toy', 'import': _IMP, 'overrides': {}, 'provision': []},
+         'artifacts': {'cache_dir': {'kind': 'sim_data', 'map': 'store'}},
+         'run': {'steps': 0}}))
+    out = tmp_path / 'f.json'
+    from process_bigraph.run_composite import run_composite
+    run_composite(build_path=str(b), steps=0.0,
+                  artifacts={'cache_dir': str(ref_path)}, state_out_path=str(out))
+    assert json.loads(out.read_text())['state']['cache_dir'] == '/some/dir'

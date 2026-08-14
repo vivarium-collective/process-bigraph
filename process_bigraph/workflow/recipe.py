@@ -31,7 +31,9 @@ Order of operations (see module docstring / task brief for the rationale):
 5. ``provision_core(core, build.provision + provision)`` SECOND — CLI/caller
    supplied providers supplement (never replace) the generator's foundation.
 6. Merge ``overrides`` with ``sets`` (``sets`` wins — it's the more specific,
-   caller-supplied layer).
+   caller-supplied layer), then with the artifact-derived overrides (each
+   build-doc ``artifacts`` entry with ``map == 'store'`` resolves its
+   ``artifacts[port]`` ref file to ``overrides[port] = ArtifactRef.store``).
 7. ``build_generator(entry, overrides, core)`` to get the document.
 8. Return ``Composite(doc, core), core``.
 """
@@ -39,7 +41,11 @@ from __future__ import annotations
 
 import importlib
 import inspect
+import json
+import logging
 from typing import Any, Dict, Iterable, Optional, Tuple
+
+_log = logging.getLogger(__name__)
 
 
 def _infer_parameters(func) -> Dict[str, dict]:
@@ -104,6 +110,58 @@ def _core_optional(func):
     return _wrapped
 
 
+def _resolve_artifact_overrides(
+    build_doc: Dict[str, Any],
+    artifacts: Optional[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """``{port: ArtifactRef.store}`` for each build-doc artifact entry that
+    was supplied a ``ref_path``.
+
+    Only ``build_doc['artifacts']`` entries with ``map == 'store'`` are
+    consumed — the doc schema reserves other ``map`` values for
+    artifact-consumption shapes not yet implemented. A ``port`` declared in
+    the build doc but absent from ``artifacts`` is left for
+    ``overrides``/``sets`` (or the generator's own default) to supply.
+
+    When the loaded ref carries a ``fingerprint``, it is checked — warned
+    on mismatch, never raised. This is an attestation that the artifact's
+    producer is deterministic given its inputs, not a cache gate: a stale or
+    nondeterministic artifact is still usable, it is just flagged.
+    """
+    from process_bigraph.artifacts import (
+        ArtifactRef, ArtifactResults, check_fingerprint, fingerprint_of,
+    )
+
+    declared = build_doc.get('artifacts', {}) or {}
+    result: Dict[str, Any] = {}
+    for port, spec in declared.items():
+        if (spec or {}).get('map') != 'store':
+            continue
+        ref_path = (artifacts or {}).get(port)
+        if ref_path is None:
+            continue
+        with open(ref_path) as fh:
+            ref = ArtifactRef.coerce(json.load(fh))
+        result[port] = ref.store
+
+        if ref.fingerprint:
+            try:
+                results = ArtifactResults.from_ref(ref)
+                observed = fingerprint_of(results.resolve())
+                status = check_fingerprint(results, observed)
+                if status != 'ok':
+                    _log.warning(
+                        "artifact %r (port %r): fingerprint mismatch "
+                        "(stored=%r observed=%r) — producer may be "
+                        "nondeterministic; proceeding anyway",
+                        ref.hash, port, ref.fingerprint, observed)
+            except Exception as exc:  # best-effort attestation, never fatal
+                _log.warning(
+                    "artifact %r (port %r): could not verify fingerprint "
+                    "(%s) — proceeding anyway", ref.hash, port, exc)
+    return result
+
+
 def build_from_recipe(
     build_doc: Dict[str, Any],
     sets: Optional[Dict[str, Any]] = None,
@@ -116,9 +174,15 @@ def build_from_recipe(
         build_doc: parsed recipe document, see module docstring for schema.
         sets: parameter overrides that take precedence over
             ``build_doc['build']['overrides']`` (e.g. from CLI ``--set``).
-        artifacts: reserved for a later task (artifact-port wiring); accepted
-            here so the CLI can pass it through without callers needing to
-            special-case its absence.
+        artifacts: ``{port: ref_path}`` — for each ``build_doc['artifacts']``
+            entry named ``port`` with ``map == 'store'``, the JSON file at
+            ``ref_path`` is loaded as an :class:`ArtifactRef` and its
+            ``store`` (a path — a file for a trajectory, a directory for a
+            bundle like ``sim_data``) is injected into ``overrides[port]``
+            unchanged, e.g. from CLI ``--artifact PORT=REF.json``. When the
+            ref carries a ``fingerprint``, it is checked (warn-only, never
+            raises) as an attestation that the artifact's producer is
+            deterministic — not a cache gate.
         provision: additional provider specs appended AFTER
             ``build_doc['build']['provision']`` — CLI-supplied providers
             supplement the generator's declared core_extensions/provisioning,
@@ -155,6 +219,7 @@ def build_from_recipe(
 
     overrides = dict(build.get('overrides', {}) or {})
     overrides.update(sets or {})
+    overrides.update(_resolve_artifact_overrides(build_doc, artifacts))
 
     build_target: Any = entry
     declared = dict(entry.parameters or {})
