@@ -80,3 +80,47 @@ def generate_nextflow_config(executor: str = 'local',
     }}
 }}
 """
+
+
+def deploy(composite, *, outdir: str, executor: str = 'local',
+           launch: bool = False, resources=None, params=None,
+           options=None, work_dir=None) -> Dict[str, Optional[str]]:
+    """Write ``main.nf`` + ``nextflow.config`` for a Composite, optionally launch it.
+
+    Renders the Step network via ``render_composite`` (pinning
+    ``sys.executable`` so Nextflow's subprocess tasks use this interpreter)
+    and writes a matching ``nextflow.config`` via ``generate_nextflow_config``.
+    When ``launch=True``, shells out to ``nextflow -C <config> run <main.nf>
+    -profile <executor>`` and raises ``subprocess.CalledProcessError`` on a
+    non-zero exit.
+    """
+    from process_bigraph.nextflow import render_composite
+
+    out = Path(outdir)
+    out.mkdir(parents=True, exist_ok=True)
+
+    render_options = dict(options or {})
+    render_options.setdefault('python', sys.executable)
+
+    main_nf = out / 'main.nf'
+    main_nf.write_text(render_composite(composite, render_options))
+
+    config = out / 'nextflow.config'
+    config.write_text(generate_nextflow_config(
+        executor=executor, resources=resources, params=params))
+
+    returncode: Optional[int] = None
+    if launch:
+        if shutil.which('nextflow') is None:
+            raise RuntimeError('nextflow binary not found on PATH')
+        cmd = ['nextflow', '-C', str(config), 'run', str(main_nf),
+               '-profile', executor]
+        if work_dir is not None:
+            cmd += ['-work-dir', str(work_dir)]
+        proc = subprocess.run(cmd, cwd=str(out))
+        returncode = proc.returncode
+        if returncode != 0:
+            raise subprocess.CalledProcessError(returncode, cmd)
+
+    return {'main_nf': str(main_nf), 'config': str(config),
+            'returncode': returncode}
