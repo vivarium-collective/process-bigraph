@@ -24,6 +24,13 @@ document — see ``workflow.recipe.build_from_recipe``::
         [--out PORT=PATH]... [--state-out PATH]
 
 ``--document`` and ``--build`` are mutually exclusive.
+
+``--state-out`` is best-effort: composites whose state can't fully
+serialize (e.g. a whole-cell model's string-typed ``LabeledArray`` under
+the pinned ``bigraph_schema==1.6.0``) get a marker document
+(``{note, error, composite}``) written to the ``--state-out`` path instead
+of crashing the run. The run's real scientific output is its emitter
+output (e.g. parquet), not this state document.
 """
 
 from __future__ import annotations
@@ -61,6 +68,17 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
                   initial_state: Optional[Dict[str, Any]] = None,
                   out_paths: Optional[Dict[str, str]] = None,
                   state_out_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+    """Run a Composite for ``steps`` and optionally write its outputs.
+
+    ``state_out_path``, if given, is best-effort: if the full
+    ``{schema, state}`` document fails to serialize (e.g. a WCM composite's
+    string-typed ``LabeledArray`` under the pinned ``bigraph_schema==1.6.0``
+    raising ``AttributeError: 'str' object has no attribute 'fields'``), a
+    marker document is written instead and a warning is printed to stderr —
+    the function does NOT raise. ``composite.run(...)`` having already
+    succeeded is what matters for exit status; the real scientific output
+    lives in the emitter output, not this state document.
+    """
     if bool(document_path) == bool(build_path):
         raise ValueError(
             "run_composite: exactly one of document_path or build_path is required")
@@ -106,9 +124,25 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
         _write_json(path, bridge_outputs[port])
 
     if state_out_path is not None:
-        _write_json(state_out_path, {
-            'schema': composite.serialize_schema(),
-            'state': composite.serialize_state()})
+        try:
+            state_document = {
+                'schema': composite.serialize_schema(),
+                'state': composite.serialize_state()}
+        except Exception as e:  # noqa: BLE001 - best-effort by design, see docstring
+            composite_id = None
+            if build_path is not None:
+                composite_id = build_doc.get('composite')
+            print(
+                f"warning: --state-out serialization failed ({e!r}); "
+                f"writing a marker document instead. The run's real output "
+                f"is its emitter output, not this state document.",
+                file=sys.stderr)
+            state_document = {
+                'note': ('state serialization failed; run output is in the '
+                         'emitter, not this document'),
+                'error': repr(e),
+                'composite': composite_id}
+        _write_json(state_out_path, state_document)
 
     return bridge_outputs
 
@@ -182,7 +216,9 @@ def _build_parser() -> argparse.ArgumentParser:
     p.add_argument('--out', dest='out_pairs', action='append', default=[],
                    metavar='PORT=PATH', help='Per bridge-output destination')
     p.add_argument('--state-out', dest='state_out_path',
-                   help='Write the final {schema, state} document here')
+                   help='Write the final {schema, state} document here '
+                        '(best-effort: a marker document is written instead '
+                        'if serialization fails)')
     return p
 
 

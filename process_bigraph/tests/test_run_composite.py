@@ -62,6 +62,34 @@ def test_run_composite_initial_state_overlay(tmp_path):
     assert float(final['state']['level']) == 42.0
 
 
+def test_run_composite_state_out_is_best_effort_on_serialization_failure(tmp_path, monkeypatch):
+    # A WCM composite's string-typed LabeledArray can't serialize under the
+    # pinned bigraph_schema==1.6.0 ('str' object has no attribute 'fields'),
+    # even though composite.run() itself succeeded and the real scientific
+    # output (emitter/parquet) was already written. --state-out must be
+    # best-effort: write a marker document and NOT crash the subprocess.
+    doc_path = tmp_path / 'doc.json'
+    doc_path.write_text(json.dumps(_incr_document()))
+    out_path = tmp_path / 'final.json'
+
+    from process_bigraph.composite import Composite as CompositeClass
+
+    def _boom(self):
+        raise AttributeError("'str' object has no attribute 'fields'")
+
+    monkeypatch.setattr(CompositeClass, 'serialize_state', _boom)
+
+    from process_bigraph.run_composite import run_composite
+    # Must not raise: composite.run() succeeded, so the subprocess exits 0.
+    run_composite(str(doc_path), steps=5.0, state_out_path=str(out_path))
+
+    assert out_path.exists()
+    marker = json.loads(out_path.read_text())
+    assert 'note' in marker
+    assert 'error' in marker
+    assert "'str' object has no attribute 'fields'" in marker['error']
+
+
 def test_run_composite_state_out_roundtrips_as_initial_state(tmp_path):
     # The composite-node renderer chains one task's --state-out into the
     # next task's --initial-state. --state-out writes a FULL {schema, state}
