@@ -170,6 +170,61 @@ Process ─▶ Composite ─▶ Study-composite ─▶ Investigation-composite  
 **AI-free preserved:** `run_workflow` is pure Python in pbg; the workbench already depends on
 process-bigraph the right direction. Nothing AI-facing enters the run path.
 
+### Spec format: YAML for authoring, JSON accepted (a study is a dict)
+A study/investigation is a `dict`; the file is only its serialization. `study_interface(spec)` and the
+compilers are format-blind, so the format is purely a loader concern:
+- **YAML stays the default authoring format** (`study.yaml`/`spec.yaml`, unchanged) — comments, readability.
+- **JSON is accepted**: YAML is a strict superset of JSON so JSON *content* already parses through the
+  existing `yaml.safe_load`; supporting a `study.json`/`spec.json` *filename* is a one-line loader change
+  (pick parser by extension). Everything downstream is identical (same dict → same composite → same
+  content address).
+- **JSON is the machine/interchange layer** anyway — the runner's build documents and API payloads are
+  JSON. Author in YAML, generate/interchange in JSON; both compile to the same composite.
+(Adds `.json` filename support to the Phase-5 workbench scope.)
+
+### The Evaluate stage: results retrieval + pluggable post-sim Steps
+
+After a study's sims run, its **Evaluate** stage is a fan-out of **pluggable vivarium Steps** wired
+deterministically into the same composite (so the step network topo-orders them; no separate post-run
+engine):
+
+```
+sims (CompositeTask) ──▶ [results store: emitter output paths]
+                              │
+        ResultsStep (retrieve): open the emitter output (parquet/DuckDB, xarray-zarr, …)
+                              │   emitter-agnostic; emits a typed ResultsHandle
+                              ▼   (records for light Steps + a lazy conn/sim_data for heavy ones)
+        ┌─────────────────────┼──────────────────────────┐
+   AnalysisStep*        VisualizationStep*           ReportCardStep*        ← pluggable subtypes
+   (analyze → data)     (render → view+data)         (build → verdict)  ← GATING
+        └─────────────────────┴──────────────────────────┘
+                              ▼
+                    verdict ──▶ composite.bridge  (the study's output artifact)
+```
+
+- **`ResultsStep` (retrieval).** One Step reads the emitter output for the study's runs and writes a
+  typed **`ResultsHandle`** to the shared `results` store — *emitter-agnostic* (uses the interchangeable-
+  emitter interface, so it works whether the sim used Parquet/DuckDB, xarray-zarr, etc.). The handle
+  carries record slices for light record-based Steps and a lazy DuckDB `conn` + `sim_data` for heavy
+  vEcoli-`plot()`-style analyses — replacing today's runner-injected live handles with an explicit node.
+- **`AnalysisStep` / `VisualizationStep` / `ReportCardStep` — pluggable subtypes.** Each is a vivarium
+  Step subtype that reads the `ResultsHandle` from state and implements its one function
+  (`analyze`/`render`/`build`), producing its output (analysis `data`, viz `view`+`data`, report-card
+  `verdict`+html). They **auto-register** via the `__init_subclass__` idiom into their registries
+  (`ANALYSIS_REGISTRY` / `VISUALIZATION_REGISTRY` / `REPORT_CARD_REGISTRY`, funneled into a unified
+  `POST_SIM_REGISTRY`). A study/investigation selects which run by name; each runs **once,
+  deterministically** (pure function of `(results, config)` → output — no hidden state, cache-keyable).
+- **Report cards gate the study.** A `ReportCardStep`'s verdict conforms to the shared study-outcome/
+  gating schema (`{status: pass|fail|warn, checks, summary}`), so an agent driving the study reads
+  structured pass/fail feedback on how well it went. The report-card fan-in is the composite's terminal
+  evaluation feeding the bridge verdict.
+
+**One shared home.** This whole family — the `ResultsStep`, the `AnalysisStep`/`VisualizationStep`/
+`ReportCardStep` bases, their registries, and the `StudyContext`/`write_card` surface — lives in
+`viva_superpowers` (next to `study_verdict`/`study_outcomes`/`rigor`), using the `__init_subclass__`
+registry idiom shared with the generator/backend registries. Project-specific concrete Steps (e.g.
+v2ecoli's `MassFractionSummary`, `vs_vecoli_card`) subclass the shared bases and stay in their package.
+
 ## What is preserved vs new
 - **Preserved:** everything on `nextflow-deploy` (the Nextflow renderer + `deploy`) becomes
   `NextflowBackend`. The prior plan's Phases 1–2 (task model: provision, build docs, ArtifactRef,
