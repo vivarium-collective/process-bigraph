@@ -17,19 +17,13 @@ class _Incr(Process):
         return {'level': self.config['rate'] * interval}
 
 
-def _make_core():
-    core = allocate_core()
-    core.register_link('_Incr', _Incr)
-    return core
-
-
 def _incr_document():
-    core = _make_core()
+    core = allocate_core()
     state = {
         'level': 1.0,
         'incr': {
             '_type': 'process',
-            'address': 'local:_Incr',
+            'address': 'local:!process_bigraph.tests.test_run_composite._Incr',
             'config': {'rate': 2.0},
             'inputs': {'level': ['level']},
             'outputs': {'level': ['level']},

@@ -17,9 +17,9 @@ CLI::
 from __future__ import annotations
 
 import argparse
+import copy
 import json
 import sys
-import tempfile
 from pathlib import Path
 from typing import Any, Dict, Optional
 
@@ -30,7 +30,7 @@ def _deep_merge(base: Any, overlay: Any) -> Any:
         for key, value in overlay.items():
             base[key] = _deep_merge(base.get(key), value)
         return base
-    return overlay
+    return copy.deepcopy(overlay)
 
 
 def _write_json(path: str, value: Any) -> None:
@@ -50,13 +50,8 @@ def run_composite(document_path: str, *, steps: float,
     if initial_state:
         document['state'] = _deep_merge(document.get('state', {}), initial_state)
 
-    # Round-trip through a temp file so Composite.load owns deserialization.
-    with tempfile.NamedTemporaryFile('w', suffix='.json', delete=False) as tmp:
-        json.dump(document, tmp)
-        tmp_path = tmp.name
-
     core = allocate_core()
-    composite = Composite.load(tmp_path, core=core)
+    composite = Composite(document, core=core)
 
     composite.run(float(steps))
 
