@@ -1,6 +1,11 @@
 # ParCa-as-a-node Nextflow DAG for process-bigraph — design (Fable review)
 
-**Status:** Architecture design (Fable review), pending user approval → writing-plans.
+**Status:** SUBSUMED by `2026-08-14-workflow-execution-architecture-design.md` — Nextflow is now one
+*backend* behind a `WorkflowBackend` interface, not the mechanism. The ParCa/rebuild/ArtifactRef/
+CompositeTask substance below is retained and remains accurate; the "Nextflow DAG is the deliverable"
+framing is superseded (the new default milestone runs under a pure-Python `LocalRunner`).
+
+Originally: Architecture design (Fable review), pending user approval → writing-plans.
 **Date:** 2026-08-14
 **Extends:** branch `nextflow-deploy` (append "Part D" to the base nextflow spec).
 **Companion spec:** `2026-08-13-nextflow-step-network-deploy-design.md`
