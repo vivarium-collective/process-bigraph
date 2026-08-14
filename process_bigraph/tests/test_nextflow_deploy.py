@@ -19,3 +19,13 @@ def test_config_default_executor_local():
     cfg = generate_nextflow_config()
     assert 'local {' in cfg
     assert "executor = 'local'" in cfg
+
+
+def test_config_params_render_valid_groovy_scalars():
+    cfg = generate_nextflow_config(params={'spot': True, 'off': False, 'x': None, 'n': 3, 's': 'hi'})
+    assert 'spot = true' in cfg
+    assert 'off = false' in cfg
+    assert 'x = null' in cfg
+    assert 'n = 3' in cfg
+    assert "s = 'hi'" in cfg
+    assert 'True' not in cfg and 'None' not in cfg

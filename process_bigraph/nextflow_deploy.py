@@ -21,14 +21,14 @@ def _resource_lines(resources: Optional[Dict[str, Dict[str, Any]]]) -> str:
         return ''
     blocks = []
     for label, res in resources.items():
-        lines = [f'        withLabel: {label} {{']
+        lines = [f'            withLabel: {label} {{']
         if 'cpus' in res:
-            lines.append(f'            cpus = {res["cpus"]}')
+            lines.append(f'                cpus = {res["cpus"]}')
         if 'memory' in res:
-            lines.append(f'            memory = {res["memory"]!r}')
+            lines.append(f'                memory = {res["memory"]!r}')
         if 'time' in res:
-            lines.append(f'            time = {res["time"]!r}')
-        lines.append('        }')
+            lines.append(f'                time = {res["time"]!r}')
+        lines.append('            }')
         blocks.append('\n'.join(lines))
     return '\n'.join(blocks)
 
@@ -38,7 +38,15 @@ def _params_block(params: Optional[Dict[str, Any]]) -> str:
         return ''
     lines = ['params {']
     for key, value in params.items():
-        lines.append(f'    {key} = {value!r}')
+        # Dispatch on type to render valid Groovy (check bool before int, since bool is int subclass)
+        if isinstance(value, bool):
+            groovy_value = 'true' if value else 'false'
+        elif value is None:
+            groovy_value = 'null'
+        else:
+            # str, int, float, etc. — repr() is correct
+            groovy_value = repr(value)
+        lines.append(f'    {key} = {groovy_value}')
     lines.append('}')
     return '\n'.join(lines) + '\n\n'
 
