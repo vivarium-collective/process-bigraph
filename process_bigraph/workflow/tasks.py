@@ -37,12 +37,13 @@ import json
 import os
 import subprocess
 import sys
+import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, Dict, List, Optional, Tuple
 
 from process_bigraph.artifacts import (
-    ArtifactRef, artifact_exists, artifact_id, fingerprint_of,
+    ArtifactRef, artifact_exists, artifact_id, artifact_store, fingerprint_of,
     write_fingerprint,
 )
 from process_bigraph.composite import Step, SyncUpdate
@@ -208,12 +209,28 @@ class CompositeTask(Step):
             os.getcwd(), '.pbg', 'artifacts')
 
     def _workdir_root(self) -> str:
-        """Scratch directory for seed outputs — sibling of the artifact store."""
+        """Scratch directory for provenance — sibling of the artifact store.
+
+        NOT used for match payloads (state.json / results/) — those MUST live
+        under the address-keyed artifact store (see ``_match_dir``), never
+        under a scatter-value-keyed path. A val-keyed path is not 1:1 with an
+        address: two different configs (e.g. the same ``start`` at two
+        different ``steps``) share the same val-keyed directory but must
+        resolve to two different cache entries, and a later run at that val
+        would silently overwrite the earlier one's payload out from under a
+        stale-but-still-"valid" address marker. See the regression test
+        ``test_cache_payload_is_address_keyed_not_scatter_val_keyed``.
+        """
         base = os.path.dirname(os.path.normpath(self._artifact_root())) or os.getcwd()
         return os.path.join(base, 'work')
 
-    def _seed_dir(self, val) -> str:
-        return os.path.join(self._workdir_root(), f'seed_{_safe_token(val)}')
+    def _match_dir(self, address: str) -> str:
+        """The address-keyed payload directory — the single source of truth
+        for both the cache-hit check and the result path handed back to the
+        caller. ``artifact_store`` is the same helper ``artifact_exists`` /
+        ``write_fingerprint`` use, so all three always agree on the location.
+        """
+        return artifact_store(address, self._artifact_root())
 
     def _provenance_path(self) -> str:
         node = self.config['generator']
@@ -267,52 +284,62 @@ class CompositeTask(Step):
             'run': {'steps': self.config['steps']},
         }
 
-    def _run_match(self, key, val, entry, artifact_paths: Dict[str, str]
+    def _run_match(self, key, val, entry, artifact_paths: Dict[str, str],
+                   address: str, lock: threading.Lock
                    ) -> Tuple[str, str, bool, float, str]:
         t0 = time.monotonic()
 
-        ref_hashes = []
-        for path in artifact_paths.values():
-            ref_hashes.append(_load_ref_hash(path))
-
-        address = self._address(entry, val, ref_hashes)
-
-        seed_dir = self._seed_dir(val)
-        result_dir = os.path.join(seed_dir, 'results')
-        state_out = os.path.join(seed_dir, 'state.json')
-
         artifact_root = self._artifact_root()
-        cache_hit = artifact_exists(address, root=artifact_root) and os.path.isfile(state_out)
+        # Address-keyed, NOT scatter-value-keyed — see _match_dir docstring.
+        # This is the one location both the cache-hit check and the
+        # returned/cached result path read from, so an address can never
+        # observe a payload that a *different* address produced.
+        match_dir = self._match_dir(address)
+        result_dir = os.path.join(match_dir, 'results')
+        state_out = os.path.join(match_dir, 'state.json')
 
+        def _payload_present() -> bool:
+            return artifact_exists(address, root=artifact_root) and os.path.isfile(state_out)
+
+        cache_hit = _payload_present()
         if not cache_hit:
-            os.makedirs(seed_dir, exist_ok=True)
-            build_doc = self._build_doc(
-                entry, val,
-                result_dir_for_emitter=result_dir)
-            build_path = os.path.join(seed_dir, 'build.json')
-            with open(build_path, 'w') as fh:
-                json.dump(build_doc, fh)
+            # Two matches can legitimately resolve to the same address (e.g.
+            # a duplicated scatter value, or two matches whose only
+            # difference doesn't affect the key) and would otherwise race to
+            # write the same match_dir concurrently. Serialize per address;
+            # re-check after acquiring the lock in case a sibling thread
+            # already finished the run while this one was waiting.
+            with lock:
+                cache_hit = _payload_present()
+                if not cache_hit:
+                    os.makedirs(match_dir, exist_ok=True)
+                    build_doc = self._build_doc(
+                        entry, val,
+                        result_dir_for_emitter=result_dir)
+                    build_path = os.path.join(match_dir, 'build.json')
+                    with open(build_path, 'w') as fh:
+                        json.dump(build_doc, fh)
 
-            cmd = [sys.executable, '-m', 'process_bigraph.run_composite',
-                   '--build', build_path]
-            scatter_param = self.config.get('scatter_param')
-            if scatter_param:
-                cmd += ['--set', f'{scatter_param}={json.dumps(val)}']
-            for port, path in artifact_paths.items():
-                cmd += ['--artifact', f'{port}={path}']
-            cmd += ['--state-out', state_out]
+                    cmd = [sys.executable, '-m', 'process_bigraph.run_composite',
+                           '--build', build_path]
+                    scatter_param = self.config.get('scatter_param')
+                    if scatter_param:
+                        cmd += ['--set', f'{scatter_param}={json.dumps(val)}']
+                    for port, path in artifact_paths.items():
+                        cmd += ['--artifact', f'{port}={path}']
+                    cmd += ['--state-out', state_out]
 
-            proc = subprocess.run(
-                cmd, env=os.environ, capture_output=True, text=True)
-            if proc.returncode != 0:
-                raise RuntimeError(
-                    f"{_log_prefix} run_composite subprocess failed for match "
-                    f"{key!r} (val={val!r}, address={address}):\n"
-                    f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}")
+                    proc = subprocess.run(
+                        cmd, env=os.environ, capture_output=True, text=True)
+                    if proc.returncode != 0:
+                        raise RuntimeError(
+                            f"{_log_prefix} run_composite subprocess failed for match "
+                            f"{key!r} (val={val!r}, address={address}):\n"
+                            f"--- stdout ---\n{proc.stdout}\n--- stderr ---\n{proc.stderr}")
 
-            with open(state_out) as fh:
-                produced = json.load(fh)
-            write_fingerprint(address, fingerprint_of(produced), root=artifact_root)
+                    with open(state_out) as fh:
+                        produced = json.load(fh)
+                    write_fingerprint(address, fingerprint_of(produced), root=artifact_root)
 
         wall_s = time.monotonic() - t0
         result_path = result_dir if os.path.isdir(result_dir) else state_out
@@ -345,6 +372,16 @@ class CompositeTask(Step):
             self._write_provenance({})
             return SyncUpdate({'results': {}})
 
+        # Addresses are computed up front (cheap — no I/O beyond the small
+        # artifact-ref files) so matches sharing an address also share one
+        # lock, keeping concurrent duplicate-scatter-value writes safe (see
+        # _run_match).
+        ref_hashes = [_load_ref_hash(p) for p in artifact_paths.values()]
+        addresses = {key: self._address(entry, val, ref_hashes) for key, val in items}
+        locks: Dict[str, threading.Lock] = {
+            address: threading.Lock() for address in set(addresses.values())
+        }
+
         cpu = os.cpu_count() or 2
         default_workers = max(1, min(n, cpu // 2))
         max_workers = int(self.config.get('max_workers') or default_workers)
@@ -354,7 +391,8 @@ class CompositeTask(Step):
         provenance: Dict[str, Dict[str, Any]] = {}
         with ThreadPoolExecutor(max_workers=max_workers) as pool:
             futures = [
-                pool.submit(self._run_match, key, val, entry, artifact_paths)
+                pool.submit(self._run_match, key, val, entry, artifact_paths,
+                            addresses[key], locks[addresses[key]])
                 for key, val in items
             ]
             for future in futures:
@@ -377,8 +415,3 @@ def _load_ref_hash(ref_path: str) -> str:
     with open(ref_path) as fh:
         ref = ArtifactRef.coerce(json.load(fh))
     return ref.hash
-
-
-def _safe_token(val) -> str:
-    token = str(val)
-    return ''.join(c if (c.isalnum() or c in ('.', '-', '_')) else '_' for c in token)
