@@ -79,4 +79,33 @@ async/submit backend APIs; entry-point provisioning discovery; any backend-owned
   retires the riskiest engine while behavior pins are fresh. A minimal Phase-5 milestone: compile a
   1-study investigation → `run_workflow(backend='local')` → its report card renders from the composite's
   bridge, with the study's sim cache and the investigation DAG sharing one content address.
-- **Anytime:** R5, W8, W9.
+- **Anytime:** R5 (delete `run.py`+`fire`), W8, W9.
+
+## Program execution order (Fable whole-program streamline)
+
+Target: **a real `study.yaml` compiled to a composite runs under `LocalRunner`, retrieves results, runs a
+gating ReportCard, emits a verdict, with sim-cache address == `resolve_study`'s `artifact_id`** — then
+demo before Phase 4/5. `[CP]` critical path, `[∥]` parallel now.
+
+1. `[∥ vsp]` post-sim T1 — family move (DONE, commit 5fe61c9).
+2. `[∥ vsp]` post-sim T2 — `ResultsStep`/`ResultsHandle` (import **`viva_emitters`**, not pbg_emitters; `ResultsHandle` reconstructs from `{paths, sim_data_ref}` config so file-rehydration is possible later) + native-engine wiring proof.
+3. `[∥ v2e]` post-sim T3 — v2ecoli rewire; **merge into v2ecoli main FIRST** (before the nextflow-parca T8 branch — disjoint files, small-first avoids rebase).
+4. `[∥ wb]` Task 0 / **W1** — hash lock-step fix (still broken today; before Phase 2).
+5. `[∥]` wave: plan T1 (`provision_core`+ray shim) ∥ T3 (`register_ecoli_core`) ∥ T4 (`ParcaBundleStep`, F6 concat-hash).
+6. `[CP]` T2 — `workflow/recipe.py` + `run_composite --build`.
+7. `[CP]` T5 — `--artifact` consumption.
+8. `[CP]` T6 — `CompositeTask` (per_match scatter, ThreadPool, F1/F2 cache, F4 guard, F5 provenance).
+9. `[CP]` T7 — `WorkflowBackend` + `run_workflow` + `LocalRunner`.
+10. `[CP]` **T8 + T9 (milestone)** — `parca → sims → ResultsStep → gating ReportCard → bridge verdict`, cached.
+11. `[CP]` **T10** — minimal `study_to_composite` over `study_interface`; compile a real study.yaml, run, assert verdict + address parity with `resolve_study`. **End-to-end done.**
+12. `[CP]` merge train: `nextflow-deploy`→pbg, `nextflow-parca`→v2e, `post-sim-family`→vsp, T10 branch→wb. Then Phase 4 → Phase 5.
+
+Sequencing notes: T9 needs T8 **and** post-sim T2. **W1 = plan Task 0** (same item; the plan is executable, this roadmap is the ledger — don't double-execute). Evaluate family and Phases 1–3 are correctly parallel (Evaluate needs nothing from CompositeTask/LocalRunner; its wiring proof runs on the native engine).
+
+## Phase 5 additions (workbench)
+- **Study notebook renderer** — `study_to_notebook(spec)` → a downloadable, deterministic, runnable+displayable `.ipynb` that rebuilds+runs the study composite and displays each Analysis/Visualization/ReportCard output + the verdict inline (governing spec §Export). **Real current consumer** (the workbench download) — justified scope, NOT cut. Sibling of `study_to_composite`; reuses the Evaluate-stage Steps as their notebook representation.
+
+## Aggressive cut list (recorded so it isn't relitigated)
+**Cut outright** (revisit only on explicit user demand): **CWL renderer entirely** (incl. the Phase-4 `cwltool --validate` deliverable — no current consumer; keep only as governing-spec Phase-6 intent); **`RayBackend`** (v2ecoli Ray batch serves single-node); **mermaid/dot diagram export** (struck from the spec — the workbench already renders bigraphs); **`CompositeTask.nextflow_script()`** (stays out of T6); entry-point provisioning discovery; async/submit backend APIs; backend-owned topo scheduler.
+**Defer past the milestone** (Phase 4+): `NextflowBackend` wrap of `deploy()` (the shipped code runs as-is; no second consumer until Phase 5); renderer `per_match` finish + S4 `--provision` forwarding + R6 `_topological_order` promotion; W2/W3/W4 workbench codegen retirement (NOT on the path to the end-to-end — the minimal `study_to_composite` doesn't need `composite_subprocess` retired); `investigation_to_composite`; W6/W7; variant×seed, multi-generation, fsspec/cloud, composite-node topo/staging fix; **Evaluate stage under Nextflow/CWL** (ResultsHandle is a live object → Evaluate is LocalRunner-only in v1, governing spec §Evaluate; Phase 6).
+**Delete/archive:** `process_bigraph/run.py` + `fire` (R5); archive the two superseded ParCa docs (`2026-08-14-parca-node-nextflow-dag.md`, `-design.md`); "SHIPPED / = NextflowBackend" banner on the 2026-08-13 nextflow spec+plan; after T10 proves parity, delete `resolve_study`'s `compute_fn` path.

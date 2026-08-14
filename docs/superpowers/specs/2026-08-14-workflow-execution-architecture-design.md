@@ -104,12 +104,21 @@ is the one public entry the workbench calls.
   vEcoli. Unchanged in capability; now behind the interface.
 
 ### Export renderers (representation, for editors/tools)
-- **CWL renderer — `Composite.to_cwl()` / `render_cwl(composite)`.** Emits a CWL `Workflow` + one
-  `CommandLineTool` per node (the tool's `baseCommand` is `run_step`/`run_composite --build`), with CWL
-  **`scatter`** for the fan-out. CWL is a *standard*: the output opens in **Rabix Composer** / **Galaxy**
-  for visual editing and runs under cwltool/Toil/Arvados. This is the external-visual-editor bridge.
+- **Study notebook renderer — `study_to_notebook(spec)` → a downloadable, runnable, displayable `.ipynb`.**
+  The workbench's "download study notebook" is a *deterministic rendering of the study composite*: the
+  notebook rebuilds the study composite from its build recipe (generator + overrides + producer artifacts),
+  runs it (`run_workflow(backend='local')` / ticks the composite), and **displays the Evaluate-stage
+  outputs inline** — one cell (or section) per `AnalysisStep`/`VisualizationStep`/`ReportCardStep`, showing
+  the analysis data, the rendered viz HTML, and the gating report-card verdict, plus the study's `verdict`.
+  It reuses the same post-sim Steps (§Evaluate) as their notebook representation — no parallel logic.
+  Deterministic: same study spec → same notebook cells → same content-addressed outputs (`artifact_id`),
+  so a downloaded notebook reproduces the study exactly. This is a real, current consumer (the download
+  feature) — unlike CWL, it is not speculative. Lives in the workbench (Phase 5), a sibling of
+  `study_to_composite`; agents and users get one runnable artifact of a study.
+- **CWL renderer — `Composite.to_cwl()` / `render_cwl(composite)`.** The external-visual-editor bridge
+  (Rabix/Galaxy, cwltool/Toil). **Deferred to Phase 6 / build-on-demand only** — no current consumer;
+  native workbench graph editing serves the visual goal. (Kept here as intent, not near-term scope.)
 - **Nextflow renderer** (already exists) doubles as an export format.
-- **Diagram** — `mermaid`/`dot` for read-only visualization (cheap; both Nextflow and a direct emitter).
 
 ### Visual editing
 - **Native:** the workbench renders/edits the composite graph directly (extends Composite Explorer / loom
@@ -224,6 +233,13 @@ sims (CompositeTask) ──▶ [results store: emitter output paths]
 `viva_superpowers` (next to `study_verdict`/`study_outcomes`/`rigor`), using the `__init_subclass__`
 registry idiom shared with the generator/backend registries. Project-specific concrete Steps (e.g.
 v2ecoli's `MassFractionSummary`, `vs_vecoli_card`) subclass the shared bases and stay in their package.
+
+**v1 asymmetry (recorded):** the `ResultsHandle` is a live Python object (lazy DuckDB `conn` + `sim_data`),
+so the **Evaluate stage is `LocalRunner`-only in v1** — it ticks in-process where the handle is valid. The
+sim *fan-out* still runs on any backend (Nextflow orchestrates the coarse sims); only the Evaluate tail is
+in-process. `ResultsHandle` reconstructs from `{paths, sim_data_ref}` config, so a file-based rehydration
+for a Nextflow/CWL Evaluate stage is possible later (Phase 6). (This plan's phasing defers to the roadmap's
+`§Program execution order` / cut list where they differ.)
 
 ## What is preserved vs new
 - **Preserved:** everything on `nextflow-deploy` (the Nextflow renderer + `deploy`) becomes

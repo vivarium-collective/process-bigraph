@@ -69,11 +69,13 @@ vivarium Steps, run deterministically in the composite. Move the family from `v2
 - [ ] Step 3 — run the existing suite (with the `[vsp]` worktree installed/on PYTHONPATH); expect PASS with no behavior change. Fix import fallout only.
 - [ ] Step 4 — commit on `post-sim-rewire` (`refactor(v2e): post-sim Step bases import from viva_superpowers (one home)`).
 
-## Decisions (from design approval)
+## Decisions (from design approval + Fable whole-program streamline)
 - Subclass pbg `Step` (drop `V2Step`); keep the error-swallowing `invoke()` on the shared bases.
-- Prefer **one `AnalysisStep` base** whose input is the `ResultsHandle` (offering both `.records()` and `.conn()`), collapsing the current live-`conn` `Analysis` + record `AnalysisStep` split; keep a back-compat alias if a concrete card needs the old surface.
-- `ResultsHandle` is a typed object (records + lazy conn), not a raw live handle → deterministic, cache-keyable.
+- **AMENDED (Fable §1.4): verbatim move NOW (T1, done), collapse LATER (T2).** T1 keeps both the live-`conn` `Analysis` and the record `AnalysisStep` bases (as shipped in commit 5fe61c9). When `ResultsHandle` lands in **T2**, collapse to **one `AnalysisStep` base** whose input is the `ResultsHandle` (offering `.records(scale)` + lazy `.conn()`), keeping `Analysis` as a thin deprecated alias. Doing the collapse in T2 (not T1) avoids reworking the committed move and lets the handle drive the merged surface. v2ecoli's T3 rewire must import the collapsed surface (do T2 before T3 fossilizes it).
+- **Emitters import (Fable §1.4): use `viva_emitters`, NOT `pbg_emitters`.** viva-superpowers renamed the emitters dep to `viva-emitters` and dropped the `pbg_emitters` shim (branch base `1dd4adc`, PRs #249/#250). T2's `ResultsStep` imports `viva_emitters`; the T2 implementer verifies the exact module name against the worktree before coding.
+- `ResultsHandle` is a typed object (records + lazy conn) **that reconstructs from `{paths, sim_data_ref}` config** (so file-based rehydration is possible for a future Nextflow/CWL Evaluate stage — Fable §1.3) → deterministic, cache-keyable. **v1 Evaluate is LocalRunner-only** (the live handle can't cross a subprocess boundary; Evaluate-under-Nextflow is Phase 6).
 - `StudyContext` keeps its workspace-layout knowledge (viva_superpowers owns workspace paths).
+- **Merge order (Fable §1.5): T3 (v2ecoli rewire) merges into v2ecoli main BEFORE the Phases-1-3 `nextflow-parca` T8 branch** (disjoint files, small-first avoids rebase load).
 
 ## Self-Review
 Coverage: family move (T1); ResultsStep/ResultsHandle + deterministic wiring proof (T2); v2ecoli rewire with green existing tests (T3). Determinism: post-sim Steps are pure `(results, config)→output`, topo-ordered after `ResultsStep`. Gating: `ReportCardStep` verdict schema `{status,checks,summary}`. Type consistency: `ResultsHandle` (T2) is the input contract for `AnalysisStep`/`ReportCardStep` (T1); registries populated by `__init_subclass__` consumed by `iter_post_sim`/`applicable`; v2ecoli concretes (T3) subclass the T1 bases.

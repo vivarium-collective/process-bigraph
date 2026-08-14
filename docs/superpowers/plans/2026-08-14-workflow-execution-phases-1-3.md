@@ -2,7 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make a process-bigraph composite the authoritative workflow DAG, runnable through a pluggable **`WorkflowBackend`**. Milestone: `run_workflow(parca_sims_composite, backend='local')` runs a `ParCa(fixture) → per-seed E.coli baseline` DAG **locally, pure-Python, with content-hash caching** (second run cache-hits, a changed `steps` misses) — no Nextflow.
+**Goal:** Make a process-bigraph composite the authoritative workflow DAG, runnable through a pluggable **`WorkflowBackend`**, and demonstrate the program end-to-end. **Milestone (redefined per Fable whole-program streamline §1.2/§5.1):** a real `study.yaml` compiled to a composite runs under `LocalRunner` (the vivarium engine) — `ParCa(fixture) → per-seed sims → ResultsStep → a gating ReportCard → bridge verdict` — **locally, pure-Python, content-hash cached** (re-run cache-hits, a changed `steps` misses), with the study's sim-cache address equal to `resolve_study`'s `artifact_id` for the same spec. Reached by T8 (engine + Evaluate tail) → T9 → **T10 minimal `study_to_composite`**. No Nextflow.
+
+**Program sequence:** see `2026-08-14-workflow-refactor-roadmap.md` §"Program execution order" for the single streamlined order across all repos (this plan's tasks interleave with the post-sim family plan and Task 0).
 
 **Standardization:** the unit is the **Study-as-workflow-composite**, with an Investigation a workflow composite of Study-composites (governing spec §"Studies and Investigations ARE workflow composites"). This plan builds the general engine those compile to; the Phase-3 `ParCa → per-seed baseline` DAG **is a study's simulation core**. The workbench `study_to_composite`/`investigation_to_composite` compilers (completing dead `resolve_study`) are Phase 5.
 
@@ -290,6 +292,32 @@ Document (per §2.3): workflow composites should set `parallel_steps: true` for 
 - [ ] **Step 3 — implement** the builder + `main` (git sha via `subprocess`/`importlib.metadata`; keep `steps` small in tests, default 2700).
 - [ ] **Step 4 — run, expect PASS** (`[v2e]` prefix; from canonical checkout so `out/cache` resolves).
 - [ ] **Step 5 — commit** on `nextflow-parca` (`feat(v2e): v2ecoli-workflow-run — ParCa→per-seed baseline under LocalRunner`).
+
+### Task 9 [v2e]: Evaluate tail on the real DAG — gating ReportCard → verdict
+
+**Depends on:** T8 (the parca→sims composite) **and** post-sim plan T2 (`ResultsStep`/`ResultsHandle` + the post-sim family in `viva_superpowers`). Wires the study's Evaluate stage onto the *real* CompositeTask output (not a fixture).
+
+**Files:** modify `v2ecoli/workflow/build.py`; Test `v2ecoli/tests/test_workflow_dag.py` (extend).
+**Produces:** `build_parca_sim_composite` grows an Evaluate tail: `sims (CompositeTask) → ResultsStep (viva_superpowers) → <one real ReportCardStep> → bridge`. The composite's bridge exposes `verdict` (the gating report card's `{status, checks, summary}`), not raw `sims.results`. `v2ecoli-workflow-run` prints `RunResult.outputs['verdict']`.
+
+- [ ] **Step 1 — failing test:** extend the milestone integration test — after the 2-seed run, assert `result.outputs['verdict']['status'] in {'pass','fail','warn'}` and that the ReportCard consumed the `ResultsHandle` produced by `ResultsStep` from the real `CompositeTask` output (not a fixture). Keep the cache-hit / cache-miss-on-`steps` assertions.
+- [ ] **Step 2 — run, expect FAIL** (no Evaluate tail yet).
+- [ ] **Step 3 — implement** the tail: add `ResultsStep` + a minimal v2ecoli `ReportCardStep` (or reuse `tests_card`) wired downstream of `sims`; the bridge exposes the verdict. `parallel_steps: true` already set.
+- [ ] **Step 4 — run, expect PASS** (`[v2e]`; from canonical checkout so `out/cache` resolves; `viva_superpowers` post-sim family installed/on PYTHONPATH).
+- [ ] **Step 5 — commit** on `nextflow-parca` (`feat(v2e): study Evaluate tail — ResultsStep → gating ReportCard → verdict`).
+
+### Task 10 [wb]: minimal `study_to_composite` — the end-to-end
+
+**Depends on:** T9. The minimal slice of workbench W5 (pure compiler; NO UI selector, NO detached-run integration, NO codegen retirement — those are Phase 5).
+
+**Files:** Create `vivarium_workbench/lib/study_to_composite.py`; Test `tests/test_study_to_composite.py`. Worktree: reuse `vivarium-workbench--hash-lockstep` or a fresh `study-to-composite` branch off `origin/main`.
+**Produces:** `study_to_composite(spec: dict) -> Composite` — a pure function over `study_interface(spec)` (`{composite, config, inputs[].from, outputs}`) producing the Task-9 shape: `composite`+`config` → the CompositeTask build recipe; seeds → its scatter; `inputs[].from` producers → upstream nodes; declared evaluations → `ReportCardStep` selection; verdict → bridge. Reads YAML today; do the one-line `.json`-filename loader branch here only if free.
+
+- [ ] **Step 1 — failing test:** compile a real fixture `study.yaml` (baseline + seeds + one report card) → `run_workflow(study_to_composite(spec), backend='local', outdir=tmp)` → assert `result.outputs['verdict']` gates, AND assert the study's sim-cache address `== artifact_id(composite_id=iface.composite, config=iface.config, input_ids=[], commit=<ws commit>)` (parity with `resolve_study`, `lib/artifacts/pipeline.py`).
+- [ ] **Step 2 — run, expect FAIL** (`ModuleNotFoundError: study_to_composite`).
+- [ ] **Step 3 — implement** the compiler (small: `study_interface` already yields the inputs; assemble the Task-9 composite shape).
+- [ ] **Step 4 — run, expect PASS.** **END-TO-END DONE** — a Study is a workflow composite, gated, cached, address-parity with the dead `resolve_study`.
+- [ ] **Step 5 — commit** (`feat(wb): study_to_composite — a Study compiled to a runnable workflow composite`).
 
 ---
 
