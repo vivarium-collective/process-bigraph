@@ -128,47 +128,55 @@ def _is_plumbing(instance: Any) -> bool:
 
 
 def _topological_order(step_paths: Dict[Path, Dict],
-                       step_dependencies: Dict[Path, Dict]) -> List[Path]:
+                       step_dependencies: Dict[Path, Dict],
+                       node_dependencies: Optional[Dict[Path, Dict]] = None) -> List[Path]:
     """Kahn's algorithm over the step graph.
 
-    Dependency: step A precedes step B if any of B's input_paths is
-    produced by A (appears in A's output_paths). Two-pointer reverse
-    lookup keeps this O(V+E).
+    Edge model: prefer ``node_dependencies`` (authoritative, prefix-aware).
+    For each shared store path, every writer in ``before`` precedes every
+    reader in ``after``. Falls back to exact ``input_path == output_path``
+    matching when ``node_dependencies`` is absent (back-compat).
     """
-    producers: Dict[Path, Path] = {}
-    for step_path, info in step_dependencies.items():
-        for out_path in info.get('output_paths', []):
-            producers[tuple(out_path)] = step_path
+    incoming = {sp: set() for sp in step_paths}
+    outgoing = {sp: set() for sp in step_paths}
 
-    incoming: Dict[Path, List[Path]] = {sp: [] for sp in step_paths}
-    outgoing: Dict[Path, List[Path]] = {sp: [] for sp in step_paths}
-    for step_path, info in step_dependencies.items():
-        for in_path in info.get('input_paths', []):
-            producer = producers.get(tuple(in_path))
-            if producer is not None and producer != step_path:
-                incoming[step_path].append(producer)
-                outgoing[producer].append(step_path)
+    if node_dependencies:
+        for deps in node_dependencies.values():
+            writers = [w for w in deps.get('before', ()) if w in step_paths]
+            readers = [r for r in deps.get('after', ()) if r in step_paths]
+            for w in writers:
+                for r in readers:
+                    if w != r:
+                        outgoing[w].add(r)
+                        incoming[r].add(w)
+    else:
+        producers = {}
+        for step_path, info in step_dependencies.items():
+            for out_path in info.get('output_paths', []):
+                producers[tuple(out_path)] = step_path
+        for step_path, info in step_dependencies.items():
+            for in_path in info.get('input_paths', []):
+                producer = producers.get(tuple(in_path))
+                if producer is not None and producer != step_path:
+                    incoming[step_path].add(producer)
+                    outgoing[producer].add(step_path)
 
-    ordered: List[Path] = []
-    ready = [sp for sp, preds in incoming.items() if not preds]
-    ready.sort()
-    remaining = dict(incoming)
-
+    ordered = []
+    remaining = {sp: set(preds) for sp, preds in incoming.items()}
+    ready = sorted(sp for sp, preds in remaining.items() if not preds)
     while ready:
         step = ready.pop(0)
         ordered.append(step)
         for consumer in outgoing[step]:
-            remaining[consumer] = [p for p in remaining[consumer] if p != step]
-            if not remaining[consumer] and consumer not in ordered:
-                if consumer not in ready:
-                    ready.append(consumer)
+            remaining[consumer].discard(step)
+            if not remaining[consumer] and consumer not in ordered and consumer not in ready:
+                ready.append(consumer)
         ready.sort()
 
     if len(ordered) != len(step_paths):
         missing = set(step_paths) - set(ordered)
         raise ValueError(
-            f"step graph contains a cycle; could not order: {sorted(missing)!r}"
-        )
+            f"step graph contains a cycle; could not order: {sorted(missing)!r}")
     return ordered
 
 
@@ -373,7 +381,8 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
     step_paths = composite.step_paths
     step_dependencies = getattr(composite, 'step_dependencies', {}) or {}
 
-    order = _topological_order(step_paths, step_dependencies)
+    node_dependencies = getattr(composite, 'node_dependencies', None)
+    order = _topological_order(step_paths, step_dependencies, node_dependencies)
 
     # Assign one channel per producer output_path.
     path_to_channel: Dict[Path, str] = {}
