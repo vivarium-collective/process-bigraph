@@ -105,16 +105,15 @@ def test_deploy_writes_files(tmp_path):
                     reason='nextflow binary not on PATH')
 def test_deploy_launch_local_end_to_end(tmp_path):
     composite = _emit_composite()
-    # render_composite's default workflow_name ('main') is a reserved
-    # identifier in real Nextflow — naming an explicit workflow block
-    # `main` is a compile error ("Identifier `main` is reserved for
-    # internal use"). Passing an empty name renders an *unnamed*
-    # `workflow { }` block, which Nextflow treats as the implicit entry
-    # workflow and runs without needing `-entry`. This is a caller-side
-    # options choice (deploy's `options` passthrough), not a change to
-    # the renderer itself.
+    # No `options` override here on purpose: this proves the *shipped
+    # default* `deploy(..., launch=True)` path works end-to-end. deploy()
+    # itself defaults render_options['workflow_name'] to '' (an
+    # unnamed/implicit entry workflow), sidestepping the fact that
+    # render_composite's own default ('main') is a reserved identifier in
+    # real Nextflow (naming an explicit workflow block `main` is a
+    # compile error). A caller who never heard of that trap must still
+    # get a working deploy.
     result = deploy(composite, outdir=str(tmp_path), executor='local',
                     launch=True, params={'seed': 3},
-                    options={'workflow_name': ''},
                     work_dir=str(tmp_path / 'work'))
     assert result['returncode'] == 0

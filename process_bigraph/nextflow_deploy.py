@@ -101,6 +101,12 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
 
     render_options = dict(options or {})
     render_options.setdefault('python', sys.executable)
+    # render_composite's own default ('main') is a reserved identifier in
+    # real Nextflow — naming the entry workflow block `main` is a compile
+    # error. Default to an unnamed/implicit entry workflow instead, which
+    # Nextflow runs without needing `-entry`. A caller-supplied
+    # `workflow_name` (including '') in `options` always wins.
+    render_options.setdefault('workflow_name', '')
 
     main_nf = out / 'main.nf'
     main_nf.write_text(render_composite(composite, render_options))
