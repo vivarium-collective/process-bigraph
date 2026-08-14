@@ -48,7 +48,15 @@ def run_composite(document_path: str, *, steps: float,
     with open(document_path) as fh:
         document = json.load(fh)
     if initial_state:
-        document['state'] = _deep_merge(document.get('state', {}), initial_state)
+        # --initial-state accepts EITHER a bare state dict OR a full
+        # {schema, state} document (the exact shape --state-out writes) —
+        # unwrap the latter so a producer's --state-out can be chained
+        # directly into a consumer's --initial-state without the whole
+        # document landing nested under document['state']['state'].
+        overlay = initial_state
+        if isinstance(overlay, dict) and 'state' in overlay and 'schema' in overlay:
+            overlay = overlay['state']
+        document['state'] = _deep_merge(document.get('state', {}), overlay)
 
     core = allocate_core()
     composite = Composite(document, core=core)

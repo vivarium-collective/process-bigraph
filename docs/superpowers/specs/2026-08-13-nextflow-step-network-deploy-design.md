@@ -150,3 +150,25 @@ Lift DAG edges instead from `composite.node_dependencies`
   no shim — the semantics differ.)
 - `--steps N` vs a stop-condition on the composite document for `run_composite`
   duration control (default: `--steps`, honor a document-level stop if present).
+
+## Status (v1)
+
+The plain **Step-network** deploy path (`render_composite` over a network of
+plain `Step`s, `nextflow_deploy.deploy()`, `run_step.py`) is **complete and
+E2E-tested**, including a real `nextflow run` integration test.
+
+The **whole-Composite-as-a-task** path (a nested `Composite` instance
+rendered as one `process` block that shells out to `run_composite.py`, see
+`_composite_node_script` / the composite-node branch of `render_composite`)
+is **experimental scaffolding, not yet runnable end-to-end**. Two known gaps,
+tracked as a follow-up:
+
+1. **Document staging** — the referenced `<name>_document.json` is not
+   staged as a Nextflow input; the rendered process assumes it is already
+   present on disk at the worker.
+2. **Topological-sort integration** — composite nodes are not folded into
+   `_topological_order`, so their position relative to plain-Step producers
+   and consumers in the same network is not guaranteed correct.
+
+Do not treat the composite-node path as merge-ready for real workflows until
+both gaps are closed.

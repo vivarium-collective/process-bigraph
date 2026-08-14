@@ -60,3 +60,28 @@ def test_run_composite_initial_state_overlay(tmp_path):
 
     final = json.loads(out_path.read_text())
     assert float(final['state']['level']) == 42.0
+
+
+def test_run_composite_state_out_roundtrips_as_initial_state(tmp_path):
+    # The composite-node renderer chains one task's --state-out into the
+    # next task's --initial-state. --state-out writes a FULL {schema, state}
+    # document, not a bare state dict. The overlay must unwrap it, so the
+    # handoff lands at state['level'] (not nested under state['state']).
+    doc_path = tmp_path / 'doc.json'
+    doc_path.write_text(json.dumps(_incr_document()))
+    first_out = tmp_path / 'first.json'
+
+    from process_bigraph.run_composite import run_composite
+    run_composite(str(doc_path), steps=5.0, state_out_path=str(first_out))
+
+    handoff_document = json.loads(first_out.read_text())
+    assert 'schema' in handoff_document and 'state' in handoff_document
+
+    second_out = tmp_path / 'second.json'
+    run_composite(str(doc_path), steps=0.0,
+                  initial_state=handoff_document,
+                  state_out_path=str(second_out))
+
+    final = json.loads(second_out.read_text())
+    expected_level = float(handoff_document['state']['level'])
+    assert float(final['state']['level']) == expected_level

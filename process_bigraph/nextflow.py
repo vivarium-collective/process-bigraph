@@ -228,6 +228,12 @@ def _composite_node_script(instance: Any,
     Runs the entire nested simulation via ``run_composite``: the first input
     port (if any) is staged as the initial-state document; the first output
     port (if any) receives the final-state document.
+
+    EXPERIMENTAL: the composite-node → run_composite rendering is
+    scaffolding and not yet runnable end-to-end — the composite document is
+    not auto-staged and composite nodes are not yet integrated into the
+    topological ordering. The plain Step-network path IS fully supported.
+    See docs/superpowers/specs/2026-08-13-nextflow-step-network-deploy-design.md.
     """
     parts = [
         f'{python} -m process_bigraph.run_composite',
@@ -409,6 +415,14 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
 
     Returns:
         The rendered workflow document, ready to save as ``.nf``.
+
+    Composite nodes (nested ``Composite`` instances rendered as a whole-task
+    ``run_composite`` process, see ``_composite_node_script``): EXPERIMENTAL.
+    This rendering path is scaffolding and not yet runnable end-to-end — the
+    composite document is not auto-staged and composite nodes are not yet
+    integrated into the topological ordering. The plain Step-network path IS
+    fully supported. See
+    docs/superpowers/specs/2026-08-13-nextflow-step-network-deploy-design.md.
     """
     options = options or {}
     workflow_name = options.get('workflow_name', 'main')
@@ -496,9 +510,14 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
             for port in inputs_wires:
                 block_lines.append(f'    path {port}')
         if outputs_wires:
-            block_lines.append('    output:')
-            for port in outputs_wires:
-                block_lines.append(f'    path "{port}.json"')
+            # _composite_node_script only ever writes the FIRST output port
+            # (via --state-out {first_out}.json) — declaring `output:` for
+            # every port here would make Nextflow expect files 2..n that are
+            # never written ("Missing output file(s)").
+            first_out_port = next(iter(outputs_wires), None)
+            if first_out_port is not None:
+                block_lines.append('    output:')
+                block_lines.append(f'    path "{first_out_port}.json"')
         block_lines.append('    script:')
         block_lines.append(_composite_node_script(
             instance, doc_ref, default_steps, inputs_wires, outputs_wires, python))
