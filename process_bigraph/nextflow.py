@@ -183,7 +183,8 @@ def _topological_order(step_paths: Dict[Path, Dict],
 def _script_body(instance: Any,
                  step_name: str,
                  inputs_wires: Dict[str, List],
-                 outputs_wires: Dict[str, List]) -> str:
+                 outputs_wires: Dict[str, List],
+                 python: str = 'python') -> str:
     """Return the script block for a process.
 
     Priority order:
@@ -205,13 +206,42 @@ def _script_body(instance: Any,
         f'--out {port}={port}.json' for port in outputs_wires
     )
     parts = [
-        'python -m process_bigraph.run_step',
+        f'{python} -m process_bigraph.run_step',
         f'--class {fq}',
     ]
     if in_flags:
         parts.append(in_flags)
     if out_flags:
         parts.append(out_flags)
+    cmd = ' \\\n    '.join(parts)
+    return f'"""\n{cmd}\n"""'
+
+
+def _composite_node_script(instance: Any,
+                           doc_ref: str,
+                           steps: int,
+                           inputs_wires: Dict[str, List],
+                           outputs_wires: Dict[str, List],
+                           python: str = 'python') -> str:
+    """Emit the ``script:`` block for a whole-Composite node.
+
+    Runs the entire nested simulation via ``run_composite``: the first input
+    port (if any) is staged as the initial-state document; the first output
+    port (if any) receives the final-state document.
+    """
+    parts = [
+        f'{python} -m process_bigraph.run_composite',
+        f'--document {doc_ref}',
+        f'--steps {steps}',
+    ]
+    in_iter = iter(inputs_wires)
+    first_in = next(in_iter, None)
+    if first_in is not None:
+        parts.append(f'--initial-state ${{{first_in}}}')
+    out_iter = iter(outputs_wires)
+    first_out = next(out_iter, None)
+    if first_out is not None:
+        parts.append(f'--state-out {first_out}.json')
     cmd = ' \\\n    '.join(parts)
     return f'"""\n{cmd}\n"""'
 
@@ -241,7 +271,8 @@ def _directive_lines(directives: Dict[str, Any]) -> List[str]:
 def _process_block(step_name: str,
                    instance: Any,
                    inputs_wires: Dict[str, List],
-                   outputs_wires: Dict[str, List]) -> str:
+                   outputs_wires: Dict[str, List],
+                   python: str = 'python') -> str:
     """Emit a ``process { ... }`` block for a non-plumbing Step."""
     lines = [f'process {step_name} {{']
 
@@ -269,7 +300,7 @@ def _process_block(step_name: str,
             lines.append(f'    {decl}')
 
     lines.append('    script:')
-    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires))
+    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires, python))
 
     lines.append('}')
     return '\n'.join(lines)
@@ -377,6 +408,7 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
     options = options or {}
     workflow_name = options.get('workflow_name', 'main')
     header = options.get('header', 'nextflow.enable.dsl=2\n')
+    python = options.get('python', 'python')
 
     step_paths = composite.step_paths
     step_dependencies = getattr(composite, 'step_dependencies', {}) or {}
@@ -418,7 +450,7 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
                                     bridge_inputs))
         else:
             process_blocks.append(
-                _process_block(name, instance, inputs_wires, outputs_wires))
+                _process_block(name, instance, inputs_wires, outputs_wires, python))
 
             # Emit a call with positional channel args in input-port order.
             call_args = []
@@ -439,6 +471,44 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
             workflow_lines.append(f'    {call}')
 
     workflow_lines.append('}')
+
+    from process_bigraph.composite import Composite as _Composite
+    default_steps = options.get('composite_steps', 1000)
+    doc_map = options.get('composite_documents', {})
+
+    for node_path, node in (getattr(composite, 'process_paths', {}) or {}).items():
+        instance = node.get('instance')
+        if not isinstance(instance, _Composite):
+            continue
+        name = _path_to_step_name(node_path)
+        inputs_wires = node.get('inputs') or {}
+        outputs_wires = node.get('outputs') or {}
+        doc_ref = doc_map.get(name, f'{name}_document.json')
+
+        block_lines = [f'process {name} {{']
+        if inputs_wires:
+            block_lines.append('    input:')
+            for port in inputs_wires:
+                block_lines.append(f'    path {port}')
+        if outputs_wires:
+            block_lines.append('    output:')
+            for port in outputs_wires:
+                block_lines.append(f'    path "{port}.json"')
+        block_lines.append('    script:')
+        block_lines.append(_composite_node_script(
+            instance, doc_ref, default_steps, inputs_wires, outputs_wires, python))
+        block_lines.append('}')
+        process_blocks.append('\n'.join(block_lines))
+
+        call_args = [
+            _channel_expr_for_input(port, wire, path_to_channel, None, bridge_inputs)
+            for port, wire in inputs_wires.items()]
+        out_port, out_wire = next(iter(outputs_wires.items()), (None, None))
+        if out_wire is not None:
+            out_channel = _path_to_channel_name(tuple(out_wire))
+            workflow_lines.insert(-1, f'    {out_channel} = {name}({", ".join(call_args)})')
+        else:
+            workflow_lines.insert(-1, f'    {name}({", ".join(call_args)})')
 
     parts = [header.rstrip(), '']
     parts.extend(process_blocks)
