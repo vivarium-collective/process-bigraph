@@ -128,54 +128,63 @@ def _is_plumbing(instance: Any) -> bool:
 
 
 def _topological_order(step_paths: Dict[Path, Dict],
-                       step_dependencies: Dict[Path, Dict]) -> List[Path]:
+                       step_dependencies: Dict[Path, Dict],
+                       node_dependencies: Optional[Dict[Path, Dict]] = None) -> List[Path]:
     """Kahn's algorithm over the step graph.
 
-    Dependency: step A precedes step B if any of B's input_paths is
-    produced by A (appears in A's output_paths). Two-pointer reverse
-    lookup keeps this O(V+E).
+    Edge model: prefer ``node_dependencies`` (authoritative, prefix-aware).
+    For each shared store path, every writer in ``before`` precedes every
+    reader in ``after``. Falls back to exact ``input_path == output_path``
+    matching when ``node_dependencies`` is absent (back-compat).
     """
-    producers: Dict[Path, Path] = {}
-    for step_path, info in step_dependencies.items():
-        for out_path in info.get('output_paths', []):
-            producers[tuple(out_path)] = step_path
+    incoming = {sp: set() for sp in step_paths}
+    outgoing = {sp: set() for sp in step_paths}
 
-    incoming: Dict[Path, List[Path]] = {sp: [] for sp in step_paths}
-    outgoing: Dict[Path, List[Path]] = {sp: [] for sp in step_paths}
-    for step_path, info in step_dependencies.items():
-        for in_path in info.get('input_paths', []):
-            producer = producers.get(tuple(in_path))
-            if producer is not None and producer != step_path:
-                incoming[step_path].append(producer)
-                outgoing[producer].append(step_path)
+    if node_dependencies:
+        for deps in node_dependencies.values():
+            writers = [w for w in deps.get('before', ()) if w in step_paths]
+            readers = [r for r in deps.get('after', ()) if r in step_paths]
+            for w in writers:
+                for r in readers:
+                    if w != r:
+                        outgoing[w].add(r)
+                        incoming[r].add(w)
+    else:
+        producers = {}
+        for step_path, info in step_dependencies.items():
+            for out_path in info.get('output_paths', []):
+                producers[tuple(out_path)] = step_path
+        for step_path, info in step_dependencies.items():
+            for in_path in info.get('input_paths', []):
+                producer = producers.get(tuple(in_path))
+                if producer is not None and producer != step_path:
+                    incoming[step_path].add(producer)
+                    outgoing[producer].add(step_path)
 
-    ordered: List[Path] = []
-    ready = [sp for sp, preds in incoming.items() if not preds]
-    ready.sort()
-    remaining = dict(incoming)
-
+    ordered = []
+    remaining = {sp: set(preds) for sp, preds in incoming.items()}
+    ready = sorted(sp for sp, preds in remaining.items() if not preds)
     while ready:
         step = ready.pop(0)
         ordered.append(step)
         for consumer in outgoing[step]:
-            remaining[consumer] = [p for p in remaining[consumer] if p != step]
-            if not remaining[consumer] and consumer not in ordered:
-                if consumer not in ready:
-                    ready.append(consumer)
+            remaining[consumer].discard(step)
+            if not remaining[consumer] and consumer not in ordered and consumer not in ready:
+                ready.append(consumer)
         ready.sort()
 
     if len(ordered) != len(step_paths):
         missing = set(step_paths) - set(ordered)
         raise ValueError(
-            f"step graph contains a cycle; could not order: {sorted(missing)!r}"
-        )
+            f"step graph contains a cycle; could not order: {sorted(missing)!r}")
     return ordered
 
 
 def _script_body(instance: Any,
                  step_name: str,
                  inputs_wires: Dict[str, List],
-                 outputs_wires: Dict[str, List]) -> str:
+                 outputs_wires: Dict[str, List],
+                 python: str = 'python') -> str:
     """Return the script block for a process.
 
     Priority order:
@@ -197,13 +206,48 @@ def _script_body(instance: Any,
         f'--out {port}={port}.json' for port in outputs_wires
     )
     parts = [
-        'python -m process_bigraph.run_step',
+        f'{python} -m process_bigraph.run_step',
         f'--class {fq}',
     ]
     if in_flags:
         parts.append(in_flags)
     if out_flags:
         parts.append(out_flags)
+    cmd = ' \\\n    '.join(parts)
+    return f'"""\n{cmd}\n"""'
+
+
+def _composite_node_script(instance: Any,
+                           doc_ref: str,
+                           steps: int,
+                           inputs_wires: Dict[str, List],
+                           outputs_wires: Dict[str, List],
+                           python: str = 'python') -> str:
+    """Emit the ``script:`` block for a whole-Composite node.
+
+    Runs the entire nested simulation via ``run_composite``: the first input
+    port (if any) is staged as the initial-state document; the first output
+    port (if any) receives the final-state document.
+
+    EXPERIMENTAL: the composite-node → run_composite rendering is
+    scaffolding and not yet runnable end-to-end — the composite document is
+    not auto-staged and composite nodes are not yet integrated into the
+    topological ordering. The plain Step-network path IS fully supported.
+    See docs/superpowers/specs/2026-08-13-nextflow-step-network-deploy-design.md.
+    """
+    parts = [
+        f'{python} -m process_bigraph.run_composite',
+        f'--document {doc_ref}',
+        f'--steps {steps}',
+    ]
+    in_iter = iter(inputs_wires)
+    first_in = next(in_iter, None)
+    if first_in is not None:
+        parts.append(f'--initial-state ${{{first_in}}}')
+    out_iter = iter(outputs_wires)
+    first_out = next(out_iter, None)
+    if first_out is not None:
+        parts.append(f'--state-out {first_out}.json')
     cmd = ' \\\n    '.join(parts)
     return f'"""\n{cmd}\n"""'
 
@@ -233,7 +277,8 @@ def _directive_lines(directives: Dict[str, Any]) -> List[str]:
 def _process_block(step_name: str,
                    instance: Any,
                    inputs_wires: Dict[str, List],
-                   outputs_wires: Dict[str, List]) -> str:
+                   outputs_wires: Dict[str, List],
+                   python: str = 'python') -> str:
     """Emit a ``process { ... }`` block for a non-plumbing Step."""
     lines = [f'process {step_name} {{']
 
@@ -253,15 +298,20 @@ def _process_block(step_name: str,
                 port, step_inputs_schema.get(port, {}), class_overrides)
             lines.append(f'    {decl}')
 
+    uses_run_step = not hasattr(instance, 'nextflow_script')
+
     if outputs_wires:
         lines.append('    output:')
         for port in outputs_wires:
-            decl = _port_to_nextflow_decl(
-                port, step_outputs_schema.get(port, {}), class_overrides)
+            if port not in class_overrides and uses_run_step:
+                decl = f'path "{port}.json"'
+            else:
+                decl = _port_to_nextflow_decl(
+                    port, step_outputs_schema.get(port, {}), class_overrides)
             lines.append(f'    {decl}')
 
     lines.append('    script:')
-    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires))
+    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires, python))
 
     lines.append('}')
     return '\n'.join(lines)
@@ -361,19 +411,37 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
         composite: an initialized ``process_bigraph.Composite``.
         options: optional dict; recognized keys:
             ``workflow_name`` (default ``'main'``) — entry workflow name.
+                ``deploy()`` passes ``''`` (an unnamed entry workflow),
+                because ``main`` is reserved in Nextflow.
             ``header`` (default DSL2 declaration) — leading text.
+            ``python`` (default ``'python'``) — interpreter used in emitted
+                task scripts; ``deploy()`` pins this to ``sys.executable``.
+            ``composite_steps`` (default ``1000``) — steps to advance a
+                whole-Composite node (experimental path).
+            ``composite_documents`` (default ``{}``) — ``{step_name:
+                document_path}`` for whole-Composite nodes (experimental path).
 
     Returns:
         The rendered workflow document, ready to save as ``.nf``.
+
+    Composite nodes (nested ``Composite`` instances rendered as a whole-task
+    ``run_composite`` process, see ``_composite_node_script``): EXPERIMENTAL.
+    This rendering path is scaffolding and not yet runnable end-to-end — the
+    composite document is not auto-staged and composite nodes are not yet
+    integrated into the topological ordering. The plain Step-network path IS
+    fully supported. See
+    docs/superpowers/specs/2026-08-13-nextflow-step-network-deploy-design.md.
     """
     options = options or {}
     workflow_name = options.get('workflow_name', 'main')
     header = options.get('header', 'nextflow.enable.dsl=2\n')
+    python = options.get('python', 'python')
 
     step_paths = composite.step_paths
     step_dependencies = getattr(composite, 'step_dependencies', {}) or {}
 
-    order = _topological_order(step_paths, step_dependencies)
+    node_dependencies = getattr(composite, 'node_dependencies', None)
+    order = _topological_order(step_paths, step_dependencies, node_dependencies)
 
     # Assign one channel per producer output_path.
     path_to_channel: Dict[Path, str] = {}
@@ -409,7 +477,7 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
                                     bridge_inputs))
         else:
             process_blocks.append(
-                _process_block(name, instance, inputs_wires, outputs_wires))
+                _process_block(name, instance, inputs_wires, outputs_wires, python))
 
             # Emit a call with positional channel args in input-port order.
             call_args = []
@@ -430,6 +498,49 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
             workflow_lines.append(f'    {call}')
 
     workflow_lines.append('}')
+
+    from process_bigraph.composite import Composite as _Composite
+    default_steps = options.get('composite_steps', 1000)
+    doc_map = options.get('composite_documents', {})
+
+    for node_path, node in (getattr(composite, 'process_paths', {}) or {}).items():
+        instance = node.get('instance')
+        if not isinstance(instance, _Composite):
+            continue
+        name = _path_to_step_name(node_path)
+        inputs_wires = node.get('inputs') or {}
+        outputs_wires = node.get('outputs') or {}
+        doc_ref = doc_map.get(name, f'{name}_document.json')
+
+        block_lines = [f'process {name} {{']
+        if inputs_wires:
+            block_lines.append('    input:')
+            for port in inputs_wires:
+                block_lines.append(f'    path {port}')
+        if outputs_wires:
+            # _composite_node_script only ever writes the FIRST output port
+            # (via --state-out {first_out}.json) — declaring `output:` for
+            # every port here would make Nextflow expect files 2..n that are
+            # never written ("Missing output file(s)").
+            first_out_port = next(iter(outputs_wires), None)
+            if first_out_port is not None:
+                block_lines.append('    output:')
+                block_lines.append(f'    path "{first_out_port}.json"')
+        block_lines.append('    script:')
+        block_lines.append(_composite_node_script(
+            instance, doc_ref, default_steps, inputs_wires, outputs_wires, python))
+        block_lines.append('}')
+        process_blocks.append('\n'.join(block_lines))
+
+        call_args = [
+            _channel_expr_for_input(port, wire, path_to_channel, None, bridge_inputs)
+            for port, wire in inputs_wires.items()]
+        out_port, out_wire = next(iter(outputs_wires.items()), (None, None))
+        if out_wire is not None:
+            out_channel = _path_to_channel_name(tuple(out_wire))
+            workflow_lines.insert(-1, f'    {out_channel} = {name}({", ".join(call_args)})')
+        else:
+            workflow_lines.insert(-1, f'    {name}({", ".join(call_args)})')
 
     parts = [header.rstrip(), '']
     parts.extend(process_blocks)

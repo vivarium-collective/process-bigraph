@@ -147,30 +147,17 @@ def get_type_providers() -> list:
 # without ray installed. ``ray.remote(...)`` is applied lazily on first use
 # (cached) inside ``_remote_actor_class()``.
 # ---------------------------------------------------------------------------
-def _apply_type_providers(core, providers: list) -> None:
+def _apply_type_providers(core, providers: list):
     """Import each (module, attr, args, kwargs) provider and call
     ``fn(core, *args, **kwargs)`` to register custom types. Imports
     are lazy so the provider's module doesn't have to be installed
     where the protocol module loads. Legacy 2-tuple form
-    ``(module, attr)`` is also accepted for back-compat."""
-    import importlib
-    for entry in providers:
-        if len(entry) == 2:
-            module_name, attr_name = entry
-            args, kwargs = (), {}
-        else:
-            module_name, attr_name, args, kwargs = entry
-        try:
-            mod = importlib.import_module(module_name)
-            fn = getattr(mod, attr_name)
-            fn(core, *args, **kwargs)
-        except Exception as e:
-            import sys
-            sys.stderr.write(
-                f'[ray-protocol] type provider {module_name}.{attr_name} '
-                f'failed: {type(e).__name__}: {e}\n')
-            sys.stderr.flush()
-            raise
+    ``(module, attr)`` is also accepted for back-compat.
+
+    Returns the (possibly replaced) core object."""
+    # Lazy import to avoid circular dependency
+    from process_bigraph.workflow.provision import provision_core
+    return provision_core(core, providers)
 
 
 def _make_state_writeable(config: dict) -> None:
@@ -218,7 +205,7 @@ class _ProcessActor:
         from process_bigraph import allocate_core
         core = allocate_core()
         if type_providers:
-            _apply_type_providers(core, type_providers)
+            core = _apply_type_providers(core, type_providers)
         _make_state_writeable(config)
         self.instance = cls(config, core=core)
 
@@ -456,7 +443,7 @@ def _batch_actor_class():
             from process_bigraph import allocate_core
             self.core = allocate_core()
             if type_providers:
-                _apply_type_providers(self.core, type_providers)
+                self.core = _apply_type_providers(self.core, type_providers)
             self.composites: Dict[int, Any] = {}
 
         def init_cell(self, proc_id: int, config: dict) -> str:
