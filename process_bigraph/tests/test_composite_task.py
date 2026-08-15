@@ -67,6 +67,24 @@ def ramp_toy_ram(rate=2.0, start=1.0):
 _IMPORT = ['process_bigraph.tests.test_composite_task']
 
 
+@pytest.fixture(autouse=True)
+def _ensure_toy_generators_registered():
+    """A full-suite run can have another test module's autouse fixture
+    (test_composite_generator.py's ``_clear_registry``) wipe the global
+    composite-generator registry between tests. Re-apply the decorators
+    here so both toy generators are registered before every test in this
+    module, regardless of cross-file run order/pollution.
+    """
+    composite_generator(
+        name='ramp_toy_task',
+        core_extensions=[_provision_ramp],
+        emitters=[{'address': 'local:JSONEmitter', 'config': {}}],
+    )(ramp_toy_task)
+    composite_generator(
+        name='ramp_toy_ram', core_extensions=[_provision_ramp],
+    )(ramp_toy_ram)
+
+
 def _core():
     core = allocate_core()
     core.register_link('_TaskRamp', _Ramp)

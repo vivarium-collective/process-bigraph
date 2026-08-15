@@ -58,6 +58,21 @@ def wf_ramp_toy(rate=2.0, start=1.0):
 _IMPORT = ['process_bigraph.tests.test_workflow_backend']
 
 
+@pytest.fixture(autouse=True)
+def _ensure_wf_ramp_toy_registered():
+    """A full-suite run can have another test module's autouse fixture
+    (test_composite_generator.py's ``_clear_registry``) wipe the global
+    composite-generator registry between tests. Re-apply the decorator
+    here so ``wf_ramp_toy`` is registered before every test in this
+    module, regardless of cross-file run order/pollution.
+    """
+    composite_generator(
+        name='wf_ramp_toy',
+        core_extensions=[_provision_wf_ramp],
+        emitters=[{'address': 'local:JSONEmitter', 'config': {}}],
+    )(wf_ramp_toy)
+
+
 # ── toy producer Step (feeds CompositeTask's per_match scatter port) ────
 
 class _WFProducer(Step):

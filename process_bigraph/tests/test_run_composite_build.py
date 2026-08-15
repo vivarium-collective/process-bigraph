@@ -1,4 +1,7 @@
 import json
+
+import pytest
+
 from process_bigraph.composite import Process
 from process_bigraph.composite_generator import composite_generator
 
@@ -29,6 +32,17 @@ def ramp_toy(rate=2.0, start=1.0, cache_dir=''):
 
 
 _IMP = ['process_bigraph.tests.test_run_composite_build']
+
+
+@pytest.fixture(autouse=True)
+def _ensure_ramp_toy_registered():
+    """A full-suite run can have another test module's autouse fixture
+    (test_composite_generator.py's ``_clear_registry``) wipe the global
+    composite-generator registry between tests. Re-apply the decorator
+    here so ``ramp_toy`` is registered before every test in this module,
+    regardless of cross-file run order/pollution.
+    """
+    composite_generator(name='ramp_toy', core_extensions=[provision_ramp])(ramp_toy)
 
 
 def test_build_via_generator_and_extensions(tmp_path):
