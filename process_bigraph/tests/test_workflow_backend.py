@@ -4,8 +4,6 @@ Uses a toy ``@composite_generator`` (``wf_ramp_toy``) plus a toy producer
 ``Step``, both registered in this module — pbg's own test suite must not
 import v2ecoli or any downstream workspace.
 """
-import json
-import os
 
 import pytest
 from bigraph_schema import allocate_core

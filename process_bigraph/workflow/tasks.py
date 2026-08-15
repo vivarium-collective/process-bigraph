@@ -29,7 +29,6 @@ most:
 """
 from __future__ import annotations
 
-import hashlib
 import importlib
 import importlib.metadata
 import inspect

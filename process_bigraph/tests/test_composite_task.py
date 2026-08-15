@@ -183,7 +183,6 @@ def test_cache_hit_launches_zero_subprocesses(tmp_path):
 
     assert second == first
 
-    node_dir = task._workdir_root() if hasattr(task, '_workdir_root') else None
     # provenance.json (F5) records the cache hit explicitly
     prov_path = task._provenance_path()
     provenance = json.loads(prov_path.read_text() if hasattr(prov_path, 'read_text')
