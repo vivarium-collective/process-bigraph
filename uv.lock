@@ -1863,21 +1863,11 @@ wheels = [
 ]
 
 [[package]]
-name = "pbg-emitters"
-version = "0.1.0"
-source = { git = "https://github.com/vivarium-collective/pbg-emitters.git?rev=main#4c7560b30c6cb18057a096ab469b76dd6532d8a7" }
-dependencies = [
-    { name = "bigraph-schema" },
-    { name = "numpy" },
-    { name = "process-bigraph" },
-]
-
-[[package]]
 name = "pexpect"
 version = "4.9.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "ptyprocess", marker = "sys_platform != 'emscripten' and sys_platform != 'win32'" },
+    { name = "ptyprocess" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/42/92/cc564bf6381ff43ce1f4d06852fc19a2f11d180f23dc32d9588bee2f149d/pexpect-4.9.0.tar.gz", hash = "sha256:ee7d41123f3c9911050ea2c2dac107568dc43b2d3b0c7557a33212c398ead30f", size = 166450, upload-time = "2023-11-25T09:07:26.339Z" }
 wheels = [
@@ -2055,12 +2045,12 @@ dev = [
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "notebook" },
-    { name = "pbg-emitters" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ray" },
     { name = "typing-inspect" },
     { name = "uvicorn" },
+    { name = "viva-emitters" },
 ]
 
 [package.metadata]
@@ -2092,12 +2082,12 @@ dev = [
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "notebook" },
-    { name = "pbg-emitters", extras = ["sqlite"], git = "https://github.com/vivarium-collective/pbg-emitters.git?rev=main" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ray", specifier = ">=2.10" },
     { name = "typing-inspect", specifier = ">=0.9.0" },
     { name = "uvicorn", specifier = ">=0.35.0" },
+    { name = "viva-emitters", extras = ["sqlite"], specifier = ">=0.2.3" },
 ]
 
 [[package]]
@@ -3147,6 +3137,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/1f/93/041fca8274050e40e6791f267d82e0e2e27dd165627bd640d3e0e378d877/uvicorn-0.46.0.tar.gz", hash = "sha256:fb9da0926999cc6cb22dc7cd71a94a632f078e6ae47ff683c5c420750fb7413d", size = 88758, upload-time = "2026-04-23T07:16:00.151Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/31/a3/5b1562db76a5a488274b2332a97199b32d0442aca0ed193697fd47786316/uvicorn-0.46.0-py3-none-any.whl", hash = "sha256:bbebbcbed972d162afca128605223022bedd345b7bc7855ce66deb31487a9048", size = 70926, upload-time = "2026-04-23T07:15:58.355Z" },
+]
+
+[[package]]
+name = "viva-emitters"
+version = "0.2.3"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "bigraph-schema" },
+    { name = "numpy" },
+    { name = "process-bigraph" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/82/b4/8c2294e66db930de5c2b69c3e867ce98cc53a7bbd0050403ae274c700930/viva_emitters-0.2.3.tar.gz", hash = "sha256:208bc26a7c69dfee8b7a62ac012a21d5eb834a5cbc9afd3fbf6a2661971bdba3", size = 111540, upload-time = "2026-08-10T01:51:07.431Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/19/ad/add1f3a64cf14bccdaa8e39f1209743d42a5a9f09c57264dadd12bcf576f/viva_emitters-0.2.3-py3-none-any.whl", hash = "sha256:196cd751b4bb0023d08b7ea7668ba2f0c4a5c45518f927ea7d3c602f4c89fca5", size = 91748, upload-time = "2026-08-10T01:51:05.958Z" },
 ]
 
 [[package]]

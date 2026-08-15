@@ -593,19 +593,19 @@ class JSONEmitter(Emitter):
 
 
 # ------------------------------------------------------------
-# Back-compat re-exports from pbg-emitters
+# Back-compat re-exports from viva-emitters
 # ------------------------------------------------------------
 # SQLiteEmitter + ParquetEmitter were extracted to a focused
-# emitter library (https://github.com/vivarium-collective/pbg-emitters)
-# so each can iterate (and ship optional heavy deps) independently of
-# the framework. Existing code that imports them from
-# ``process_bigraph.emitter`` keeps working as long as ``pbg-emitters``
-# is installed (``pip install pbg-emitters[sqlite]`` or
-# ``pip install pbg-emitters[parquet]``). Install both via the
+# emitter library (https://github.com/vivarium-collective/viva-emitters,
+# formerly pbg-emitters) so each can iterate (and ship optional heavy deps)
+# independently of the framework. Existing code that imports them from
+# ``process_bigraph.emitter`` keeps working as long as ``viva-emitters``
+# is installed (``pip install viva-emitters[sqlite]`` or
+# ``pip install viva-emitters[parquet]``). Install both via the
 # ``process-bigraph[emitters]`` extra.
 try:
-    from pbg_emitters import SQLiteEmitter  # noqa: F401
-    from pbg_emitters import (  # noqa: F401
+    from viva_emitters import SQLiteEmitter  # noqa: F401
+    from viva_emitters import (  # noqa: F401
         save_simulation_metadata,
         list_simulations,
         load_history,
@@ -616,6 +616,6 @@ except ImportError:
     pass
 
 try:
-    from pbg_emitters import ParquetEmitter  # noqa: F401
+    from viva_emitters import ParquetEmitter  # noqa: F401
 except ImportError:
     pass
