@@ -49,14 +49,12 @@ ec2-ssm = [
     "boto3>=1.28",
 ]
 
-# SQLiteEmitter + ParquetEmitter were extracted to the focused pbg-emitters
-# library (https://github.com/vivarium-collective/pbg-emitters) so each
-# emitter can ship its own heavy deps without forcing them on every user.
-# ``process_bigraph.emitter`` re-exports them as a back-compat shim. To use
-# the shim, install pbg-emitters separately:
-#   pip install "pbg-emitters[sqlite,parquet] @ git+https://github.com/vivarium-collective/pbg-emitters.git@main"
-# (Not declared here as a project extra because PyPI rejects direct-URL
-# deps in published optional-dependencies metadata.)
+# SQLiteEmitter + ParquetEmitter were extracted to the focused viva-emitters
+# library (https://github.com/vivarium-collective/viva-emitters, formerly
+# pbg-emitters) so each emitter can ship its own heavy deps without forcing
+# them on every user. ``process_bigraph.emitter`` re-exports them as a
+# back-compat shim. To use the shim, install viva-emitters separately:
+#   pip install "viva-emitters[sqlite,parquet]"
 
 [dependency-groups]
 dev = [
@@ -78,7 +76,7 @@ dev = [
     # Lets the back-compat re-export shim resolve in CI / dev so the
     # SQLiteEmitter tests run; production users opt in via
     # ``process-bigraph[emitters]``.
-    "pbg-emitters[sqlite] @ git+https://github.com/vivarium-collective/pbg-emitters.git@main",
+    "viva-emitters[sqlite]>=0.2.3",
 ]
 
 #[tool.uv.sources]
