@@ -603,19 +603,36 @@ class JSONEmitter(Emitter):
 # is installed (``pip install viva-emitters[sqlite]`` or
 # ``pip install viva-emitters[parquet]``). Install both via the
 # ``process-bigraph[emitters]`` extra.
-try:
-    from viva_emitters import SQLiteEmitter  # noqa: F401
-    from viva_emitters import (  # noqa: F401
-        save_simulation_metadata,
-        list_simulations,
-        load_history,
-        load_simulation_metadata,
-        mark_simulation_finished,
-    )
-except ImportError:
-    pass
+#
+# These are re-exported LAZILY via a module ``__getattr__`` (PEP 562) rather
+# than eager ``from viva_emitters import ...`` at import time. viva-emitters'
+# ``__init__`` imports ``viva_emitters.sqlite_emitter``, which imports
+# ``process_bigraph.emitter.Emitter`` — a cycle. With an eager re-export, an
+# ``import viva_emitters`` that lands FIRST leaves this module half-built when
+# viva_emitters re-enters it, the re-export raises ImportError against the
+# partially-initialised viva_emitters, and the name is silently dropped for the
+# rest of the process. Resolving on first *attribute access* instead runs only
+# after both modules are fully initialised, so the order can't drop the name.
+_VIVA_REEXPORTS = frozenset({
+    "SQLiteEmitter",
+    "ParquetEmitter",
+    "save_simulation_metadata",
+    "list_simulations",
+    "load_history",
+    "load_simulation_metadata",
+    "mark_simulation_finished",
+})
 
-try:
-    from viva_emitters import ParquetEmitter  # noqa: F401
-except ImportError:
-    pass
+
+def __getattr__(name):
+    if name in _VIVA_REEXPORTS:
+        import viva_emitters
+        try:
+            return getattr(viva_emitters, name)
+        except AttributeError as exc:
+            raise ImportError(
+                f"cannot import name {name!r} from 'process_bigraph.emitter': "
+                f"viva-emitters is installed but does not export {name!r} "
+                f"(is the needed extra installed, e.g. viva-emitters[parquet])"
+            ) from exc
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
