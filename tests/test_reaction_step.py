@@ -51,12 +51,28 @@ def test_typed_store_fires_a_structural_division():
     assert 'cell' not in sim.state['colony']
 
 
-def test_untyped_store_warns():
-    """An UNTYPED store realizes to a plain dict (no _control); the reaction silently
-    no-ops — ReactionStep now warns so this is diagnosable."""
+def test_untyped_store_with_controls_now_works():
+    """An UNTYPED store of node-tagged (_control) dicts now realizes as nodes and
+    the reaction fires — no manual tree[node] typing, no warning. (Requires the
+    bigraph-schema _control-inference fix; falls back to warning without it.)"""
     core = allocate_core()
     state = {
         'colony': {'cell': {'_control': 'cell', 'contents': {'biomass': 1.0}}},  # no _type
+        'divider': _step_node(['colony']),
+    }
+    sim = Composite({'state': state}, core=core)
+    if sim.state['colony'].get('cell', {}).get('_control') != 'cell':
+        pytest.skip("bigraph-schema _control-inference fix not present")
+    sim.run(1)
+    assert _cells(sim.state['colony']) == {'daughter_1', 'daughter_2'}
+
+
+def test_nodeless_store_warns():
+    """A store with rules but NO _control-tagged nodes anywhere (nothing to match)
+    warns — the genuine footgun the diagnostic is for."""
+    core = allocate_core()
+    state = {
+        'colony': {'x': 1.0, 'y': 2.0},   # plain scalars, no nodes
         'divider': _step_node(['colony']),
     }
     sim = Composite({'state': state}, core=core)
