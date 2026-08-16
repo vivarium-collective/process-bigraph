@@ -39,8 +39,19 @@ Usage::
 """
 
 import random
+import warnings
 
 from process_bigraph.composite import Step
+
+
+def _has_any_control(node):
+    """True if any dict in the subtree carries a ``_control`` tag (i.e. it looks
+    like a node tree the matcher can act on)."""
+    if isinstance(node, dict):
+        if node.get('_control') is not None:
+            return True
+        return any(_has_any_control(v) for v in node.values())
+    return False
 
 from bigraph_schema.assembly import (
     find_matches,
@@ -77,7 +88,25 @@ class ReactionStep(Step):
 
     def update(self, state):
         subtree = state.get('state', {})
+        result = self._fire(subtree)
+        # Diagnose the common footgun: rules present but the target subtree has no
+        # ``_control``-tagged nodes for them to match. This happens when the wired
+        # store was left UNTYPED — a composite realizes an untyped store as a plain
+        # dict, dropping node semantics, so the reaction silently no-ops. Typing the
+        # store ``tree[node]`` fixes it. Warn once so this is diagnosable, not silent.
+        if not result and self.rules and not getattr(self, '_warned_untyped', False):
+            if isinstance(subtree, dict) and subtree and not _has_any_control(subtree):
+                warnings.warn(
+                    "ReactionStep has rules but its target subtree contains no "
+                    "'_control'-tagged nodes to match. The wired store is likely "
+                    "UNTYPED — an untyped store is realized as a plain dict, which "
+                    "drops the node/_control structure the matcher needs. Type the "
+                    "store 'tree[node]' to enable structural rewrites.",
+                    stacklevel=2)
+                self._warned_untyped = True
+        return result
 
+    def _fire(self, subtree):
         if self.mode == 'stochastic':
             # Collect all candidates
             candidates = []
