@@ -7,7 +7,19 @@ silent process-bigraph wiring hazards into a classified ``Crossed`` or a loud
 accepts in silence.
 """
 
-from bigraph_schema.translator import Crossed, Refusal
+import pytest
+
+# The Translator kernel (Crossed/Refusal) ships only in a bigraph-schema build
+# that includes the `translator` module. Skip this file cleanly on an install
+# that lacks it rather than aborting collection of the whole suite — a single
+# unguarded top-level import of a version-specific symbol otherwise takes every
+# other test down with it.
+translator = pytest.importorskip(
+    "bigraph_schema.translator",
+    reason="requires a bigraph-schema build with the Translator kernel "
+           "(bigraph_schema.translator: Crossed/Refusal)",
+)
+Crossed, Refusal = translator.Crossed, translator.Refusal
 
 from process_bigraph import allocate_core, Composite
 from process_bigraph.composite import Process
