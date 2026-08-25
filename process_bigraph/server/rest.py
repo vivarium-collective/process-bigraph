@@ -1,13 +1,33 @@
 import uuid
 
-from fastapi import FastAPI
-from fastapi_utils.cbv import cbv
-from fastapi_utils.inferring_router import InferringRouter
-
 from bigraph_schema import Edge
 
 
+def _require_fastapi():
+    """Import the optional REST-server dependencies lazily.
+
+    ``fastapi`` / ``fastapi-utils`` / ``uvicorn`` ship only with the
+    ``[server-rest]`` extra. Importing this module must therefore never fail
+    when they are absent — only actually building or starting the server needs
+    them — so the imports live here instead of at module top level. This keeps a
+    bare install (and, critically, test collection) from crashing on an optional
+    dependency; it raises a clear install hint if the server is used without it.
+    """
+    try:
+        from fastapi import FastAPI
+        from fastapi_utils.cbv import cbv
+        from fastapi_utils.inferring_router import InferringRouter
+    except ImportError as e:  # pragma: no cover - only hit without the extra
+        raise ImportError(
+            "process_bigraph.server.rest requires the optional REST-server "
+            "dependencies. Install them with: "
+            "pip install 'process-bigraph[server-rest]'"
+        ) from e
+    return FastAPI, cbv, InferringRouter
+
+
 def make_router(core):
+    _, cbv, InferringRouter = _require_fastapi()
     router = InferringRouter()
     processes = {}
 
@@ -83,6 +103,7 @@ def make_router(core):
 
 
 def start_server(core):
+    FastAPI, _, _ = _require_fastapi()
     app = FastAPI()
     router = make_router(core)
     app.include_router(router)
