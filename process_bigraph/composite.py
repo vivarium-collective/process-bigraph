@@ -2075,25 +2075,6 @@ class Composite(Process):
         """
         return self.core.render(self.schema)
 
-    def nextflow(self, options: Optional[Dict[str, Any]] = None) -> str:
-        """Render this composite as a Nextflow DSL2 workflow document.
-
-        Delegates to ``process_bigraph.nextflow.render_composite``. See
-        that module for the full renderer description and the schema
-        annotations (``_cardinality``, ``_nextflow``,
-        ``_nextflow_directives``) it consumes.
-
-        Args:
-            options: optional renderer options; currently
-                ``workflow_name`` (default ``'main'``) and ``header``
-                (default ``nextflow.enable.dsl=2``) are recognized.
-
-        Returns:
-            The rendered Nextflow document as a string.
-        """
-        from process_bigraph.nextflow import render_composite
-        return render_composite(self, options)
-
     def save(
             self,
             filename: str = 'composite.json',

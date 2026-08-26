@@ -236,11 +236,6 @@ More tutorials are added continuously and appear automatically in the index.
 - **Distributed lifecycles** — *running parts of a composite off-process.*
   [docs/distributed_lifecycles.md](docs/distributed_lifecycles.md)
 
-- **Deploying a Step network to Nextflow** — *opt-in: compile a composite's
-  Step network into a Nextflow DSL2 workflow and run it on a batch backend
-  (local / SLURM). Nothing changes about `Composite.run()`.*
-  [docs/nextflow.md](docs/nextflow.md)
-
 ---
 
 ## 🧪 Reference Implementation: spatio-flux
