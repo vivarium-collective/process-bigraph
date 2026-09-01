@@ -382,7 +382,8 @@ def _emitter_node_from_decl(decl: dict, *, run_id: str | None = None,
 
 def install_default_emitters(state: dict, source: Any, *, run_id: str | None = None,
                              out_dir: Any = None, core: Any = None,
-                             on_unknown_address: str = "raise") -> dict:
+                             on_unknown_address: str = "raise",
+                             on_unresolved_path: str = "raise") -> dict:
     """Return a copy of ``state`` with the composite's declared default
     emitter(s) installed as ``emitter`` / ``emitter_<i>`` step nodes.
 
@@ -403,14 +404,19 @@ def install_default_emitters(state: dict, source: Any, *, run_id: str | None = N
     addresses against the core's link registry. ``on_unknown_address`` selects
     the policy for an address the core doesn't know: ``"raise"`` (default) fails
     loud at build time; ``"ram"`` is the explicit opt-in to the historical
-    silent degrade to ``local:RAMEmitter``. Returns ``state`` unchanged when
-    nothing is declared, so callers can invoke it unconditionally.
+    silent degrade to ``local:RAMEmitter``. ``on_unresolved_path`` selects the
+    policy for a declared emit path that resolves to no store: ``"raise"``
+    (default) fails loud so a typo'd observable cannot silently emit nothing;
+    ``"warn"`` builds but logs; ``"ignore"`` is the historical silence. Returns
+    ``state`` unchanged when nothing is declared, so callers can invoke it
+    unconditionally.
     """
     from process_bigraph.emitter import install_emitters
 
     return install_emitters(
         state, emitter_defaults(source), run_id=run_id, out_dir=out_dir,
-        core=core, on_unknown_address=on_unknown_address)
+        core=core, on_unknown_address=on_unknown_address,
+        on_unresolved_path=on_unresolved_path)
 
 
 def apply_core_extensions(entry: GeneratorEntry, core: Any) -> Any:

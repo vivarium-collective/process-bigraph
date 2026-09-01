@@ -3954,11 +3954,13 @@ def test_both_call_paths_materialize_equivalent_nodes():
              'paths': ['cell/mass']}]
     core = allocate_core()
 
-    via_emitter = install_emitters({'level': 1.0}, decl, core=core)
+    # The declared path must resolve to a real store — otherwise install_emitters
+    # now fails loud (a declared-but-missing emit path emits nothing, silently).
+    via_emitter = install_emitters({'cell': {'mass': 1.0}}, decl, core=core)
     # install_default_emitters reads a declaration list off a parsed static
     # spec dict (its `emitters:` key), then delegates to the same materializer.
     via_generator = install_default_emitters(
-        {'level': 1.0}, {'emitters': decl}, core=core)
+        {'cell': {'mass': 1.0}}, {'emitters': decl}, core=core)
 
     assert via_emitter['emitter'] == via_generator['emitter']
     assert via_emitter['emitter']['config']['subsample'] == 3
@@ -3985,6 +3987,112 @@ def test_declared_emitter_config_is_preserved():
 
     assert node['config']['subsample'] == 5
     assert 'emit' in node['config']
+
+
+class _RuntimeStoreWriter(Process):
+    """Writes an output to a store the document does not pre-declare — the
+    store is created at build time from this process's output wiring. Used to
+    prove the unresolved-emit-path check does not flag a legitimately
+    runtime-wired store."""
+
+    def inputs(self):
+        return {'tick': 'float'}
+
+    def outputs(self):
+        return {'level': 'float'}
+
+    def update(self, state, interval=None):
+        return {'level': 1.0}
+
+
+def test_unresolved_declared_emit_path_raises():
+    """A declared emit path that resolves to no store fails loud, listing the
+    bad path — a typo'd/renamed observable would otherwise wire an empty store
+    and emit nothing (zero columns), indistinguishable from 'never declared'.
+    This mirrors XArrayEmitter's 'Missing emit paths' raise."""
+    from process_bigraph.emitter import install_emitters
+
+    with pytest.raises(KeyError) as excinfo:
+        install_emitters(
+            {'x': 1.0, 'nested': {'y': 2.0}},
+            [{'address': 'local:RAMEmitter',
+              'paths': ['x', 'nested.y', 'does.not.exist']}],
+            core=allocate_core())
+
+    message = str(excinfo.value)
+    assert 'does.not.exist' in message      # names the offending path
+    # the valid paths resolve and so are NOT listed in the failure
+    assert "['does.not.exist']" in message
+
+
+def test_valid_declared_emit_paths_do_not_raise_and_emit():
+    """The check is a guard, not a gate: valid declared paths build and emit
+    normally under the default raise policy."""
+    from process_bigraph.emitter import install_emitters
+
+    core = allocate_core()
+    installed = install_emitters(
+        {'x': 1.0, 'nested': {'y': 2.0}},
+        [{'address': 'local:RAMEmitter', 'paths': ['x', 'nested.y']}],
+        core=core)
+    composite = Composite({'state': installed}, core=core)
+    composite.run(2)
+    history = list(gather_emitter_results(composite).values())[0]
+    assert history and 'x' in history[0] and 'nested_y' in history[0]
+
+
+def test_runtime_wired_store_emit_path_does_not_raise():
+    """A store no document node pre-declares but a process *wires* an output to
+    is a legitimate emit target (it is materialized at build time) — the check
+    must not flag it. This is the false-positive guard: the resolvable-path set
+    includes every process/step wiring target, not just pre-declared stores."""
+    from process_bigraph.emitter import install_emitters
+
+    core = allocate_core()
+    core.register_link('_RuntimeStoreWriter', _RuntimeStoreWriter)
+    state = {
+        'tick': 0.0,
+        'writer': {
+            '_type': 'process',
+            'address': 'local:_RuntimeStoreWriter',
+            'config': {},
+            'inputs': {'tick': ['tick']},
+            'outputs': {'level': ['runtime_level']},  # created at runtime
+        },
+    }
+    # 'runtime_level' is not a pre-declared store, yet resolves via the wiring.
+    installed = install_emitters(
+        state,
+        [{'address': 'local:RAMEmitter', 'paths': ['tick', 'runtime_level']}],
+        core=core)
+    composite = Composite({'state': installed}, core=core)
+    composite.run(2)
+    history = list(gather_emitter_results(composite).values())[0]
+    assert history and 'runtime_level' in history[0]
+
+
+def test_unresolved_emit_path_warn_and_ignore_policies():
+    """`on_unresolved_path` opts out of the hard raise: 'warn' builds but logs,
+    'ignore' restores the historical silence (for a store that only exists as a
+    dynamically-created runtime sub-store the static check cannot see)."""
+    import warnings as _warnings
+    from process_bigraph.emitter import install_emitters
+
+    core = allocate_core()
+    decl = [{'address': 'local:RAMEmitter', 'paths': ['typo_here']}]
+
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter('always')
+        install_emitters({'level': 1.0}, decl, core=core,
+                         on_unresolved_path='warn')
+    assert any('Missing emit paths' in str(w.message) for w in caught)
+
+    # 'ignore' does not raise or warn.
+    with _warnings.catch_warnings(record=True) as caught:
+        _warnings.simplefilter('always')
+        install_emitters({'level': 1.0}, decl, core=core,
+                         on_unresolved_path='ignore')
+    assert not any('Missing emit paths' in str(w.message) for w in caught)
 
 
 # ==========================================

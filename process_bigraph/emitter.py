@@ -20,6 +20,7 @@ import copy
 import json
 import os
 import uuid
+import warnings
 from typing import Dict
 
 import numpy as np
@@ -144,6 +145,112 @@ def _resolve_declared_address(address, name, registered, fallback, on_unknown_ad
         f"to fall back to {fallback!r} instead.")
 
 
+_EDGE_TYPES = ('process', 'step', 'edge')
+
+# Built-in stores the composite always provides but that need not appear as a
+# node in a raw document — never a "typo" even when absent from the state tree.
+_ALWAYS_PRESENT_PATHS = frozenset({('global_time',), ('time',)})
+
+
+def _iter_wire_targets(wires, parent):
+    '''Yield absolute store-path tuples from an edge's ``inputs``/``outputs``
+    wiring tree.
+
+    A wiring value is a path (list/tuple of segments), a nested dict of ports,
+    or a bare string. Relative segments (``'..'``) are resolved against
+    ``parent`` — the edge's containing path — so a store a process writes to is
+    recovered as an absolute path from the document root.
+    '''
+    if isinstance(wires, dict):
+        for value in wires.values():
+            yield from _iter_wire_targets(value, parent)
+    elif isinstance(wires, (list, tuple)):
+        path = list(parent)
+        for seg in wires:
+            if seg == '..':
+                if path:
+                    path.pop()
+            else:
+                path.append(str(seg))
+        yield tuple(path)
+    elif isinstance(wires, str):
+        yield tuple(parent) + (wires,)
+
+
+def _collect_known_store_paths(state, prefix=()):
+    '''The set of store paths a raw document *can* resolve.
+
+    This is every store branch/leaf path present in the state tree **plus**
+    every path any edge (process/step) wires an input or output to — because a
+    store a process writes to at runtime need not be pre-declared in the
+    document, yet is a legitimate emit target (see the ``runtime_store`` case in
+    the tests). Prefixes of a wired target are included too, so emitting a
+    container that holds a wired leaf resolves. Edge-internal ``config`` is not
+    walked (it is not observable state).
+
+    Used by :func:`_unresolved_emit_paths` to tell a typo'd emit path from a
+    store that will exist once the composite is built.
+    '''
+    known = set()
+    if not isinstance(state, dict):
+        # A bare-scalar leaf store (e.g. ``{'level': 1.0}``) — the path itself
+        # is the observable.
+        if prefix:
+            known.add(prefix)
+        return known
+
+    if state.get('_type') in _EDGE_TYPES or isinstance(state.get('instance'), Edge):
+        parent = prefix[:-1]
+        for port_key in ('inputs', 'outputs'):
+            for target in _iter_wire_targets(state.get(port_key) or {}, parent):
+                for i in range(1, len(target) + 1):
+                    known.add(target[:i])
+        return known
+
+    if prefix:
+        known.add(prefix)
+    for key, value in state.items():
+        if is_schema_key(key):
+            continue
+        known |= _collect_known_store_paths(value, prefix + (key,))
+    return known
+
+
+def _split_emit_path(path):
+    '''Split a declared emit path (slash- or dot-joined) into a segment tuple,
+    matching how :func:`emitter_node_from_declaration` wires it.'''
+    return tuple(part for part in str(path).replace('.', '/').split('/') if part)
+
+
+def _unresolved_emit_paths(state, declared_paths):
+    '''Declared emit paths that resolve to no store in ``state``.
+
+    A path resolves when it equals a known store path, is a prefix of one (a
+    container), or is a descendant of one (a leaf inside a wired store). Known
+    paths come from :func:`_collect_known_store_paths`. Anything else is a typo
+    or a renamed/removed observable — it would otherwise materialize as an empty
+    store and emit nothing, silently.
+
+    Limitation: stores created *dynamically at runtime* (e.g. per-agent
+    sub-stores a division process spawns) that are not statically wired in the
+    document cannot be seen here; a declared path under such a store is treated
+    as unresolved. Callers that legitimately emit those can pass
+    ``on_unresolved_path='warn'`` (or ``'ignore'``).
+    '''
+    known = _collect_known_store_paths(state)
+    unresolved = []
+    for path in declared_paths or []:
+        segments = _split_emit_path(path)
+        if not segments or segments in _ALWAYS_PRESENT_PATHS:
+            continue
+        resolves = any(
+            segments == k or k[:len(segments)] == segments or segments[:len(k)] == k
+            for k in known)
+        if not resolves:
+            unresolved.append(path)
+    return unresolved
+
+
 def emitter_node_from_declaration(
         decl,
         run_id=None,
@@ -242,8 +349,40 @@ def document_has_emitter(state, core=None):
     return False
 
 
+def _apply_unresolved_policy(state, decl, on_unresolved_path):
+    '''Enforce the ``on_unresolved_path`` policy for one declaration's paths.
+
+    ``"raise"`` (default) fails loud when a declared emit path resolves to no
+    store — the fix for the silent-empty-emit failure mode: a typo'd or renamed
+    observable otherwise materializes an empty store and emits zero columns,
+    indistinguishable from "never declared". ``"warn"`` logs loudly but builds;
+    ``"ignore"`` restores the historical silence.
+    '''
+    if on_unresolved_path not in ('raise', 'warn', 'ignore'):
+        raise ValueError(
+            "on_unresolved_path must be 'raise', 'warn', or 'ignore', "
+            f"got {on_unresolved_path!r}")
+    if on_unresolved_path == 'ignore':
+        return
+    unresolved = _unresolved_emit_paths(state, decl.get('paths'))
+    if not unresolved:
+        return
+    address = decl.get('address') or 'local:RAMEmitter'
+    message = (
+        f"Missing emit paths for emitter {address!r}: {unresolved}. "
+        "These declared paths resolve to no store in the composite — a typo, a "
+        "renamed observable, or a store no process wires. Wiring them anyway "
+        "materializes empty stores that emit nothing (zero columns), silently. "
+        "Fix the path, or — if the store is created dynamically at runtime and "
+        "cannot be seen statically — pass on_unresolved_path='warn' (or "
+        "'ignore').")
+    if on_unresolved_path == 'raise':
+        raise KeyError(message)
+    warnings.warn(message, stacklevel=2)
+
+
 def install_emitters(state, declarations, run_id=None, out_dir=None, core=None,
-                     on_unknown_address='raise'):
+                     on_unknown_address='raise', on_unresolved_path='raise'):
     '''Return a copy of ``state`` with the declared emitter(s) installed.
 
     Emitters land at the conventional ``emitter`` / ``emitter_<i>`` keys.
@@ -255,6 +394,15 @@ def install_emitters(state, declarations, run_id=None, out_dir=None, core=None,
     silent RAMEmitter fallback) is threaded to
     :func:`emitter_node_from_declaration`.
 
+    ``on_unresolved_path`` sets the policy when a declared emit path resolves to
+    no store in ``state``: ``"raise"`` (default) fails loud, listing the bad
+    paths, so a typo cannot silently emit nothing; ``"warn"`` builds but logs;
+    ``"ignore"`` is the historical silent behavior. The check is against the
+    pre-emitter state — existing stores plus every path a process/step wires —
+    so a store created at runtime by a process is *not* flagged. See
+    :func:`_unresolved_emit_paths` for the one case it cannot see (dynamically
+    created, non-statically-wired sub-stores).
+
     Returns ``state`` unchanged when nothing is declared.
     '''
     declarations = [decl for decl in (declarations or []) if isinstance(decl, dict)]
@@ -263,6 +411,7 @@ def install_emitters(state, declarations, run_id=None, out_dir=None, core=None,
 
     installed = dict(state)
     for index, decl in enumerate(declarations):
+        _apply_unresolved_policy(state, decl, on_unresolved_path)
         key = 'emitter' if index == 0 else f'emitter_{index}'
         installed[key] = emitter_node_from_declaration(
             decl, run_id=run_id, out_dir=out_dir, core=core,
