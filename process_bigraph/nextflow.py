@@ -184,7 +184,8 @@ def _script_body(instance: Any,
                  step_name: str,
                  inputs_wires: Dict[str, List],
                  outputs_wires: Dict[str, List],
-                 python: str = 'python') -> str:
+                 python: str = 'python',
+                 config_ref: Optional[str] = None) -> str:
     """Return the script block for a process.
 
     Priority order:
@@ -209,6 +210,8 @@ def _script_body(instance: Any,
         f'{python} -m process_bigraph.run_step',
         f'--class {fq}',
     ]
+    if config_ref:
+        parts.append(f'--config {config_ref}')
     if in_flags:
         parts.append(in_flags)
     if out_flags:
@@ -278,7 +281,8 @@ def _process_block(step_name: str,
                    instance: Any,
                    inputs_wires: Dict[str, List],
                    outputs_wires: Dict[str, List],
-                   python: str = 'python') -> str:
+                   python: str = 'python',
+                   config_ref: Optional[str] = None) -> str:
     """Emit a ``process { ... }`` block for a non-plumbing Step."""
     lines = [f'process {step_name} {{']
 
@@ -311,7 +315,8 @@ def _process_block(step_name: str,
             lines.append(f'    {decl}')
 
     lines.append('    script:')
-    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires, python))
+    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires,
+                              python, config_ref))
 
     lines.append('}')
     return '\n'.join(lines)
@@ -600,6 +605,7 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
     # Pass 1: collect process blocks for non-plumbing Steps.
     process_blocks: List[str] = []
     subworkflow_blocks: List[str] = []
+    staged_configs: Dict[str, Dict] = options.setdefault('_staged_configs', {})
     take_ports = options.get('_take_ports') or []
     emit_ports = options.get('_emit_ports') or []
     workflow_lines: List[str] = [f'workflow {workflow_name} {{']
@@ -628,8 +634,14 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
                                     outputs_wires, path_to_channel,
                                     bridge_inputs))
         else:
+            node_config = step.get('config') or getattr(instance, 'config', None) or {}
+            cfg_ref = None
+            if node_config:
+                cfg_ref = f'{name}.config.json'
+                staged_configs[cfg_ref] = dict(node_config)
             process_blocks.append(
-                _process_block(name, instance, inputs_wires, outputs_wires, python))
+                _process_block(name, instance, inputs_wires, outputs_wires,
+                               python, cfg_ref))
 
             # Emit a call with positional channel args in input-port order.
             call_args = []

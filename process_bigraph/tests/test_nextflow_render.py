@@ -203,3 +203,33 @@ def test_composite_node_ordered_between_its_producer_and_consumer():
     pos = {k: i for i, l in enumerate(lines)
            for k in ('src(', 'runs(', 'sink(') if k in l}
     assert pos['src('] < pos['runs('] < pos['sink('], body
+
+
+def test_per_node_config_is_threaded_into_run_step():
+    """An unrolled sweep differs only by config. If it is not passed to
+    run_step, every node runs with DEFAULTS -- N copies of the same run, with
+    N tasks, N work dirs and N outputs all looking correct."""
+    class _Cfg(Step):
+        config_schema = {'seed': {'_type': 'integer', '_default': 0}}
+        def inputs(self): return {}
+        def outputs(self): return {'o': {'_type': 'string', '_is_file': True}}
+        def update(self, state): return {'o': 'out'}
+
+    core = allocate_core()
+    core.register_link('_Cfg', _Cfg)
+    state = {}
+    for i in range(3):
+        state[f'out_{i}'] = ''
+        state[f'node_{i}'] = {'_type': 'step', 'address': 'local:_Cfg',
+                              'config': {'seed': i},
+                              'inputs': {}, 'outputs': {'o': [f'out_{i}']}}
+    comp = Composite({'state': state}, core=core)
+
+    opts = {'workflow_name': 'w'}
+    nf = render_composite(comp, opts)
+    assert '--config node_0.config.json' in nf
+
+    staged = opts['_staged_configs']
+    assert len(staged) == 3
+    seeds = sorted(c['seed'] for c in staged.values())
+    assert seeds == [0, 1, 2], f'seeds collapsed: {seeds}'
