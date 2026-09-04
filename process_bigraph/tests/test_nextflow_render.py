@@ -233,3 +233,32 @@ def test_per_node_config_is_threaded_into_run_step():
     assert len(staged) == 3
     seeds = sorted(c['seed'] for c in staged.values())
     assert seeds == [0, 1, 2], f'seeds collapsed: {seeds}'
+
+
+def test_config_is_a_declared_staged_input_not_just_a_flag():
+    """Writing the config beside main.nf and passing --config is NOT enough:
+    Nextflow stages only DECLARED inputs, so the task would open a path absent
+    from its work dir. Verified live: all four lineages read `{}` until the
+    config became a declared input."""
+    class _C(Step):
+        config_schema = {'seed': {'_type': 'integer', '_default': 0}}
+        def inputs(self): return {}
+        def outputs(self): return {'o': {'_type': 'string', '_is_file': True}}
+        def update(self, state): return {'o': 'out'}
+
+    core = allocate_core()
+    core.register_link('_C', _C)
+    comp = Composite({'state': {
+        'out_0': '',
+        'node_0': {'_type': 'step', 'address': 'local:_C', 'config': {'seed': 7},
+                   'inputs': {}, 'outputs': {'o': ['out_0']}}}}, core=core)
+    nf = render_composite(comp, {'workflow_name': 'w'})
+
+    # declared as an input, with a pinned staged name
+    assert "path config_json, stageAs: 'node_0.config.json'" in nf
+    # and actually passed at the call site
+    assert 'node_0(file(' in nf
+    # DOUBLE quotes -- Groovy does not interpolate single-quoted strings, so
+    # file('${projectDir}/x') is a literal dollar sign and staging fails.
+    assert 'file("${projectDir}/node_0.config.json")' in nf
+    assert "file('${projectDir}" not in nf

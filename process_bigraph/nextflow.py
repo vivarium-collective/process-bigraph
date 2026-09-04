@@ -295,12 +295,18 @@ def _process_block(step_name: str,
     step_outputs_schema = instance.outputs() if hasattr(instance, 'outputs') else {}
     class_overrides = _class_annotation(instance, 'nextflow_port_decls', {}) or {}
 
-    if inputs_wires:
+    if inputs_wires or config_ref:
         lines.append('    input:')
         for port in inputs_wires:
             decl = _port_to_nextflow_decl(
                 port, step_inputs_schema.get(port, {}), class_overrides)
             lines.append(f'    {decl}')
+        if config_ref:
+            # Declared, not merely referenced: writing the file beside main.nf
+            # and passing --config is NOT enough -- Nextflow stages only
+            # declared inputs, so the task would open a path that does not
+            # exist in its work dir. stageAs pins the name the script uses.
+            lines.append(f"    path config_json, stageAs: '{config_ref}'")
 
     uses_run_step = not hasattr(instance, 'nextflow_script')
 
@@ -651,6 +657,12 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
                 call_args.append(_channel_expr_for_input(
                     port_name, wire, path_to_channel, cardinality,
                     bridge_inputs))
+            if cfg_ref:
+                # A value channel over the staged config file, so the task
+                # receives it as a real input rather than a dangling filename.
+                # DOUBLE quotes: Groovy does not interpolate single-quoted
+                # strings, so '${projectDir}/x' would be a literal dollar sign.
+                call_args.append(f'file("${{projectDir}}/{cfg_ref}")')
 
             # The process's outputs become channels named after their wire path.
             out_port, out_wire = next(iter(outputs_wires.items()), (None, None))
