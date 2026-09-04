@@ -184,7 +184,8 @@ def _script_body(instance: Any,
                  step_name: str,
                  inputs_wires: Dict[str, List],
                  outputs_wires: Dict[str, List],
-                 python: str = 'python') -> str:
+                 python: str = 'python',
+                 config_ref: Optional[str] = None) -> str:
     """Return the script block for a process.
 
     Priority order:
@@ -209,6 +210,8 @@ def _script_body(instance: Any,
         f'{python} -m process_bigraph.run_step',
         f'--class {fq}',
     ]
+    if config_ref:
+        parts.append(f'--config {config_ref}')
     if in_flags:
         parts.append(in_flags)
     if out_flags:
@@ -278,7 +281,8 @@ def _process_block(step_name: str,
                    instance: Any,
                    inputs_wires: Dict[str, List],
                    outputs_wires: Dict[str, List],
-                   python: str = 'python') -> str:
+                   python: str = 'python',
+                   config_ref: Optional[str] = None) -> str:
     """Emit a ``process { ... }`` block for a non-plumbing Step."""
     lines = [f'process {step_name} {{']
 
@@ -291,12 +295,18 @@ def _process_block(step_name: str,
     step_outputs_schema = instance.outputs() if hasattr(instance, 'outputs') else {}
     class_overrides = _class_annotation(instance, 'nextflow_port_decls', {}) or {}
 
-    if inputs_wires:
+    if inputs_wires or config_ref:
         lines.append('    input:')
         for port in inputs_wires:
             decl = _port_to_nextflow_decl(
                 port, step_inputs_schema.get(port, {}), class_overrides)
             lines.append(f'    {decl}')
+        if config_ref:
+            # Declared, not merely referenced: writing the file beside main.nf
+            # and passing --config is NOT enough -- Nextflow stages only
+            # declared inputs, so the task would open a path that does not
+            # exist in its work dir. stageAs pins the name the script uses.
+            lines.append(f"    path config_json, stageAs: '{config_ref}'")
 
     uses_run_step = not hasattr(instance, 'nextflow_script')
 
@@ -311,7 +321,8 @@ def _process_block(step_name: str,
             lines.append(f'    {decl}')
 
     lines.append('    script:')
-    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires, python))
+    lines.append(_script_body(instance, step_name, inputs_wires, outputs_wires,
+                              python, config_ref))
 
     lines.append('}')
     return '\n'.join(lines)
@@ -404,6 +415,120 @@ def _emit_plumbing_call(step_name: str,
     return f'    {out_channel} = {call}'
 
 
+def _unified_order(step_paths: Dict[Path, Dict],
+                   composite_nodes: Dict[Path, Dict],
+                   seed_order: List[Path]) -> List[Path]:
+    """Topologically order Steps AND nested Composites as one graph.
+
+    A Steps-only sort cannot see a dependency that runs *through* a composite
+    node (``parca -> cache -> runs -> results -> analysis``), so the two ends
+    come out in arbitrary relative order and the emitted workflow references an
+    unassigned channel. Sorting both kinds together fixes it in one pass.
+    """
+    units: Dict[Path, Dict] = {}
+    units.update(step_paths)
+    units.update(composite_nodes)
+
+    def wires(node, key):
+        got = set()
+        for w in (node.get(key) or {}).values():
+            if isinstance(w, list) and w and not isinstance(w[0], list):
+                got.add(tuple(w))
+        return got
+
+    producer: Dict[Path, Path] = {}
+    for up, node in units.items():
+        for out in wires(node, 'outputs'):
+            producer.setdefault(out, up)
+
+    incoming = {u: set() for u in units}
+    outgoing: Dict[Path, set] = {u: set() for u in units}
+    for up, node in units.items():
+        for inp in wires(node, 'inputs'):
+            src = producer.get(inp)
+            if src is not None and src != up:
+                incoming[up].add(src)
+                outgoing[src].add(up)
+
+    # Stable: prefer the Steps-only order for units with no constraint.
+    rank = {u: i for i, u in enumerate(seed_order)}
+    ready = sorted((u for u in units if not incoming[u]),
+                   key=lambda u: rank.get(u, len(rank)))
+    ordered: List[Path] = []
+    while ready:
+        u = ready.pop(0)
+        ordered.append(u)
+        for v in sorted(outgoing[u], key=lambda x: rank.get(x, len(rank))):
+            incoming[v].discard(u)
+            if not incoming[v] and v not in ordered and v not in ready:
+                ready.append(v)
+        ready.sort(key=lambda x: rank.get(x, len(rank)))
+    for u in units:                      # cycles / leftovers: keep them
+        if u not in ordered:
+            ordered.append(u)
+    return ordered
+
+
+def _insert_position(workflow_lines: List[str],
+                     input_paths: List[Path],
+                     path_to_channel: Dict[Path, str]) -> int:
+    """Index at which to splice a call so it follows its own producers.
+
+    The composite-node loop runs after the Step loop, so a naive append puts a
+    producer AFTER its consumer. Insert instead just past the last line that
+    assigns one of this node's input channels.
+    """
+    wanted = {path_to_channel[p] for p in input_paths if p in path_to_channel}
+    pos = 1
+    for i, line in enumerate(workflow_lines):
+        lhs = line.strip().split('=')[0].strip()
+        if lhs in wanted:
+            pos = i + 1
+    return pos
+
+
+def _terminal_channels(step_paths: Dict[Path, Dict],
+                       step_dependencies: Dict[Path, Dict],
+                       path_to_channel: Dict[Path, str]) -> List[str]:
+    """Channels produced in this scope that nothing in this scope consumes.
+
+    These are the scope's results -- what a sub-workflow should ``emit:``.
+    """
+    consumed = set()
+    for sp, node in step_paths.items():
+        for wire in (node.get('inputs') or {}).values():
+            if isinstance(wire, list) and wire and not isinstance(wire[0], list):
+                consumed.add(tuple(wire))
+    out: List[str] = []
+    for sp, node in step_paths.items():
+        for wire in (node.get('outputs') or {}).values():
+            t = tuple(wire) if isinstance(wire, list) else None
+            if t and t not in consumed and t in path_to_channel:
+                ch = path_to_channel[t]
+                if ch not in out:
+                    out.append(ch)
+    return out
+
+
+def _homogeneous_group(step_paths: Dict[Path, Dict],
+                       order: List[Path]) -> Dict[str, List[Path]]:
+    """Group step paths by (class, rendered script) -- the "re-roll" key.
+
+    An unrolled document expresses N identical units as N distinct nodes.
+    Nextflow's natural form is ONE process invoked over a channel of N items,
+    which is also the only form whose outputs arrive as a single channel (and
+    therefore the only one that can be gathered without an N-way merge).
+    Nodes that share a class AND render an identical script body are exactly
+    the nodes that can be re-rolled that way.
+    """
+    groups: Dict[str, List[Path]] = {}
+    for sp in order:
+        inst = step_paths[sp]['instance']
+        key = type(inst).__module__ + '.' + type(inst).__qualname__
+        groups.setdefault(key, []).append(sp)
+    return groups
+
+
 def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -> str:
     """Render a realized ``Composite`` as a Nextflow DSL2 workflow string.
 
@@ -443,6 +568,15 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
     node_dependencies = getattr(composite, 'node_dependencies', None)
     order = _topological_order(step_paths, step_dependencies, node_dependencies)
 
+    # Nested Composites are units of the SAME graph as the Steps. Ordering them
+    # in a second pass (the original structure) emits a producer after its
+    # consumer; interleave them here instead.
+    from process_bigraph.composite import Composite as _CNode
+    _composite_nodes = {
+        np: nd for np, nd in (getattr(composite, 'process_paths', {}) or {}).items()
+        if isinstance(nd.get('instance'), _CNode)}
+    order = _unified_order(step_paths, _composite_nodes, order)
+
     # Assign one channel per producer output_path.
     path_to_channel: Dict[Path, str] = {}
     for step_path, info in step_dependencies.items():
@@ -459,11 +593,41 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
         for name, wire in bridge_inputs_decl.items()
     }
 
+    # Nested Composites are producers too: register their output paths before the
+    # Step loop runs, or a consuming Step resolves to params.<path> and the run
+    # dies with "A process input channel evaluates to null".
+    from process_bigraph.composite import Composite as _C0
+    for _np, _nd in (getattr(composite, 'process_paths', {}) or {}).items():
+        if isinstance(_nd.get('instance'), _C0):
+            for _w in (_nd.get('outputs') or {}).values():
+                if isinstance(_w, list) and _w and not isinstance(_w[0], list):
+                    path_to_channel.setdefault(tuple(_w), _path_to_channel_name(tuple(_w)))
+
+    # A sub-workflow's `take:` ports are in scope as bare identifiers. Seed them
+    # so _channel_expr_for_input resolves to `cache` rather than `params.cache`.
+    for tp in (options.get('_take_ports') or []):
+        path_to_channel.setdefault((tp,), tp)
+
     # Pass 1: collect process blocks for non-plumbing Steps.
     process_blocks: List[str] = []
+    subworkflow_blocks: List[str] = []
+    staged_configs: Dict[str, Dict] = options.setdefault('_staged_configs', {})
+    take_ports = options.get('_take_ports') or []
+    emit_ports = options.get('_emit_ports') or []
     workflow_lines: List[str] = [f'workflow {workflow_name} {{']
+    if take_ports:
+        # DSL2 sub-workflow inputs. These shadow the parent's channels by name,
+        # which is how the composite's own bridge inputs cross the boundary.
+        workflow_lines.append('    take:')
+        for tp in take_ports:
+            workflow_lines.append(f'    {tp}')
+        workflow_lines.append('    main:')
 
     for step_path in order:
+        if step_path not in step_paths:
+            # A composite node: reserve its ordered slot; the loop below fills it.
+            workflow_lines.append(f'@@SUBWF:{_path_to_step_name(step_path)}@@')
+            continue
         step = step_paths[step_path]
         instance = step['instance']
         inputs_wires = step.get('inputs') or {}
@@ -476,8 +640,14 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
                                     outputs_wires, path_to_channel,
                                     bridge_inputs))
         else:
+            node_config = step.get('config') or getattr(instance, 'config', None) or {}
+            cfg_ref = None
+            if node_config:
+                cfg_ref = f'{name}.config.json'
+                staged_configs[cfg_ref] = dict(node_config)
             process_blocks.append(
-                _process_block(name, instance, inputs_wires, outputs_wires, python))
+                _process_block(name, instance, inputs_wires, outputs_wires,
+                               python, cfg_ref))
 
             # Emit a call with positional channel args in input-port order.
             call_args = []
@@ -487,6 +657,12 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
                 call_args.append(_channel_expr_for_input(
                     port_name, wire, path_to_channel, cardinality,
                     bridge_inputs))
+            if cfg_ref:
+                # A value channel over the staged config file, so the task
+                # receives it as a real input rather than a dangling filename.
+                # DOUBLE quotes: Groovy does not interpolate single-quoted
+                # strings, so '${projectDir}/x' would be a literal dollar sign.
+                call_args.append(f'file("${{projectDir}}/{cfg_ref}")')
 
             # The process's outputs become channels named after their wire path.
             out_port, out_wire = next(iter(outputs_wires.items()), (None, None))
@@ -497,11 +673,33 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
                 call = f'{name}({", ".join(call_args)})'
             workflow_lines.append(f'    {call}')
 
+    if emit_ports:
+        # Gather every terminal producer in this scope into ONE emitted channel.
+        # `_terminal_channels` is what makes a nested scope's N units arrive at
+        # the parent as a single channel instead of N separate ones.
+        terminal = _terminal_channels(step_paths, step_dependencies, path_to_channel)
+        if len(terminal) > 1:
+            # Chain BINARY mixes. A single `a.mix(b, c, ...)` with N-1
+            # arguments is a Java method call and fails at 255 parameters
+            # ("bad parameter count"); N statements of arity 1 do not.
+            acc = '_merged'
+            workflow_lines.append(f'    {acc} = {terminal[0]}')
+            for ch in terminal[1:]:
+                workflow_lines.append(f'    {acc} = {acc}.mix({ch})')
+            workflow_lines.append('    emit:')
+            workflow_lines.append(f'    {acc}.collect()')
+        elif terminal:
+            workflow_lines.append('    emit:')
+            workflow_lines.append(f'    {terminal[0]}.collect()')
+        else:
+            workflow_lines.append('    emit:')
+            workflow_lines.append('    channel.empty()')
     workflow_lines.append('}')
 
     from process_bigraph.composite import Composite as _Composite
     default_steps = options.get('composite_steps', 1000)
     doc_map = options.get('composite_documents', {})
+    nest = options.get('nest_composites', True)
 
     for node_path, node in (getattr(composite, 'process_paths', {}) or {}).items():
         instance = node.get('instance')
@@ -510,6 +708,36 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
         name = _path_to_step_name(node_path)
         inputs_wires = node.get('inputs') or {}
         outputs_wires = node.get('outputs') or {}
+        inner_steps = getattr(instance, 'step_paths', {}) or {}
+
+        # NEW: a nested Composite with renderable content becomes a Nextflow
+        # SUB-WORKFLOW, preserving the hierarchy the document already carries.
+        # Collapsing to one ``run_composite`` task (the original behaviour) is
+        # kept for an empty/opaque composite, and via nest_composites=False.
+        if nest and inner_steps:
+            sub_opts = dict(options)
+            sub_opts['workflow_name'] = name
+            sub_opts['_emit_ports'] = list(outputs_wires)
+            sub_opts['_take_ports'] = list(inputs_wires)
+            sub_text = render_composite(instance, {**sub_opts, 'header': ''})
+            subworkflow_blocks.append(sub_text.strip())
+
+            call_args = [
+                _channel_expr_for_input(port, wire, path_to_channel, None, bridge_inputs)
+                for port, wire in inputs_wires.items()]
+            out_port, out_wire = next(iter(outputs_wires.items()), (None, None))
+            if out_wire := next(iter(outputs_wires.values()), None):
+                out_channel = _path_to_channel_name(tuple(out_wire))
+                call_line = f'    {out_channel} = {name}({", ".join(call_args)})'
+            else:
+                call_line = f'    {name}({", ".join(call_args)})'
+            marker = f'@@SUBWF:{name}@@'
+            if marker in workflow_lines:
+                workflow_lines[workflow_lines.index(marker)] = call_line
+            else:
+                workflow_lines.insert(-1, call_line)
+            continue
+
         doc_ref = doc_map.get(name, f'{name}_document.json')
 
         block_lines = [f'process {name} {{']
@@ -518,10 +746,6 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
             for port in inputs_wires:
                 block_lines.append(f'    path {port}')
         if outputs_wires:
-            # _composite_node_script only ever writes the FIRST output port
-            # (via --state-out {first_out}.json) — declaring `output:` for
-            # every port here would make Nextflow expect files 2..n that are
-            # never written ("Missing output file(s)").
             first_out_port = next(iter(outputs_wires), None)
             if first_out_port is not None:
                 block_lines.append('    output:')
@@ -544,6 +768,8 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
 
     parts = [header.rstrip(), '']
     parts.extend(process_blocks)
+    parts.extend(subworkflow_blocks)
     parts.append('')
+    workflow_lines = [l for l in workflow_lines if not l.startswith('@@SUBWF:')]
     parts.append('\n'.join(workflow_lines))
     return '\n'.join(parts) + '\n'

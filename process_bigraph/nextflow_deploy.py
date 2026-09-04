@@ -110,6 +110,15 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
     main_nf = out / 'main.nf'
     main_nf.write_text(render_composite(composite, render_options))
 
+    # Write each Step's own config beside main.nf. Without these the emitted
+    # `run_step --config <name>.config.json` has nothing to read, and every
+    # unrolled node silently runs with DEFAULTS -- an N-way parameter sweep
+    # collapsing into N copies of the same run, with every structural check
+    # (N tasks, N work dirs, N outputs) still passing.
+    import json as _json
+    for _name, _cfg in (render_options.get('_staged_configs') or {}).items():
+        (out / _name).write_text(_json.dumps(_cfg, indent=2, default=str))
+
     config = out / 'nextflow.config'
     config.write_text(generate_nextflow_config(
         executor=executor, resources=resources, params=params))

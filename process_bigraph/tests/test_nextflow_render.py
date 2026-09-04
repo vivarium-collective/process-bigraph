@@ -85,3 +85,180 @@ def test_plain_step_output_decl_matches_run_step_file():
     assert 'val value' not in block
     # sanity: the script body still writes value.json
     assert '--out value=value.json' in block
+
+
+# --- nested Composite -> Nextflow sub-workflow -------------------------------
+
+class _Unit(Step):
+    """A trivial unit; N of these stand in for an unrolled fan-out."""
+    nextflow_port_decls = {'cache': 'path cache', 'o': 'path "out"'}
+
+    def inputs(self):
+        return {'cache': {'_type': 'string', '_is_file': True}}
+
+    def outputs(self):
+        return {'o': {'_type': 'string', '_is_file': True}}
+
+    def nextflow_script(self):
+        return '"""\nmkdir -p out\n"""'
+
+    def update(self, state):
+        return {'o': 'out'}
+
+
+def _nested(n):
+    """An outer scope holding one nested Composite of n units."""
+    core = allocate_core()
+    core.register_link('_Unit', _Unit)
+    inner_state = {'cache': ''}
+    for i in range(n):
+        inner_state[f'sweep_{i}'] = ''
+        inner_state[f'unit_{i}'] = {
+            '_type': 'step', 'address': 'local:_Unit', 'config': {},
+            'inputs': {'cache': ['cache']}, 'outputs': {'o': [f'sweep_{i}']}}
+    inner = Composite({'state': inner_state}, core=core)
+    return SimpleNamespace(
+        step_paths={}, step_dependencies={}, node_dependencies={},
+        process_paths={('runs',): {
+            'instance': inner,
+            'inputs': {'cache': ['cache_store']},
+            'outputs': {'results': ['results_store']}}},
+        bridge={})
+
+
+def test_nested_composite_renders_as_subworkflow():
+    nf = render_composite(_nested(3))
+    assert 'workflow runs {' in nf
+    assert 'take:' in nf and 'emit:' in nf
+    # the hierarchy is preserved: inner units are their own processes
+    assert 'process unit_0 {' in nf and 'process unit_2 {' in nf
+    # ...and the parent sees ONE channel, not three
+    assert 'runs(' in nf
+
+
+def test_subworkflow_take_port_is_a_bare_identifier():
+    """Inside a sub-workflow a take: port is in scope by name, not params.<x>."""
+    nf = render_composite(_nested(2))
+    start = nf.index('workflow runs {')
+    body = nf[start:nf.index('workflow', start + 1)]   # sub-workflow block ONLY
+    assert 'unit_0(cache)' in body
+    assert 'params.' not in body
+
+
+def test_gather_uses_chained_binary_mix_not_nary_call():
+    """`a.mix(b, c, ... )` is a Java method call and dies at 255 parameters;
+    chained binary mixes are N statements of arity 1 and do not."""
+    nf = render_composite(_nested(300))
+    body = nf[nf.index('workflow runs {'):]
+    assert '_merged.mix(' in body
+    # no single mix() call with more than one argument
+    for line in body.splitlines():
+        if '.mix(' in line:
+            assert line.count(',') == 0, f'n-ary mix would hit the 255 limit: {line[:80]}'
+    assert '.collect()' in body
+
+
+def test_composite_node_ordered_between_its_producer_and_consumer():
+    """The dependency runs THROUGH the composite node, so a Steps-only sort
+    cannot order the two ends; _unified_order must."""
+    core = allocate_core()
+    core.register_link('_Unit', _Unit)
+    inner = Composite({'state': {
+        'cache': '', 'sweep_0': '',
+        'unit_0': {'_type': 'step', 'address': 'local:_Unit', 'config': {},
+                   'inputs': {'cache': ['cache']}, 'outputs': {'o': ['sweep_0']}}}},
+        core=core)
+
+    class _Src(Step):
+        nextflow_port_decls = {'c': 'path "cache"'}
+        def inputs(self): return {}
+        def outputs(self): return {'c': {'_type': 'string', '_is_file': True}}
+        def nextflow_script(self): return '"""\nmkdir -p cache\n"""'
+        def update(self, s): return {'c': 'cache'}
+
+    class _Sink(Step):
+        nextflow_port_decls = {'r': 'path r', 'out': 'path "done.txt"'}
+        def inputs(self): return {'r': {'_type': 'list', '_is_file': True}}
+        def outputs(self): return {'out': {'_type': 'string', '_is_file': True}}
+        def nextflow_script(self): return '"""\ntouch done.txt\n"""'
+        def update(self, s): return {'out': 'done.txt'}
+
+    outer = SimpleNamespace(
+        step_paths={
+            ('src',): {'instance': _Src({}, core=core), 'inputs': {},
+                       'outputs': {'c': ['cache_store']}},
+            ('sink',): {'instance': _Sink({}, core=core),
+                        'inputs': {'r': ['results_store']},
+                        'outputs': {'out': ['done']}}},
+        step_dependencies={('src',): {'output_paths': [['cache_store']]},
+                           ('sink',): {'output_paths': [['done']]}},
+        node_dependencies={},
+        process_paths={('runs',): {'instance': inner,
+                                   'inputs': {'cache': ['cache_store']},
+                                   'outputs': {'results': ['results_store']}}},
+        bridge={})
+    nf = render_composite(outer, {'workflow_name': ''})
+    body = nf[nf.rindex('workflow'):]
+    lines = [l.strip() for l in body.splitlines() if '(' in l]
+    pos = {k: i for i, l in enumerate(lines)
+           for k in ('src(', 'runs(', 'sink(') if k in l}
+    assert pos['src('] < pos['runs('] < pos['sink('], body
+
+
+def test_per_node_config_is_threaded_into_run_step():
+    """An unrolled sweep differs only by config. If it is not passed to
+    run_step, every node runs with DEFAULTS -- N copies of the same run, with
+    N tasks, N work dirs and N outputs all looking correct."""
+    class _Cfg(Step):
+        config_schema = {'seed': {'_type': 'integer', '_default': 0}}
+        def inputs(self): return {}
+        def outputs(self): return {'o': {'_type': 'string', '_is_file': True}}
+        def update(self, state): return {'o': 'out'}
+
+    core = allocate_core()
+    core.register_link('_Cfg', _Cfg)
+    state = {}
+    for i in range(3):
+        state[f'out_{i}'] = ''
+        state[f'node_{i}'] = {'_type': 'step', 'address': 'local:_Cfg',
+                              'config': {'seed': i},
+                              'inputs': {}, 'outputs': {'o': [f'out_{i}']}}
+    comp = Composite({'state': state}, core=core)
+
+    opts = {'workflow_name': 'w'}
+    nf = render_composite(comp, opts)
+    assert '--config node_0.config.json' in nf
+
+    staged = opts['_staged_configs']
+    assert len(staged) == 3
+    seeds = sorted(c['seed'] for c in staged.values())
+    assert seeds == [0, 1, 2], f'seeds collapsed: {seeds}'
+
+
+def test_config_is_a_declared_staged_input_not_just_a_flag():
+    """Writing the config beside main.nf and passing --config is NOT enough:
+    Nextflow stages only DECLARED inputs, so the task would open a path absent
+    from its work dir. Verified live: all four lineages read `{}` until the
+    config became a declared input."""
+    class _C(Step):
+        config_schema = {'seed': {'_type': 'integer', '_default': 0}}
+        def inputs(self): return {}
+        def outputs(self): return {'o': {'_type': 'string', '_is_file': True}}
+        def update(self, state): return {'o': 'out'}
+
+    core = allocate_core()
+    core.register_link('_C', _C)
+    comp = Composite({'state': {
+        'out_0': '',
+        'node_0': {'_type': 'step', 'address': 'local:_C', 'config': {'seed': 7},
+                   'inputs': {}, 'outputs': {'o': ['out_0']}}}}, core=core)
+    nf = render_composite(comp, {'workflow_name': 'w'})
+
+    # declared as an input, with a pinned staged name
+    assert "path config_json, stageAs: 'node_0.config.json'" in nf
+    # and actually passed at the call site
+    assert 'node_0(file(' in nf
+    # DOUBLE quotes -- Groovy does not interpolate single-quoted strings, so
+    # file('${projectDir}/x') is a literal dollar sign and staging fails.
+    assert 'file("${projectDir}/node_0.config.json")' in nf
+    assert "file('${projectDir}" not in nf
