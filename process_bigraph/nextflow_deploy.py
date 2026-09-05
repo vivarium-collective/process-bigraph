@@ -50,11 +50,117 @@ def _params_block(params: Optional[Dict[str, Any]]) -> str:
     return '\n'.join(lines) + '\n\n'
 
 
+# The AWS Batch profile is params-driven, exactly like vEcoli's proven
+# `config.template`: this module must not know about any one deployment's
+# queue names, image registry or region. Callers supply them via `params`.
+AWSBATCH_REQUIRED_PARAMS = ('container_image', 'queue', 'aws_region')
+
+# Defaults for the two independent retry mechanisms. Both matter, and both are
+# absent from a bare `executor = 'awsbatch'`:
+#
+#   aws.batch.maxSpotAttempts   Batch retries the SAME job on a new instance,
+#                               and ONLY for a spot reclaim -- nf-amazon pins
+#                               EvaluateOnExit to RETRY on `Host EC2*`, EXIT on
+#                               `*`. Its default is 0, i.e. no retry at all, and
+#                               a spot-first queue will eventually reclaim a
+#                               long-running task.
+#   errorStrategy + maxRetries  Nextflow resubmits as a NEW Batch job. This is
+#                               the one that survives an OOM or a code fault,
+#                               and the only reason "the outer DAG is the
+#                               resubmitter" is true rather than aspirational.
+#
+# Nextflow's own default for errorStrategy is 'terminate', so without the second
+# row a single failed task takes the whole campaign with it.
+AWSBATCH_DEFAULTS = {
+    'max_spot_attempts': 10,
+    'max_transfer_attempts': 10,
+    'max_retries': 3,
+}
+
+
+def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
+    """Render the `awsbatch` profile body, modelled on vEcoli's production one.
+
+    Deliberately NOT emitted here:
+
+    * ``aws.batch.jobRole`` -- the submitting role's ``iam:PassRole`` is usually
+      scoped to a handful of named roles, so any value we invented would fail at
+      submission. Unset means the task runs as the compute environment's own
+      instance profile, which is what already has the work-bucket grant.
+    * ``aws.batch.cliPath`` -- unset relies on ``aws`` being on ``PATH`` inside
+      the task container, which is how vEcoli runs and what the science image
+      already provides.
+    """
+    params = params or {}
+    missing = [k for k in AWSBATCH_REQUIRED_PARAMS if params.get(k) in (None, '')]
+    if missing:
+        raise ValueError(
+            "the awsbatch profile needs params " + ', '.join(missing) + " -- without them the "
+            "profile still renders, and Nextflow reads them as null. Pass them in `params`.")
+
+    opts = dict(AWSBATCH_DEFAULTS)
+    for key in opts:
+        if params.get(key) is not None:
+            opts[key] = params[key]
+
+    # PYTHONPATH is separate from the region env because it is not an AWS
+    # concern: `scratch true` (and Batch's own working directory) moves the
+    # task's cwd off the image's project root, so a repo that relies on
+    # cwd-relative imports stops importing. Emitted only when the caller
+    # declares a project root -- a null PYTHONPATH would be worse than none.
+    env_opts = '--env AWS_DEFAULT_REGION=${params.aws_region}'
+    if params.get('project_root'):
+        env_opts += ' --env PYTHONPATH=${params.project_root}'
+
+    # A GovCloud (or any non-standard-partition) S3 endpoint. Emitted only when
+    # given, so the common commercial-partition case stays on the SDK default.
+    endpoint_line = ''
+    if params.get('s3_endpoint'):
+        endpoint_line = '\n            client { endpoint = params.s3_endpoint }'
+
+    work_dir_line = ''
+    if params.get('work_dir'):
+        work_dir_line = '\n        workDir = params.work_dir'
+
+    return f"""    awsbatch {{
+        process {{
+            executor = 'awsbatch'
+            container = params.container_image
+            queue = params.queue
+            // AWS_DEFAULT_REGION is required by the AWS CLI *inside* the task
+            // container, which is what stages the S3 work dir in and out.
+            containerOptions = "{env_opts}"
+            // Retry, then stop scheduling new work and let running tasks drain.
+            // 'finish' rather than vEcoli's 'ignore': ignore is safe there only
+            // because it also sets workflow.failOnIgnore, and an ignored failed
+            // task is a campaign that goes green having produced no science.
+            errorStrategy = {{ task.attempt <= task.maxRetries ? 'retry' : 'finish' }}
+            maxRetries = {opts['max_retries']}{res_block}
+        }}
+        aws {{
+            region = params.aws_region{endpoint_line}
+            batch {{
+                // Spot preemption is retried by Batch itself; default is 0.
+                maxSpotAttempts = {opts['max_spot_attempts']}
+                maxTransferAttempts = {opts['max_transfer_attempts']}
+            }}
+        }}
+        docker.enabled = true{work_dir_line}
+    }}
+"""
+
+
 def generate_nextflow_config(executor: str = 'local',
                              resources: Optional[Dict[str, Dict[str, Any]]] = None,
                              params: Optional[Dict[str, Any]] = None) -> str:
     res = _resource_lines(resources)
     res_block = ('\n' + res) if res else ''
+    # Only validate the profile actually being deployed: this function always
+    # emits every profile, so requiring awsbatch params from a local run would
+    # make the local path depend on AWS settings it never uses.
+    awsbatch = (_awsbatch_profile(res_block, params) if executor == 'awsbatch'
+                else "    awsbatch {\n        // not configured; pass awsbatch params to render it\n"
+                     "        process { executor = 'awsbatch' }\n    }\n")
     return f"""{_params_block(params)}profiles {{
     local {{
         process {{
@@ -69,11 +175,7 @@ def generate_nextflow_config(executor: str = 'local',
         executor.queueSize = 100
         executor.submitRateLimit = '20/min'
     }}
-    awsbatch {{
-        // STUB (untested in v1)
-        process {{ executor = 'awsbatch' }}
-    }}
-    'google-batch' {{
+{awsbatch}    'google-batch' {{
         // STUB (untested in v1)
         process {{ executor = 'google-batch' }}
     }}
