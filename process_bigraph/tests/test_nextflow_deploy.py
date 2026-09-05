@@ -117,3 +117,76 @@ def test_deploy_launch_local_end_to_end(tmp_path):
                     launch=True, params={'seed': 3},
                     work_dir=str(tmp_path / 'work'))
     assert result['returncode'] == 0
+
+
+# --- launch flags: -resume is the reason to run a campaign under a DAG engine ---
+
+
+def _captured_launch(tmp_path, monkeypatch, **kwargs):
+    """Run deploy(launch=True) with nextflow stubbed, and return the argv it built."""
+    import subprocess as _sp
+    from process_bigraph import nextflow_deploy as nd
+
+    seen = {}
+
+    def fake_run(cmd, **kw):
+        seen['cmd'] = cmd
+        return _sp.CompletedProcess(cmd, 0)
+
+    monkeypatch.setattr(nd.shutil, 'which', lambda _: '/usr/bin/nextflow')
+    monkeypatch.setattr(nd.subprocess, 'run', fake_run)
+    deploy(_emit_composite(), outdir=str(tmp_path), executor='local',
+           launch=True, **kwargs)
+    return seen['cmd']
+
+
+def test_resume_is_emitted_only_when_asked(tmp_path, monkeypatch):
+    """go/no-go 3 of the Nextflow dispatch plan is '-resume re-runs only the failed
+    lineage'. deploy() could not pass -resume at all, so that gate was untestable."""
+    assert '-resume' not in _captured_launch(tmp_path, monkeypatch)
+    assert '-resume' in _captured_launch(tmp_path, monkeypatch, resume=True)
+
+
+def test_report_trace_and_weblog_are_passed_through(tmp_path, monkeypatch):
+    """The trace CSV is how a resumed run is told apart from a repeated one: a reused
+    task reports CACHED there and nowhere else."""
+    cmd = _captured_launch(
+        tmp_path, monkeypatch,
+        report=tmp_path / 'r.html', trace=tmp_path / 't.csv',
+        weblog_url='http://receiver/events')
+    assert cmd[cmd.index('-with-report') + 1] == str(tmp_path / 'r.html')
+    assert cmd[cmd.index('-with-trace') + 1] == str(tmp_path / 't.csv')
+    assert cmd[cmd.index('-with-weblog') + 1] == 'http://receiver/events'
+
+
+def test_nextflow_args_appended_verbatim_and_never_shell_split(tmp_path, monkeypatch):
+    cmd = _captured_launch(tmp_path, monkeypatch, nextflow_args=['-queue-size', '50'])
+    assert cmd[-2:] == ['-queue-size', '50']
+    with pytest.raises(TypeError):
+        _captured_launch(tmp_path, monkeypatch, nextflow_args='-queue-size 50')
+
+
+# --- the interpreter default is executor-scoped (a latent AWS Batch bug) ---
+
+
+def test_python_pinned_for_local_but_not_for_other_executors(tmp_path):
+    """sys.executable is the HEAD's interpreter path. On the local executor that is
+    also the tasks' interpreter. On awsbatch the task runs in a container where that
+    path need not exist, and baking it in emits a command that cannot run."""
+    import sys
+    composite = _emit_composite()
+
+    local_dir = tmp_path / 'local'
+    deploy(composite, outdir=str(local_dir), executor='local', launch=False)
+    assert sys.executable in (local_dir / 'main.nf').read_text()
+
+    batch_dir = tmp_path / 'batch'
+    deploy(_emit_composite(), outdir=str(batch_dir), executor='awsbatch', launch=False)
+    assert sys.executable not in (batch_dir / 'main.nf').read_text()
+
+
+def test_explicit_python_option_still_wins_on_any_executor(tmp_path):
+    out = tmp_path / 'explicit'
+    deploy(_emit_composite(), outdir=str(out), executor='awsbatch', launch=False,
+           options={'python': '/opt/venv/bin/python'})
+    assert '/opt/venv/bin/python' in (out / 'main.nf').read_text()

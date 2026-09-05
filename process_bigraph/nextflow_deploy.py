@@ -83,15 +83,40 @@ def generate_nextflow_config(executor: str = 'local',
 
 def deploy(composite, *, outdir: str, executor: str = 'local',
            launch: bool = False, resources=None, params=None,
-           options=None, work_dir=None) -> Dict[str, Optional[str]]:
+           options=None, work_dir=None, resume: bool = False,
+           report=None, trace=None, weblog_url=None,
+           nextflow_args=None) -> Dict[str, Optional[str]]:
     """Write ``main.nf`` + ``nextflow.config`` for a Composite, optionally launch it.
 
-    Renders the Step network via ``render_composite`` (pinning
-    ``sys.executable`` so Nextflow's subprocess tasks use this interpreter)
-    and writes a matching ``nextflow.config`` via ``generate_nextflow_config``.
-    When ``launch=True``, shells out to ``nextflow -C <config> run <main.nf>
-    -profile <executor>`` and raises ``subprocess.CalledProcessError`` on a
-    non-zero exit.
+    Renders the Step network via ``render_composite`` and writes a matching
+    ``nextflow.config`` via ``generate_nextflow_config``. When ``launch=True``,
+    shells out to ``nextflow -C <config> run <main.nf> -profile <executor>``
+    and raises ``subprocess.CalledProcessError`` on a non-zero exit.
+
+    ``resume`` adds ``-resume``, which is the entire point of running a campaign
+    under a DAG engine: on a re-invocation Nextflow reuses cached *successful*
+    tasks and re-runs only what changed or failed. Without it a re-run repeats
+    every ParCa and every completed lineage. Note this is distinct from in-run
+    retry, which is ``errorStrategy``/``maxRetries`` in the profile.
+
+    ``report`` / ``trace`` add ``-with-report`` / ``-with-trace``. The trace CSV
+    is how you tell a resumed run apart from a repeated one -- a reused task
+    shows CACHED there and nowhere else.
+
+    ``weblog_url`` adds ``-with-weblog``, which POSTs task-level events to a
+    receiver, so a long campaign is observable without tailing a head log.
+
+    ``nextflow_args`` is an escape hatch appended verbatim; it is a list, never
+    a string, so nothing is shell-split or shell-interpreted.
+
+    **The interpreter default is executor-scoped, deliberately.**
+    ``sys.executable`` is the path of the *head's* Python. On the local executor
+    that is also the tasks' Python, so pinning it is right. On any other
+    executor tasks run in a container or on another host where that path need
+    not exist, and baking it in produces a command that cannot run -- a failure
+    that surfaces only once real infrastructure is involved. Callers that do
+    want an explicit interpreter pass ``options={'python': ...}``, which always
+    wins.
     """
     from process_bigraph.nextflow import render_composite
 
@@ -99,7 +124,8 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
     out.mkdir(parents=True, exist_ok=True)
 
     render_options = dict(options or {})
-    render_options.setdefault('python', sys.executable)
+    if executor == 'local':
+        render_options.setdefault('python', sys.executable)
     # render_composite's own default ('main') is a reserved identifier in
     # real Nextflow — naming the entry workflow block `main` is a compile
     # error. Default to an unnamed/implicit entry workflow instead, which
@@ -131,6 +157,21 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
                '-profile', executor]
         if work_dir is not None:
             cmd += ['-work-dir', str(work_dir)]
+        if resume:
+            cmd += ['-resume']
+        if report is not None:
+            cmd += ['-with-report', str(report)]
+        if trace is not None:
+            cmd += ['-with-trace', str(trace)]
+        if weblog_url is not None:
+            cmd += ['-with-weblog', str(weblog_url)]
+        if nextflow_args:
+            if isinstance(nextflow_args, str):
+                raise TypeError(
+                    'nextflow_args must be a sequence of arguments, not a string -- '
+                    'a string would have to be shell-split, and quoting is exactly '
+                    'where that goes wrong silently')
+            cmd += [str(a) for a in nextflow_args]
         proc = subprocess.run(cmd, cwd=str(out))
         returncode = proc.returncode
         if returncode != 0:
