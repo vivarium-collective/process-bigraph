@@ -114,14 +114,14 @@ surfaced as Nextflow `params.<name>` — supply them through `deploy(params=...)
 
 ```python
 deploy(composite, *, outdir, executor='local', launch=False,
-       resources=None, params=None, options=None, work_dir=None)
+       resources=None, params=None, options=None, work_dir=None,
+       resume=False, report=None, trace=None, weblog_url=None,
+       nextflow_args=None, config=None)
     -> {'main_nf': str, 'config': str, 'returncode': int | None}
 ```
 
 - `outdir` — where `main.nf` and `nextflow.config` are written.
-- `executor` — selects the `nextflow.config` profile: `local` and `slurm` are
-  real; `awsbatch` and `google-batch` are emitted but **untested stubs** in
-  this version.
+- `executor` — selects the `nextflow.config` profile (see the table below).
 - `launch` — `True` runs `nextflow -C <config> run <main.nf> -profile
   <executor> [-work-dir <work_dir>]` and raises
   `subprocess.CalledProcessError` on a non-zero exit. `False` only writes the
@@ -131,6 +131,9 @@ deploy(composite, *, outdir, executor='local', launch=False,
 - `params` — `{name: value}`, rendered into a `params { }` block (booleans and
   `None` become valid Groovy `true`/`false`/`null`).
 - `options` — passed to `render_composite` (see below).
+- `config` — **supply your own `nextflow.config` and skip generation entirely.**
+  A `Path` is read; a `str` is used verbatim as the config text. `executor`
+  still selects `-profile`, so your config must define a profile by that name.
 
 Generated scripts are pinned to the current `sys.executable`, so the Nextflow
 tasks run under the same interpreter (and virtualenv) that called `deploy()`.
@@ -158,9 +161,48 @@ The generated `nextflow.config` carries one `profiles { }` block:
 | Profile | Executor | Status |
 |---|---|---|
 | `local` | `local` | supported, tested end-to-end |
-| `slurm` | `slurm` | supported (retry/queue tuning, `withLabel` resources) |
-| `awsbatch` | `awsbatch` | **stub, untested** |
+| `slurm` | `slurm` | basic — retry, queue size, `withLabel` resources. Names **no partition and no container** |
+| `awsbatch` | `awsbatch` | queue, container, region, S3 endpoint, work dir, both retry mechanisms. Parse-tested against the real binary; **not yet run on Batch** |
 | `google-batch` | `google-batch` | **stub, untested** |
+
+### These are a default, not a ceiling
+
+`generate_nextflow_config` emits **one fixed shape** with `params` substituted
+into it. A production config routinely needs more than that shape can express:
+per-label *executor* switching (ParCa on SLURM, sims on HyperQueue), memory that
+scales on the previous attempt's exit status, `workflow.failOnIgnore`, Fusion,
+accelerators. None of those are expressible here, at any executor.
+
+So when you outgrow it, pass your own — `deploy(config=Path('my.config'))` — and
+keep everything else. The built-in profiles exist so the common cases work
+without you rediscovering, say, that `aws.batch.maxSpotAttempts` defaults to `0`
+on a spot-first queue and `errorStrategy` defaults to `terminate`; they are not
+meant to be the only way to configure a run.
+
+### `awsbatch` params
+
+| param | required | effect |
+|---|---|---|
+| `container_image` | ✅ | `process.container` |
+| `queue` | ✅ | `process.queue` |
+| `aws_region` | ✅ | `aws.region`, and `--env AWS_DEFAULT_REGION` for the CLI in the task |
+| `container_env` | | `{NAME: value}` → extra `--env NAME=value`. **Consumed, not echoed** into `params { }` (a dict has no Groovy literal) |
+| `s3_endpoint` | | `aws.client.endpoint`, for a non-standard partition such as GovCloud |
+| `work_dir` | | `workDir` |
+| `max_spot_attempts` / `max_transfer_attempts` / `max_retries` | | default 10 / 10 / 3 |
+
+Missing required params **raise** rather than rendering `queue = null` into a
+config Nextflow happily accepts.
+
+`aws.batch.jobRole` and `aws.batch.cliPath` are deliberately left unset: a
+submitting role's `iam:PassRole` is typically scoped to a few named roles, so an
+invented `jobRole` fails at submission, and an unset `cliPath` relies on `aws`
+being on `PATH` in the task container — which is how vEcoli runs.
+
+`container_env` is where an image's own needs go, so the profile carries no
+opinion about them. The motivating case is `PYTHONPATH`: Nextflow moves a task's
+cwd off the image's project root, so an application whose imports resolve on cwd
+stops importing — but that is a fact about *that image*, not about AWS Batch.
 
 ## Whole-Composite tasks — experimental
 

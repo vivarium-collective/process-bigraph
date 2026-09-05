@@ -33,6 +33,7 @@ def test_config_params_render_valid_groovy_scalars():
 
 import shutil
 import subprocess
+from pathlib import Path
 import pytest
 from process_bigraph import Composite, allocate_core
 from process_bigraph.composite import Step
@@ -171,7 +172,7 @@ _AWS_PARAMS = {
     'container_image': '000.dkr.ecr.us-gov-west-1.amazonaws.com/img:abc123',
     'queue': 'a-spot-first-queue',
     'aws_region': 'us-gov-west-1',
-    'project_root': '/app/v2ecoli',
+    'container_env': {'PYTHONPATH': '/app/v2ecoli'},
 }
 
 
@@ -249,16 +250,94 @@ def test_local_executor_does_not_require_aws_params():
     assert 'awsbatch {' in cfg
 
 
-def test_pythonpath_is_emitted_only_when_a_project_root_is_declared():
-    """A null PYTHONPATH is worse than none -- it shadows the container's own."""
-    with_root = generate_nextflow_config(executor='awsbatch', params=_AWS_PARAMS)
-    assert '--env PYTHONPATH=${params.project_root}' in with_root
+def test_container_env_is_the_callers_business_not_the_profiles():
+    """The profile carries no opinion about what any one image needs.
+
+    PYTHONPATH is the motivating case -- Nextflow moves a task's cwd off the
+    image's project root, so an app whose imports resolve on cwd stops importing
+    -- but that is a fact about that IMAGE, not about AWS Batch.
+    """
+    cfg = generate_nextflow_config(executor='awsbatch', params=_AWS_PARAMS)
+    assert '--env PYTHONPATH=/app/v2ecoli' in cfg
 
     without = dict(_AWS_PARAMS)
-    without.pop('project_root')
-    cfg = generate_nextflow_config(executor='awsbatch', params=without)
-    assert 'PYTHONPATH' not in cfg
-    assert '--env AWS_DEFAULT_REGION=${params.aws_region}' in cfg
+    without.pop('container_env')
+    bare = generate_nextflow_config(executor='awsbatch', params=without)
+    assert 'PYTHONPATH' not in bare
+    # The region env is the EXECUTOR's own requirement, so it is unconditional.
+    assert '--env AWS_DEFAULT_REGION=${params.aws_region}' in bare
+
+
+def test_container_env_renders_every_pair_and_is_not_echoed_as_a_param():
+    cfg = generate_nextflow_config(executor='awsbatch', params=dict(
+        _AWS_PARAMS, container_env={'PYTHONPATH': '/app/v2ecoli', 'FOO': 'bar'}))
+    assert '--env PYTHONPATH=/app/v2ecoli --env FOO=bar' in cfg
+    # Consumed, not echoed: a dict has no Groovy literal, so emitting it into
+    # params { } would break the whole config.
+    assert 'container_env =' not in cfg
+
+
+@pytest.mark.parametrize('bad', [
+    {'PYTHONPATH': '/two dirs/x'},      # whitespace splits the docker argument
+    {'X': 'a"b'},                       # ends the Groovy string
+    {'X': '${params.queue}'},           # interpolated behind the caller's back
+    {'not-an-identifier': 'v'},
+])
+def test_container_env_rejects_values_it_cannot_render(bad):
+    with pytest.raises(ValueError):
+        generate_nextflow_config(executor='awsbatch', params=dict(_AWS_PARAMS, container_env=bad))
+
+
+def test_dict_param_names_itself_rather_than_failing_as_groovy():
+    """`{'a': 1}` is a Groovy CLOSURE, not a map: Nextflow fails to compile the
+    whole config and reports a column number in a generated script."""
+    with pytest.raises(ValueError, match='sweep'):
+        generate_nextflow_config(params={'sweep': {'a': 1}})
+    # A list is fine -- Python and Groovy list literals coincide.
+    assert "xs = ['a', 'b']" in generate_nextflow_config(params={'xs': ['a', 'b']})
+
+
+# --- the config= escape hatch ---
+
+
+def test_supplied_config_text_replaces_the_generated_one(tmp_path):
+    """generate_nextflow_config emits ONE fixed shape. A real deployment needs
+    per-label executor switching, exit-status-keyed memory, failOnIgnore --
+    none of which that shape can express. Without this, disagreeing about one
+    directive means abandoning deploy()."""
+    out = tmp_path / 'custom'
+    mine = "profiles {\n    mine {\n        process { executor = 'local' }\n    }\n}\n"
+    result = deploy(_emit_composite(), outdir=str(out), executor='mine',
+                    launch=False, config=mine)
+    written = Path(result['config']).read_text()
+    assert written == mine
+    assert 'awsbatch' not in written
+
+
+def test_supplied_config_bypasses_the_awsbatch_param_requirement(tmp_path):
+    """A caller's own config need not use `params` at all."""
+    out = tmp_path / 'bypass'
+    deploy(_emit_composite(), outdir=str(out), executor='awsbatch', launch=False,
+           config="profiles { awsbatch { process { executor = 'awsbatch' } } }\n")
+    assert (out / 'nextflow.config').read_text().startswith('profiles')
+
+
+def test_config_path_reads_the_file(tmp_path):
+    src = tmp_path / 'my.config'
+    src.write_text("profiles { mine { process { executor = 'local' } } }\n")
+    out = tmp_path / 'fromfile'
+    deploy(_emit_composite(), outdir=str(out), executor='mine', launch=False, config=src)
+    assert (out / 'nextflow.config').read_text() == src.read_text()
+
+
+def test_a_str_that_is_really_a_path_is_caught(tmp_path):
+    """Left alone this writes the PATH into the config and fails as a Groovy
+    parse error pointing at nothing useful."""
+    src = tmp_path / 'my.config'
+    src.write_text("profiles { mine { } }\n")
+    with pytest.raises(TypeError, match='Path'):
+        deploy(_emit_composite(), outdir=str(tmp_path / 'oops'), executor='mine',
+               launch=False, config=str(src))
 
 
 def test_s3_endpoint_and_work_dir_are_optional():
