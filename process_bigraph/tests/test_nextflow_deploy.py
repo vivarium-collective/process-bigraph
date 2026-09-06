@@ -392,3 +392,51 @@ def test_awsbatch_profile_parses_and_resolves_under_real_nextflow(tmp_path):
     assert "endpoint = 'https://s3.us-gov-west-1.amazonaws.com'" in resolved
     assert "workDir = 's3://bucket/nf/eid/work'" in resolved
     assert 'maxSpotAttempts = 10' in resolved
+
+
+# --- a resource value may be a Groovy closure ------------------------------
+
+
+def test_a_closure_memory_is_emitted_raw_not_quoted():
+    """Retry-with-more-memory is only expressible as a closure.
+
+    repr-quoting it would ask Batch for a quantity of memory literally named
+    `{ task.exitStatus == 137 ? ... }`. Measured motivation: a ParCa OOMed
+    (exit 137) three times under `maxRetries = 3`, because retrying an OOM with
+    the same memory is three identical failures.
+    """
+    cfg = generate_nextflow_config(
+        executor='awsbatch',
+        resources={'parca': {'memory': '{ task.exitStatus == 137 ? 32.GB * task.attempt : 32.GB }'}},
+        params=_AWS_PARAMS)
+    assert 'memory = { task.exitStatus == 137 ? 32.GB * task.attempt : 32.GB }' in cfg
+    assert "memory = '{" not in cfg
+
+
+def test_plain_resource_values_are_still_quoted():
+    cfg = generate_nextflow_config(
+        executor='awsbatch',
+        resources={'lineage': {'cpus': 4, 'memory': '16 GB', 'time': '12 h'}},
+        params=_AWS_PARAMS)
+    assert 'cpus = 4' in cfg
+    assert "memory = '16 GB'" in cfg
+    assert "time = '12 h'" in cfg
+
+
+@pytest.mark.skipif(shutil.which('nextflow') is None, reason='nextflow binary not on PATH')
+def test_a_closure_resource_survives_the_real_parser(tmp_path):
+    """A closure that repr-quoting would have broken must still resolve."""
+    (tmp_path / 'main.nf').write_text('workflow { }\n')
+    (tmp_path / 'nextflow.config').write_text(generate_nextflow_config(
+        executor='awsbatch',
+        resources={'parca': {
+            'memory': '{ task.exitStatus == 137 ? 32.GB * task.attempt : 32.GB }',
+            'time': '4 h',
+        }},
+        params=_AWS_PARAMS))
+    proc = subprocess.run(['nextflow', 'config', '-profile', 'awsbatch', '.'],
+                          cwd=str(tmp_path), capture_output=True, text=True,
+                          encoding='utf-8', errors='replace')
+    assert proc.returncode == 0, proc.stderr
+    assert 'withLabel:parca' in proc.stdout
+    assert 'task.exitStatus == 137' in proc.stdout

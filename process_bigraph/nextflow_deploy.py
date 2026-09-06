@@ -16,18 +16,36 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
+def _resource_value(value: Any) -> str:
+    """Render one directive value: a Groovy CLOSURE raw, anything else quoted.
+
+    A string starting with ``{`` is a closure and must be emitted verbatim --
+    repr-quoting it turns `{ task.exitStatus == 137 ? 32.GB * task.attempt :
+    32.GB }` into a string literal, and the process then asks Batch for a
+    quantity of memory named "{ task.exitStatus ... }".
+
+    This is what makes retry-with-more-memory expressible at all. Retrying an
+    OOM with the SAME memory is three identical failures: measured, exit 137
+    three times on one ParCa. vEcoli scales via its `scaledMemory` closure for
+    exactly this reason.
+
+    Same convention as ``_directive_lines`` in nextflow.py, deliberately -- two
+    places that emit Groovy should not disagree about what a leading ``{`` means.
+    """
+    if isinstance(value, str) and value.lstrip().startswith('{'):
+        return value
+    return repr(value) if isinstance(value, str) else str(value)
+
+
 def _resource_lines(resources: Optional[Dict[str, Dict[str, Any]]]) -> str:
     if not resources:
         return ''
     blocks = []
     for label, res in resources.items():
         lines = [f'            withLabel: {label} {{']
-        if 'cpus' in res:
-            lines.append(f'                cpus = {res["cpus"]}')
-        if 'memory' in res:
-            lines.append(f'                memory = {res["memory"]!r}')
-        if 'time' in res:
-            lines.append(f'                time = {res["time"]!r}')
+        for key in ('cpus', 'memory', 'time'):
+            if key in res:
+                lines.append(f'                {key} = {_resource_value(res[key])}')
         lines.append('            }')
         blocks.append('\n'.join(lines))
     return '\n'.join(blocks)
