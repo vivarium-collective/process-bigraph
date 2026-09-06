@@ -42,6 +42,11 @@ class GeneratorEntry:
     # a Study is built on top of this composite the dashboard merges these
     # defaults into its visualizations list; Studies can still declare extras.
     visualizations: list[dict] = field(default_factory=list)
+    # Canonical analyses that ship with this composite. Each entry is a
+    # Study-spec analysis dict ({name, params?}) or a scale-grouped block,
+    # matching CompositeSpec.analyses. Merged under a run's config-declared
+    # analyses when a composite runs standalone (config wins).
+    analyses: list[dict] = field(default_factory=list)
     # Emitter(s) this composite ships as its default observation sink. Each
     # entry is a lightweight ``{address, config, paths?}`` dict: ``address`` is
     # the registered emitter link (e.g. ``"local:ParquetEmitter"``), ``config``
@@ -80,6 +85,7 @@ def _entry_for(spec) -> GeneratorEntry:
         module=spec.module,
         default_n_steps=spec.default_n_steps,
         visualizations=spec.visualizations,
+        analyses=spec.analyses,
         emitters=spec.emitters,
         core_extensions=spec.core_extensions,
     )
@@ -180,6 +186,7 @@ def composite_generator(
     description: str = "",
     parameters: dict[str, dict] | None = None,
     visualizations: list[dict] | None = None,
+    analyses: list[dict] | None = None,
     emitters: list[dict] | None = None,
     default_n_steps: int | None = None,
     core_extensions: list[Callable[[Any], Any]] | None = None,
@@ -208,6 +215,12 @@ def composite_generator(
     composite, so callers get the v2ecoli simulation report (or whatever the
     composite author considers canonical) without having to hand-author them
     in every Study spec.
+
+    `analyses` declares the canonical analyses that ship with this composite.
+    Each entry is a Study-spec analysis dict (``{name, params?}``) or a
+    scale-grouped block, matching ``CompositeSpec.analyses``. Mirrors
+    ``visualizations``: a run built on this composite standalone merges these
+    defaults under any config-declared analyses (config wins).
 
     `emitters` (optional) declares the default observation sink(s) this
     composite ships with. Each entry is a lightweight
@@ -266,6 +279,7 @@ def composite_generator(
             description=description,
             parameters=parameters,
             visualizations=visualizations,
+            analyses=analyses,
             emitters=validated_emitters,
             default_n_steps=default_n_steps,
             core_extensions=core_extensions,
