@@ -161,6 +161,7 @@ class _RegistryView:
                 module=getattr(entry, "module", ""),
                 default_n_steps=getattr(entry, "default_n_steps", None),
                 visualizations=list(getattr(entry, "visualizations", []) or []),
+                analyses=list(getattr(entry, "analyses", []) or []),
                 emitters=list(getattr(entry, "emitters", []) or []),
                 core_extensions=list(getattr(entry, "core_extensions", []) or []),
             )

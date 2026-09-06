@@ -587,6 +587,33 @@ def test_registry_view_supports_clean_alias_assignment():
     assert len(_REGISTRY) >= 2                      # exercises __len__
 
 
+def test_registry_view_clean_alias_assignment_preserves_analyses():
+    """The v2ecoli clean-alias path (``_REGISTRY[clean_id] = dataclasses.replace(orig,
+    id=clean_id)``) rebuilds a CompositeSpec from a GeneratorEntry in __setitem__;
+    ``analyses`` must round-trip the same way ``visualizations`` does."""
+    import dataclasses
+    from process_bigraph import composite_spec as cs
+    from process_bigraph.composite_generator import composite_generator, _REGISTRY
+    cs.clear_registry()
+
+    @composite_generator(
+        name="aliasme_analyses",
+        parameters={},
+        analyses=[{"name": "ptools_rna_multigeneration"}],
+        visualizations=[{"name": "v", "address": "local:X"}],
+    )
+    def aliasme_analyses(core=None):
+        return {"state": {}}
+
+    full_id = f"{aliasme_analyses.__module__}.aliasme_analyses"
+    orig = _REGISTRY[full_id]                       # GeneratorEntry from the view
+    _REGISTRY["aliasme_analyses_clean"] = dataclasses.replace(orig, id="aliasme_analyses_clean")
+
+    aliased = _REGISTRY["aliasme_analyses_clean"]
+    assert aliased.analyses == [{"name": "ptools_rna_multigeneration"}]
+    assert aliased.visualizations  # unchanged path still works
+
+
 def test_registry_view_dict_conversion_works():
     """M2: _RegistryView.keys() enables dict(_REGISTRY) to work."""
     from process_bigraph import composite_spec as cs
