@@ -440,3 +440,27 @@ def test_a_closure_resource_survives_the_real_parser(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert 'withLabel:parca' in proc.stdout
     assert 'task.exitStatus == 137' in proc.stdout
+
+
+def test_awsbatch_hashes_inputs_leniently():
+    """The default cache mode includes an input's LAST-MODIFIED time.
+
+    A re-render rewrites each task's staged config with identical content and a
+    new mtime, so every task hash moves and `-resume` matches nothing -- having
+    restored a perfectly good session. Measured across two identical dispatches:
+    the same ParCa hashed 40/466afa, then ab/95dc07.
+    """
+    cfg = generate_nextflow_config(executor='awsbatch', params=_AWS_PARAMS)
+    assert "cache = 'lenient'" in cfg
+
+
+@pytest.mark.skipif(shutil.which('nextflow') is None, reason='nextflow binary not on PATH')
+def test_the_cache_directive_resolves(tmp_path):
+    (tmp_path / 'main.nf').write_text('workflow { }\n')
+    (tmp_path / 'nextflow.config').write_text(
+        generate_nextflow_config(executor='awsbatch', params=_AWS_PARAMS))
+    proc = subprocess.run(['nextflow', 'config', '-profile', 'awsbatch', '.'],
+                          cwd=str(tmp_path), capture_output=True, text=True,
+                          encoding='utf-8', errors='replace')
+    assert proc.returncode == 0, proc.stderr
+    assert "cache = 'lenient'" in proc.stdout
