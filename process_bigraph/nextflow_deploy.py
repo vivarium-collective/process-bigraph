@@ -8,6 +8,7 @@ one `profiles { }` block, backend selected by name.
 
 from __future__ import annotations
 
+import re
 import shutil
 import subprocess
 import sys
@@ -38,6 +39,15 @@ def _params_block(params: Optional[Dict[str, Any]]) -> str:
     lines = ['params {']
     for key, value in params.items():
         # Dispatch on type to render valid Groovy (check bool before int, since bool is int subclass)
+        if isinstance(value, dict):
+            # A Python dict repr is a Groovy CLOSURE, not a map -- `{'a': 1}`
+            # fails to compile and takes the whole config with it, reported as a
+            # column number in a generated script. Name the parameter instead.
+            # (A list is fine: Python and Groovy list literals coincide.)
+            raise ValueError(
+                f'param {key!r} is a dict, which has no Groovy literal here -- Python renders it '
+                f'as a closure and Nextflow fails to parse the config. Flatten it, or pass it '
+                f'through a directive that takes structured values (e.g. `container_env`).')
         if isinstance(value, bool):
             groovy_value = 'true' if value else 'false'
         elif value is None:
@@ -50,12 +60,161 @@ def _params_block(params: Optional[Dict[str, Any]]) -> str:
     return '\n'.join(lines) + '\n\n'
 
 
+_ENV_NAME = re.compile(r'^[A-Za-z_][A-Za-z0-9_]*$')
+# Characters that would end the Groovy string, be interpolated by it, or split
+# the docker argument. A value carrying one of these silently produces a broken
+# `--env`, which is the failure this module keeps trying not to ship.
+_ENV_VALUE_FORBIDDEN = set(' \t\n"\'$\\')
+
+
+def _container_env_opts(container_env: Optional[Dict[str, Any]]) -> str:
+    """Render caller-supplied container env vars as ``--env K=V`` fragments.
+
+    This exists so the profile carries no opinion about what any one image
+    needs. The motivating case is ``PYTHONPATH``: Nextflow moves a task's cwd
+    off the image's project root, so an application whose imports resolve on cwd
+    stops importing -- but that is a fact about *that image*, not about AWS
+    Batch, and encoding it here would make a general profile carry one
+    consumer's layout.
+
+    Values are rendered into a Groovy double-quoted string that becomes a docker
+    argument, so anything that would end the string, be interpolated by it, or
+    split the argument is rejected rather than emitted broken.
+    """
+    if not container_env:
+        return ''
+    parts = []
+    for key, value in container_env.items():
+        if not _ENV_NAME.match(str(key)):
+            raise ValueError(f'container_env key {key!r} is not a valid environment variable name')
+        text = str(value)
+        bad = sorted(_ENV_VALUE_FORBIDDEN.intersection(text))
+        if bad:
+            raise ValueError(
+                f'container_env[{key!r}] contains {"".join(bad)!r}, which cannot be rendered into '
+                f'a `--env` argument inside a Groovy string. Pass a value with no whitespace, '
+                f'quotes, `$` or backslashes.')
+        parts.append(f' --env {key}={text}')
+    return ''.join(parts)
+
+
+# The AWS Batch profile is params-driven, exactly like vEcoli's proven
+# `config.template`: this module must not know about any one deployment's
+# queue names, image registry or region. Callers supply them via `params`.
+AWSBATCH_REQUIRED_PARAMS = ('container_image', 'queue', 'aws_region')
+
+# Defaults for the two independent retry mechanisms. Both matter, and both are
+# absent from a bare `executor = 'awsbatch'`:
+#
+#   aws.batch.maxSpotAttempts   Batch retries the SAME job on a new instance,
+#                               and ONLY for a spot reclaim -- nf-amazon pins
+#                               EvaluateOnExit to RETRY on `Host EC2*`, EXIT on
+#                               `*`. Its default is 0, i.e. no retry at all, and
+#                               a spot-first queue will eventually reclaim a
+#                               long-running task.
+#   errorStrategy + maxRetries  Nextflow resubmits as a NEW Batch job. This is
+#                               the one that survives an OOM or a code fault,
+#                               and the only reason "the outer DAG is the
+#                               resubmitter" is true rather than aspirational.
+#
+# Nextflow's own default for errorStrategy is 'terminate', so without the second
+# row a single failed task takes the whole campaign with it.
+AWSBATCH_DEFAULTS = {
+    'max_spot_attempts': 10,
+    'max_transfer_attempts': 10,
+    'max_retries': 3,
+}
+
+
+def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
+    """Render the `awsbatch` profile body, modelled on vEcoli's production one.
+
+    Deliberately NOT emitted here:
+
+    * ``aws.batch.jobRole`` -- the submitting role's ``iam:PassRole`` is usually
+      scoped to a handful of named roles, so any value we invented would fail at
+      submission. Unset means the task runs as the compute environment's own
+      instance profile, which is what already has the work-bucket grant.
+    * ``aws.batch.cliPath`` -- unset relies on ``aws`` being on ``PATH`` inside
+      the task container, which is how vEcoli runs and what the science image
+      already provides.
+    """
+    params = params or {}
+    missing = [k for k in AWSBATCH_REQUIRED_PARAMS if params.get(k) in (None, '')]
+    if missing:
+        raise ValueError(
+            "the awsbatch profile needs params " + ', '.join(missing) + " -- without them the "
+            "profile still renders, and Nextflow reads them as null. Pass them in `params`.")
+
+    opts = dict(AWSBATCH_DEFAULTS)
+    for key in opts:
+        if params.get(key) is not None:
+            opts[key] = params[key]
+
+    # AWS_DEFAULT_REGION is the executor's own requirement, so it is always
+    # emitted. Anything else the image needs is the CALLER's business, not this
+    # library's -- see _container_env_opts.
+    env_opts = '--env AWS_DEFAULT_REGION=${params.aws_region}' + _container_env_opts(
+        params.get('container_env'))
+
+    # A GovCloud (or any non-standard-partition) S3 endpoint. Emitted only when
+    # given, so the common commercial-partition case stays on the SDK default.
+    endpoint_line = ''
+    if params.get('s3_endpoint'):
+        endpoint_line = '\n            client { endpoint = params.s3_endpoint }'
+
+    work_dir_line = ''
+    if params.get('work_dir'):
+        work_dir_line = '\n        workDir = params.work_dir'
+
+    return f"""    awsbatch {{
+        process {{
+            executor = 'awsbatch'
+            container = params.container_image
+            queue = params.queue
+            // AWS_DEFAULT_REGION is required by the AWS CLI *inside* the task
+            // container, which is what stages the S3 work dir in and out.
+            containerOptions = "{env_opts}"
+            // Retry, then stop scheduling new work and let running tasks drain.
+            // 'finish' rather than vEcoli's 'ignore': ignore is safe there only
+            // because it also sets workflow.failOnIgnore, and an ignored failed
+            // task is a campaign that goes green having produced no science.
+            errorStrategy = {{ task.attempt <= task.maxRetries ? 'retry' : 'finish' }}
+            maxRetries = {opts['max_retries']}{res_block}
+        }}
+        aws {{
+            region = params.aws_region{endpoint_line}
+            batch {{
+                // Spot preemption is retried by Batch itself; default is 0.
+                maxSpotAttempts = {opts['max_spot_attempts']}
+                maxTransferAttempts = {opts['max_transfer_attempts']}
+            }}
+        }}
+        docker.enabled = true{work_dir_line}
+    }}
+"""
+
+
+# Params the generator CONSUMES rather than echoes. They configure a profile
+# directive (not a Nextflow `params.<name>` lookup), so rendering them into the
+# params block would be noise at best -- and `container_env`, being a dict, has
+# no Groovy literal at all.
+PROFILE_ONLY_PARAMS = ('container_env',)
+
+
 def generate_nextflow_config(executor: str = 'local',
                              resources: Optional[Dict[str, Dict[str, Any]]] = None,
                              params: Optional[Dict[str, Any]] = None) -> str:
+    block_params = {k: v for k, v in (params or {}).items() if k not in PROFILE_ONLY_PARAMS}
     res = _resource_lines(resources)
     res_block = ('\n' + res) if res else ''
-    return f"""{_params_block(params)}profiles {{
+    # Only validate the profile actually being deployed: this function always
+    # emits every profile, so requiring awsbatch params from a local run would
+    # make the local path depend on AWS settings it never uses.
+    awsbatch = (_awsbatch_profile(res_block, params) if executor == 'awsbatch'
+                else "    awsbatch {\n        // not configured; pass awsbatch params to render it\n"
+                     "        process { executor = 'awsbatch' }\n    }\n")
+    return f"""{_params_block(block_params)}profiles {{
     local {{
         process {{
             executor = 'local'{res_block}
@@ -69,11 +228,7 @@ def generate_nextflow_config(executor: str = 'local',
         executor.queueSize = 100
         executor.submitRateLimit = '20/min'
     }}
-    awsbatch {{
-        // STUB (untested in v1)
-        process {{ executor = 'awsbatch' }}
-    }}
-    'google-batch' {{
+{awsbatch}    'google-batch' {{
         // STUB (untested in v1)
         process {{ executor = 'google-batch' }}
     }}
@@ -85,7 +240,7 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
            launch: bool = False, resources=None, params=None,
            options=None, work_dir=None, resume: bool = False,
            report=None, trace=None, weblog_url=None,
-           nextflow_args=None) -> Dict[str, Optional[str]]:
+           nextflow_args=None, config=None) -> Dict[str, Optional[str]]:
     """Write ``main.nf`` + ``nextflow.config`` for a Composite, optionally launch it.
 
     Renders the Step network via ``render_composite`` and writes a matching
@@ -108,6 +263,21 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
 
     ``nextflow_args`` is an escape hatch appended verbatim; it is a list, never
     a string, so nothing is shell-split or shell-interpreted.
+
+    **``config`` replaces the generated ``nextflow.config`` outright**, and is
+    the escape hatch that matters. ``generate_nextflow_config`` emits ONE fixed
+    shape with params substituted into it; a real deployment routinely needs
+    more than that shape can express -- per-label *executor* switching (ParCa on
+    SLURM, sims on HyperQueue), memory that scales on the previous attempt's exit
+    status, ``workflow.failOnIgnore``, Fusion, accelerators. Without ``config``
+    the only way to have those is to stop using ``deploy()``, which turns a
+    disagreement about one directive into a fork. With it, the built-in profiles
+    are a default rather than the only path.
+
+    Pass a ``Path`` to read a file, or a ``str`` used verbatim as the config
+    text. ``executor`` still selects ``-profile``, so a supplied config must
+    define a profile by that name. Supplying one bypasses
+    ``generate_nextflow_config`` entirely, including its required-param checks.
 
     **The interpreter default is executor-scoped, deliberately.**
     ``sys.executable`` is the path of the *head's* Python. On the local executor
@@ -145,15 +315,28 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
     for _name, _cfg in (render_options.get('_staged_configs') or {}).items():
         (out / _name).write_text(_json.dumps(_cfg, indent=2, default=str))
 
-    config = out / 'nextflow.config'
-    config.write_text(generate_nextflow_config(
-        executor=executor, resources=resources, params=params))
+    config_path = out / 'nextflow.config'
+    if config is None:
+        config_text = generate_nextflow_config(
+            executor=executor, resources=resources, params=params)
+    elif isinstance(config, Path):
+        config_text = config.read_text()
+    else:
+        config_text = str(config)
+        # A one-line str that names a real file is almost certainly a path the
+        # caller forgot to wrap. Left alone it writes that path INTO the config
+        # and fails as a Groovy parse error pointing at nothing useful.
+        if '\n' not in config_text and Path(config_text).is_file():
+            raise TypeError(
+                f'config={config_text!r} looks like a file path, but a str is used as the config '
+                f'TEXT. Wrap it in Path(...) to read the file.')
+    config_path.write_text(config_text)
 
     returncode: Optional[int] = None
     if launch:
         if shutil.which('nextflow') is None:
             raise RuntimeError('nextflow binary not found on PATH')
-        cmd = ['nextflow', '-C', str(config), 'run', str(main_nf),
+        cmd = ['nextflow', '-C', str(config_path), 'run', str(main_nf),
                '-profile', executor]
         if work_dir is not None:
             cmd += ['-work-dir', str(work_dir)]
@@ -177,5 +360,5 @@ def deploy(composite, *, outdir: str, executor: str = 'local',
         if returncode != 0:
             raise subprocess.CalledProcessError(returncode, cmd)
 
-    return {'main_nf': str(main_nf), 'config': str(config),
+    return {'main_nf': str(main_nf), 'config': str(config_path),
             'returncode': returncode}
