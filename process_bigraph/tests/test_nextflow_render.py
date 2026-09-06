@@ -262,3 +262,32 @@ def test_config_is_a_declared_staged_input_not_just_a_flag():
     # file('${projectDir}/x') is a literal dollar sign and staging fails.
     assert 'file("${projectDir}/node_0.config.json")' in nf
     assert "file('${projectDir}" not in nf
+
+
+# --- a nextflow_script() override returns SHELL, not Groovy ----------------
+
+
+def test_bare_override_script_is_wrapped_into_a_groovy_block():
+    """An unquoted command in `script:` is Groovy SOURCE, not a string.
+
+    The file then fails to compile -- at RUN time, with the error pointing at
+    the `process` line rather than the script. Rendering succeeds and the file
+    looks fine, which is exactly why the renderer normalises it rather than
+    trusting each Step author.
+
+    Measured on real infrastructure: v2ecoli's ParcaTaskStep returned a bare
+    `v2ecoli-parca --mode fast ...` and `nextflow run` reported
+    "Unexpected input: '{' @ line 3, column 18 -- process parca_v0 {".
+    """
+    from process_bigraph.nextflow import _as_script_block
+
+    assert _as_script_block("v2ecoli-parca --mode fast") == '"""\nv2ecoli-parca --mode fast\n"""'
+
+
+def test_an_already_quoted_override_is_passed_through_unchanged():
+    """Double-wrapping would break every caller that got it right."""
+    from process_bigraph.nextflow import _as_script_block
+
+    block = '"""\necho hi\n"""'
+    assert _as_script_block(block) == block
+    assert _as_script_block("'''\necho hi\n'''") == "'''\necho hi\n'''"

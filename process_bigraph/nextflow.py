@@ -196,7 +196,10 @@ def _script_body(instance: Any,
          same ``update()`` runs natively and under Nextflow.
     """
     if hasattr(instance, 'nextflow_script'):
-        return instance.nextflow_script()
+        # The override returns the SHELL BODY; the Groovy quoting is ours. See
+        # _as_script_block -- a bare command in `script:` is Groovy source, and
+        # the file fails to compile at RUN time while rendering looks fine.
+        return _as_script_block(instance.nextflow_script())
 
     cls = type(instance)
     fq = f"{cls.__module__}.{cls.__name__}"
@@ -218,6 +221,25 @@ def _script_body(instance: Any,
         parts.append(out_flags)
     cmd = ' \\\n    '.join(parts)
     return f'"""\n{cmd}\n"""'
+
+
+_SCRIPT_QUOTE_PREFIXES = ('"""', "'''")
+
+
+def _as_script_block(script: str) -> str:
+    """Wrap a shell body in a Groovy triple-quoted block, idempotently.
+
+    Nextflow's ``script:`` takes a Groovy string. An unquoted command is
+    Groovy SOURCE, and ``v2ecoli-parca --mode fast`` is not valid Groovy, so
+    the file fails to compile -- at RUN time, with the error pointing at the
+    ``process`` line rather than at the script. Rendering itself succeeds,
+    which is what makes this worth normalising here rather than trusting
+    every Step author to remember.
+    """
+    body = script.strip()
+    if body.startswith(_SCRIPT_QUOTE_PREFIXES):
+        return script
+    return '"""\n' + body + '\n"""'
 
 
 def _composite_node_script(instance: Any,
