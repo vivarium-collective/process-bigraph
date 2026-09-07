@@ -16,18 +16,36 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 
+def _resource_value(value: Any) -> str:
+    """Render one directive value: a Groovy CLOSURE raw, anything else quoted.
+
+    A string starting with ``{`` is a closure and must be emitted verbatim --
+    repr-quoting it turns `{ task.exitStatus == 137 ? 32.GB * task.attempt :
+    32.GB }` into a string literal, and the process then asks Batch for a
+    quantity of memory named "{ task.exitStatus ... }".
+
+    This is what makes retry-with-more-memory expressible at all. Retrying an
+    OOM with the SAME memory is three identical failures: measured, exit 137
+    three times on one ParCa. vEcoli scales via its `scaledMemory` closure for
+    exactly this reason.
+
+    Same convention as ``_directive_lines`` in nextflow.py, deliberately -- two
+    places that emit Groovy should not disagree about what a leading ``{`` means.
+    """
+    if isinstance(value, str) and value.lstrip().startswith('{'):
+        return value
+    return repr(value) if isinstance(value, str) else str(value)
+
+
 def _resource_lines(resources: Optional[Dict[str, Dict[str, Any]]]) -> str:
     if not resources:
         return ''
     blocks = []
     for label, res in resources.items():
         lines = [f'            withLabel: {label} {{']
-        if 'cpus' in res:
-            lines.append(f'                cpus = {res["cpus"]}')
-        if 'memory' in res:
-            lines.append(f'                memory = {res["memory"]!r}')
-        if 'time' in res:
-            lines.append(f'                time = {res["time"]!r}')
+        for key in ('cpus', 'memory', 'time'):
+            if key in res:
+                lines.append(f'                {key} = {_resource_value(res[key])}')
         lines.append('            }')
         blocks.append('\n'.join(lines))
     return '\n'.join(blocks)
@@ -180,7 +198,18 @@ def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
             // because it also sets workflow.failOnIgnore, and an ignored failed
             // task is a campaign that goes green having produced no science.
             errorStrategy = {{ task.attempt <= task.maxRetries ? 'retry' : 'finish' }}
-            maxRetries = {opts['max_retries']}{res_block}
+            maxRetries = {opts['max_retries']}
+            // Hash inputs by name+size, NOT last-modified. The default mode
+            // includes the timestamp, and a re-render rewrites each task's
+            // staged config with identical content and a new mtime -- so every
+            // task hash moves and `-resume` matches nothing, having restored a
+            // perfectly good session. Measured: the same ParCa hashed 40/466afa
+            // then ab/95dc07 across two identical dispatches.
+            // Trade-off, stated: a content change that preserves name AND size
+            // is not detected. `deep` would hash content instead, at the cost of
+            // reading every staged input -- here that includes a multi-hundred-MB
+            // cache directory on S3.
+            cache = 'lenient'{res_block}
         }}
         aws {{
             region = params.aws_region{endpoint_line}
