@@ -17,10 +17,16 @@ The design rules (they are load-bearing, keep them):
 * **Off by default in the library, stdout by default in the CLI entrypoints**
   (``run_composite`` / ``run_step``), so a container gets events with zero
   configuration and an importing program gets nothing unless it asks.
-* **OpenTelemetry-shaped identity, no OpenTelemetry SDK.** Every event carries
+* **OpenTelemetry-shaped context, no OpenTelemetry SDK.** Every event carries
   ``trace_id`` / ``span_id`` / ``parent_span_id``; spans nest (task -> run ->
   optional tick/invoke); context is propagated to child processes through a
   W3C ``traceparent`` string. An OTLP exporter is one more sink, later.
+* **The engine knows no domain.** The only fields it interprets are its own
+  (times, ids, the event name). Everything a CALLER wants to say about a run --
+  which campaign, which cell, which generation, which seed -- travels in
+  ``baggage``, an opaque string-to-scalar map with W3C ``baggage`` semantics
+  that the engine copies onto every event and never reads. Domain keys such
+  as a generation index belong to the caller's baggage, never to this module.
 
 Switches (all environment variables, all optional)::
 
@@ -38,16 +44,14 @@ Switches (all environment variables, all optional)::
                          its correlation id) -- never assumed random. Absent:
                          a fresh trace_id is minted and the first span opened
                          becomes the root.
-    PBG_TRACE_BAGGAGE    identity fields the dispatcher knows, in W3C
-                         ``baggage`` form: ``sim_id=946,variant=0,
-                         lineage_seed=3`` (values percent-encoded; no quotes,
+    PBG_TRACE_BAGGAGE    the caller's context in W3C ``baggage`` form:
+                         ``k=v,k2=v2`` (values percent-encoded; no quotes,
                          whitespace, ``$`` or backslashes -- dispatchers render
                          env through ``docker --env``). A value starting with
-                         ``{`` is read as JSON for laptop convenience. Keys:
-                         ``sim_id``, ``experiment_id``, ``variant``,
-                         ``lineage_seed``, ``generation``; the last three are
-                         coerced to int when they parse as ints. All optional;
-                         the runner binds what only it knows via ``bind()``.
+                         ``{`` is read as JSON for laptop convenience. Keys are
+                         opaque to the engine; values that parse as ints become
+                         ints, everything else stays a string. Callers add to
+                         it at runtime with ``emitter.bind(**kv)``.
     PBG_EVENT_TAGS       same ``key=value,...`` (or JSON) form, copied verbatim
                          onto every event's ``tags`` (job ids, backend names --
                          infrastructure identifiers live here, never in the
@@ -70,10 +74,9 @@ Event schema (one JSON object per line, ``default=str`` serialisation)::
     {"v": 1, "ts": "<UTC ISO 8601>", "seq": <per-process counter>,
      "layer": "engine", "event": "<name>", "level": "debug|info|warning|error",
      "trace_id": "<32 hex>", "span_id": "<16 hex>", "parent_span_id": "<16 hex>|null",
-     "sim_id": ..., "experiment_id": ..., "variant": ..., "lineage_seed": ...,
-     "generation": ...,            # identity: all optional, null when unknown
      "global_time": <float|null>, "wall_time": <seconds since configure()>,
-     "source": "<host-pid>", "tags": {...}, "payload": {...}}
+     "source": "<host-pid>",
+     "baggage": {<caller's opaque context>}, "tags": {...}, "payload": {...}}
 
 Engine events: ``run_start``, ``tick``, ``structural_change``, ``exception``,
 ``run_end``, ``process_init``, ``invoke`` (opt-in), ``span_start``/``span_end``
@@ -408,7 +411,7 @@ class EventEmitter:
     public method short-circuits on ``enabled``."""
 
     def __init__(self, sinks: Optional[Iterable[EventSink]] = None, *,
-                 identity: Optional[Dict[str, Any]] = None,
+                 baggage: Optional[Dict[str, Any]] = None,
                  tags: Optional[Dict[str, Any]] = None,
                  heartbeat_s: float = DEFAULT_HEARTBEAT_S,
                  detail: Iterable[str] = (),
@@ -416,11 +419,8 @@ class EventEmitter:
                  root_span_id: Optional[str] = None,
                  source: Optional[str] = None):
         self._sinks: List[EventSink] = list(sinks or [])
-        self.identity: Dict[str, Any] = {
-            'sim_id': None, 'experiment_id': None, 'variant': None,
-            'lineage_seed': None, 'generation': None}
-        self.identity.update({k: v for k, v in (identity or {}).items()
-                              if k in self.identity})
+        # Opaque to the engine: copied onto every event, never interpreted.
+        self.baggage: Dict[str, Any] = dict(baggage or {})
         self.tags: Dict[str, Any] = dict(tags or {})
         self.heartbeat_s = float(heartbeat_s)
         detail = {d.strip() for d in detail if d and d.strip()}
@@ -445,12 +445,14 @@ class EventEmitter:
     def enabled(self) -> bool:
         return bool(self._sinks)
 
-    def bind(self, **identity) -> 'EventEmitter':
-        """Set identity fields the caller knows (``variant``, ``lineage_seed``,
-        ``generation``, ...). Unknown keys are ignored."""
-        for key, value in identity.items():
-            if key in self.identity:
-                self.identity[key] = value
+    def bind(self, **baggage) -> 'EventEmitter':
+        """Add to (or overwrite in) the opaque baggage copied onto every
+        event. Any key; a value of ``None`` removes the key."""
+        for key, value in baggage.items():
+            if value is None:
+                self.baggage.pop(key, None)
+            else:
+                self.baggage[key] = value
         return self
 
     # -- context -------------------------------------------------------- #
@@ -599,10 +601,10 @@ class EventEmitter:
             'trace_id': ctx.trace_id if ctx else self.trace_id,
             'span_id': ctx.span_id if ctx else None,
             'parent_span_id': ctx.parent_span_id if ctx else self.root_span_id,
-            **self.identity,
             'global_time': global_time,
             'wall_time': round(_time.monotonic() - self._origin, 3),
             'source': self.source,
+            'baggage': dict(self.baggage),
             'tags': self.tags,
             'payload': payload,
         }
@@ -643,14 +645,11 @@ _EMITTER: Optional[EventEmitter] = None
 _EMITTER_LOCK = threading.RLock()   # re-entrant: get_emitter() -> configure() nests
 
 
-_INT_IDENTITY_KEYS = ('variant', 'lineage_seed', 'generation')
-
-
 def parse_baggage(raw: Optional[str]) -> Dict[str, Any]:
     """W3C ``baggage`` form ``k=v,k2=v2`` (values percent-encoded), or a JSON
-    object when the value starts with ``{``. ``variant``/``lineage_seed``/
-    ``generation`` become ints when they parse as ints; everything else stays
-    a string. Never raises; malformed entries are skipped."""
+    object when the value starts with ``{``. Keys are opaque; a value that
+    parses as an int becomes an int, everything else stays a string. Never
+    raises; malformed entries are skipped."""
     if not raw or not raw.strip():
         return {}
     raw = raw.strip()
@@ -673,18 +672,13 @@ def parse_baggage(raw: Optional[str]) -> Dict[str, Any]:
                 continue
             # W3C baggage allows ``;``-separated properties after the value
             out[key] = unquote(value.split(';', 1)[0].strip())
-    for key in _INT_IDENTITY_KEYS:
-        value = out.get(key)
+    for key, value in list(out.items()):
         if isinstance(value, str):
             try:
                 out[key] = int(value)
             except ValueError:
                 pass
     return out
-
-
-def _load_json_env(env: Dict[str, str], key: str) -> Dict[str, Any]:
-    return parse_baggage(env.get(key))
 
 
 def configure(spec: Optional[str] = None, *, default: str = 'none',
@@ -715,14 +709,14 @@ def configure(spec: Optional[str] = None, *, default: str = 'none',
 
     parsed = parse_traceparent(env.get('PBG_TRACEPARENT'))
     trace_id, root_span = parsed if parsed else (None, None)
-    identity = _load_json_env(env, 'PBG_TRACE_BAGGAGE') or _load_json_env(env, 'PBG_EVENT_IDENTITY')
-    tags = _load_json_env(env, 'PBG_EVENT_TAGS')
+    baggage = parse_baggage(env.get('PBG_TRACE_BAGGAGE'))
+    tags = parse_baggage(env.get('PBG_EVENT_TAGS'))
     try:
         heartbeat_s = float(env.get('PBG_EVENT_HEARTBEAT_S', DEFAULT_HEARTBEAT_S))
     except ValueError:
         heartbeat_s = DEFAULT_HEARTBEAT_S
 
-    emitter = EventEmitter(resolved, identity=identity, tags=tags,
+    emitter = EventEmitter(resolved, baggage=baggage, tags=tags,
                            heartbeat_s=heartbeat_s, detail=detail,
                            trace_id=trace_id, root_span_id=root_span,
                            source=env.get('PBG_EVENT_SOURCE'))

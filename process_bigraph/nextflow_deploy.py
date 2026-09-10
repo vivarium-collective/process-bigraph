@@ -162,8 +162,8 @@ AWSBATCH_REQUIRED_PARAMS = ('container_image', 'queue', 'aws_region')
 # on it), 143 (SIGTERM, an instance draining), and the nf-core set 104/134/139
 # (I/O, abort, segfault under memory pressure). A Python exception exits 1 and
 # is NOT in the list: retrying a deterministic fault re-runs the whole task N
-# times and reports "running" the whole while (measured on a 30-minute
-# generation that died 7 s after division, three times over). Spot reclaim is
+# times and reports "running" the whole while (measured on a 30-minute task
+# that died 7 s after its checkpoint, three times over). Spot reclaim is
 # Batch's own retry (``maxSpotAttempts``) and never reaches errorStrategy
 # unless those attempts are exhausted.
 AWSBATCH_DEFAULTS = {

@@ -100,9 +100,9 @@ def test_events_off_by_default_emits_nothing(capsys, monkeypatch):
     assert _lines(capsys) == []
 
 
-def test_stdout_sink_emits_run_start_and_run_end_with_identity(capsys):
+def test_stdout_sink_emits_run_start_and_run_end_with_baggage(capsys):
     events.configure('stdout', env={
-        'PBG_TRACE_BAGGAGE': json.dumps({'sim_id': '946', 'variant': 0, 'lineage_seed': 3}),
+        'PBG_TRACE_BAGGAGE': json.dumps({'campaign': '946', 'cell': 0, 'replicate': 3}),
         'PBG_EVENT_TAGS': json.dumps({'backend': 'test'}),
         'PBG_EVENT_HEARTBEAT_S': '3600'})
     sim = Composite({'state': _two_increasers()}, core=allocate_core())
@@ -114,9 +114,11 @@ def test_stdout_sink_emits_run_start_and_run_end_with_identity(capsys):
     for r in recs:
         assert r['v'] == events.SCHEMA_VERSION
         assert r['layer'] == 'engine'
-        assert r['sim_id'] == '946' and r['variant'] == 0 and r['lineage_seed'] == 3
-        assert r['experiment_id'] is None and r['generation'] is None
+        assert r['baggage'] == {'campaign': 946, 'cell': 0, 'replicate': 3}   # opaque, ints coerced
         assert r['tags'] == {'backend': 'test'}
+        assert set(r) == {'v', 'ts', 'seq', 'layer', 'event', 'level', 'trace_id', 'span_id',
+                          'parent_span_id', 'global_time', 'wall_time', 'source',
+                          'baggage', 'tags', 'payload'}
         assert len(r['trace_id']) == 32
     end = recs[-1]['payload']
     assert end['status'] == 'ok' and recs[-1]['global_time'] == 3.0
@@ -268,20 +270,24 @@ def test_spans_nest_and_span_end_carries_start_ts(capsys):
     assert em.current_context() is None            # restored after the task span
 
 
-def test_baggage_and_tags_accept_w3c_key_value_form():
+def test_baggage_and_tags_accept_w3c_key_value_form_and_stay_opaque():
     """Dispatchers render env through ``docker --env`` (no quotes/whitespace),
-    so the primary form is W3C baggage; JSON stays accepted for laptops."""
+    so the primary form is W3C baggage; JSON stays accepted for laptops. The
+    engine interprets no key: whatever a caller puts there comes out as-is,
+    with int-looking values coerced."""
     em = events.configure(env={
-        'PBG_TRACE_BAGGAGE': 'sim_id=946,experiment_id=sim193-run3%20pilot,variant=0,lineage_seed=3,generation=x',
+        'PBG_TRACE_BAGGAGE': 'campaign=946,label=run3%20pilot,cell=0,replicate=3,stage=x',
         'PBG_EVENT_TAGS': 'backend=nextflow,job=abc-123;prop=ignored,attempt=2',
         'PBG_TRACEPARENT': '00-' + '0123456789abcdef' * 2 + '-' + 'fedcba9876543210' + '-01'})
-    assert em.identity == {'sim_id': '946', 'experiment_id': 'sim193-run3 pilot',
-                           'variant': 0, 'lineage_seed': 3, 'generation': 'x'}
-    assert em.tags == {'backend': 'nextflow', 'job': 'abc-123', 'attempt': '2'}
+    assert em.baggage == {'campaign': 946, 'label': 'run3 pilot', 'cell': 0, 'replicate': 3, 'stage': 'x'}
+    assert em.tags == {'backend': 'nextflow', 'job': 'abc-123', 'attempt': 2}
     assert em.trace_id == '0123456789abcdef' * 2 and em.root_span_id == 'fedcba9876543210'
-    assert events.parse_baggage('{"sim_id": "1", "variant": "2"}') == {'sim_id': '1', 'variant': 2}
+    assert events.parse_baggage('{"a": "1", "b": "two"}') == {'a': 1, 'b': 'two'}
     assert events.parse_baggage('') == {} and events.parse_baggage('novalue,=x') == {}
-    assert events.parse_baggage('{not json') == {} or True     # never raises
+    assert events.parse_baggage('{not json') == {}                      # never raises
+    # bind() adds/overwrites/removes, any key
+    em.bind(stage='y', extra=7, cell=None)
+    assert em.baggage == {'campaign': 946, 'label': 'run3 pilot', 'replicate': 3, 'stage': 'y', 'extra': 7}
 
 
 def test_local_run_mints_trace_id_when_no_traceparent():
