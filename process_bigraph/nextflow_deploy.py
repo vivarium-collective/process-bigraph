@@ -37,6 +37,16 @@ def _resource_value(value: Any) -> str:
     return repr(value) if isinstance(value, str) else str(value)
 
 
+def retry_error_strategy(exit_codes) -> str:
+    """The Groovy ``errorStrategy`` closure that retries only ``exit_codes``
+    (up to ``task.maxRetries``) and otherwise lets the campaign ``finish``.
+    Shared by the awsbatch profile and by callers that want the same policy
+    on another executor via a per-label ``resources`` entry."""
+    codes = '[' + ', '.join(str(int(c)) for c in exit_codes) + ']'
+    return ("{ (task.exitStatus in " + codes + ") && task.attempt <= task.maxRetries"
+            " ? 'retry' : 'finish' }")
+
+
 def _resource_lines(resources: Optional[Dict[str, Dict[str, Any]]]) -> str:
     if not resources:
         return ''
@@ -188,7 +198,7 @@ def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
     for key in opts:
         if params.get(key) is not None:
             opts[key] = params[key]
-    retry_codes = '[' + ', '.join(str(int(c)) for c in opts['retry_exit_codes']) + ']'
+    retry_strategy = retry_error_strategy(opts['retry_exit_codes'])
     # Optional identity in the Batch job name: nf-amazon derives the job name
     # from the task name, which includes the ``tag`` directive.
     tag_line = ''
@@ -225,7 +235,7 @@ def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
             // task is a campaign that goes green having produced no science.
             // ...and only for exit classes a fresh attempt can fix (see
             // AWSBATCH_DEFAULTS['retry_exit_codes']); a code fault is not retried.
-            errorStrategy = {{ (task.exitStatus in {retry_codes}) && task.attempt <= task.maxRetries ? 'retry' : 'finish' }}
+            errorStrategy = {retry_strategy}
             maxRetries = {opts['max_retries']}{tag_line}
             // Hash inputs by name+size, NOT last-modified. The default mode
             // includes the timestamp, and a re-render rewrites each task's

@@ -4,7 +4,6 @@ The invariant every test here protects, stated once: enabling instrumentation
 adds output and never changes a simulation's result or exception type.
 """
 import json
-import os
 import sys
 import types
 
@@ -12,7 +11,7 @@ import numpy as np
 import pytest
 
 from process_bigraph import Composite, allocate_core, events
-from process_bigraph.composite import Process, Step
+from process_bigraph.composite import Process
 
 
 # ---------------------------------------------------------------------------

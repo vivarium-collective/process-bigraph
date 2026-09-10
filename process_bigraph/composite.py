@@ -18,7 +18,6 @@ import math
 import inspect
 import time as _time
 import contextvars
-import numpy as np
 
 
 # Set by ``Composite.run`` for the duration of the run loop so Steps

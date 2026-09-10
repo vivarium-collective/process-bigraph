@@ -33,16 +33,25 @@ Switches (all environment variables, all optional)::
                          ``configure()`` -- 'none' for the library,
                          'stdout' for the CLI entrypoints.
     PBG_TRACEPARENT      W3C ``00-<trace_id>-<span_id>-01`` (the short
-                         ``<trace_id>-<span_id>`` form is accepted). Absent:
+                         ``<trace_id>-<span_id>`` form is accepted). Trace ids
+                         are whatever the dispatcher derived (viva-api hashes
+                         its correlation id) -- never assumed random. Absent:
                          a fresh trace_id is minted and the first span opened
                          becomes the root.
-    PBG_TRACE_BAGGAGE    JSON object of identity fields the dispatcher knows:
+    PBG_TRACE_BAGGAGE    identity fields the dispatcher knows, in W3C
+                         ``baggage`` form: ``sim_id=946,variant=0,
+                         lineage_seed=3`` (values percent-encoded; no quotes,
+                         whitespace, ``$`` or backslashes -- dispatchers render
+                         env through ``docker --env``). A value starting with
+                         ``{`` is read as JSON for laptop convenience. Keys:
                          ``sim_id``, ``experiment_id``, ``variant``,
-                         ``lineage_seed``, ``generation``. All optional; the
-                         runner binds what only it knows via ``bind()``.
-    PBG_EVENT_TAGS       JSON object copied verbatim onto every event's
-                         ``tags`` (job ids, backend names -- infrastructure
-                         identifiers live here, never in the core schema).
+                         ``lineage_seed``, ``generation``; the last three are
+                         coerced to int when they parse as ints. All optional;
+                         the runner binds what only it knows via ``bind()``.
+    PBG_EVENT_TAGS       same ``key=value,...`` (or JSON) form, copied verbatim
+                         onto every event's ``tags`` (job ids, backend names --
+                         infrastructure identifiers live here, never in the
+                         core schema).
     PBG_EVENT_HEARTBEAT_S  seconds of wall clock between ``tick`` events
                          (default 30; 0 = every tick).
     PBG_EVENT_DETAIL     comma list of ``timing`` (per-process invoke time in
@@ -87,7 +96,7 @@ import time as _time
 import traceback
 import warnings
 from abc import ABC, abstractmethod
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, Callable, Dict, Iterable, List, Optional
 
 import numpy as np
@@ -634,16 +643,48 @@ _EMITTER: Optional[EventEmitter] = None
 _EMITTER_LOCK = threading.RLock()   # re-entrant: get_emitter() -> configure() nests
 
 
+_INT_IDENTITY_KEYS = ('variant', 'lineage_seed', 'generation')
+
+
+def parse_baggage(raw: Optional[str]) -> Dict[str, Any]:
+    """W3C ``baggage`` form ``k=v,k2=v2`` (values percent-encoded), or a JSON
+    object when the value starts with ``{``. ``variant``/``lineage_seed``/
+    ``generation`` become ints when they parse as ints; everything else stays
+    a string. Never raises; malformed entries are skipped."""
+    if not raw or not raw.strip():
+        return {}
+    raw = raw.strip()
+    out: Dict[str, Any] = {}
+    if raw.startswith('{'):
+        try:
+            value = json.loads(raw)
+            out = dict(value) if isinstance(value, dict) else {}
+        except Exception:
+            warnings.warn('process_bigraph.events: baggage looks like JSON but does not parse; ignored')
+            return {}
+    else:
+        from urllib.parse import unquote
+        for item in raw.split(','):
+            if '=' not in item:
+                continue
+            key, value = item.split('=', 1)
+            key = key.strip()
+            if not key:
+                continue
+            # W3C baggage allows ``;``-separated properties after the value
+            out[key] = unquote(value.split(';', 1)[0].strip())
+    for key in _INT_IDENTITY_KEYS:
+        value = out.get(key)
+        if isinstance(value, str):
+            try:
+                out[key] = int(value)
+            except ValueError:
+                pass
+    return out
+
+
 def _load_json_env(env: Dict[str, str], key: str) -> Dict[str, Any]:
-    raw = env.get(key)
-    if not raw:
-        return {}
-    try:
-        value = json.loads(raw)
-        return value if isinstance(value, dict) else {}
-    except Exception:
-        warnings.warn(f'process_bigraph.events: {key} is not a JSON object; ignored')
-        return {}
+    return parse_baggage(env.get(key))
 
 
 def configure(spec: Optional[str] = None, *, default: str = 'none',
@@ -731,6 +772,6 @@ __all__ = [
     'EventSink', 'NullSink', 'StdoutSink', 'FileSink', 'MultiSink',
     'register_sink_factory', 'resolve_sink', 'resolve_sinks',
     'SpanContext', 'Span', 'EventEmitter', 'configure', 'get_emitter',
-    'set_emitter', 'parse_traceparent', 'mint_trace_id', 'mint_span_id',
+    'set_emitter', 'parse_traceparent', 'parse_baggage', 'mint_trace_id', 'mint_span_id',
     'summarize_state', 'failure_record', 'traceback_tail', 'SCHEMA_VERSION',
 ]
