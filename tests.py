@@ -3164,6 +3164,28 @@ def test_per_process_timing_is_opt_in():
     # Profiling is a pure observation — it must not perturb the simulation.
     assert on.state['level'] == off.state['level']
 
+    # The same invariant for the whole event stream: sinks on, every detail
+    # flag on, heartbeat every tick -- byte-identical serialized state.
+    from process_bigraph import events as _events
+    sink = []
+
+    class _Collect(_events.EventSink):
+        def emit(self, event):
+            sink.append(event)
+    _events.set_emitter(_events.EventEmitter(
+        [_Collect()], heartbeat_s=0, detail=('timing', 'invoke', 'spans')))
+    try:
+        loud = Composite({'state': _two_increasers()}, core=allocate_core())
+        loud.run(10.0)
+    finally:
+        _events.set_emitter(None)
+    assert loud.state['level'] == off.state['level']
+    assert json.dumps(loud.serialize_state(), sort_keys=True, default=str) == \
+        json.dumps(off.serialize_state(), sort_keys=True, default=str)
+    assert [e['event'] for e in sink][0] == 'span_start'
+    assert [e['event'] for e in sink][-1] == 'span_end'
+    assert any(e['event'] == 'invoke' for e in sink)
+
 
 def test_omitted_interval_takes_the_schema_default():
     """An omitted interval is not an error — it takes the `process` schema

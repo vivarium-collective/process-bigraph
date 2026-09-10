@@ -15,6 +15,47 @@ def test_config_has_requested_profiles_and_resources():
     assert "publishDir = 'results'" in cfg
 
 
+def _awsbatch_params(**extra):
+    from process_bigraph.nextflow_deploy import AWSBATCH_REQUIRED_PARAMS
+    params = {k: f'{k}-value' for k in AWSBATCH_REQUIRED_PARAMS}
+    params.update(extra)
+    return params
+
+
+def test_awsbatch_error_strategy_retries_only_reclaim_class_exits():
+    """A code fault (exit 1) is never retried; OOM/SIGTERM-class exits are,
+    up to maxRetries; then the campaign finishes instead of terminating."""
+    cfg = generate_nextflow_config(executor='awsbatch', params=_awsbatch_params())
+    assert ("errorStrategy = { (task.exitStatus in [137, 143, 104, 134, 139]) "
+            "&& task.attempt <= task.maxRetries ? 'retry' : 'finish' }") in cfg
+    assert 'maxRetries = 3' in cfg
+    # retry_exit_codes is consumed by the profile, not echoed as a param
+    assert 'retry_exit_codes' not in cfg.split('profiles {')[0]
+
+    cfg = generate_nextflow_config(executor='awsbatch',
+                                   params=_awsbatch_params(retry_exit_codes=[137], max_retries=1))
+    assert 'task.exitStatus in [137]' in cfg and 'maxRetries = 1' in cfg
+
+
+def test_label_can_override_retry_policy():
+    cfg = generate_nextflow_config(
+        executor='awsbatch', params=_awsbatch_params(),
+        resources={'lineage': {'cpus': 4, 'maxRetries': 0,
+                               'errorStrategy': "{ task.exitStatus == 137 ? 'retry' : 'finish' }"},
+                   'analysis': {'errorStrategy': 'ignore'}})
+    assert 'withLabel: lineage {' in cfg
+    assert '                maxRetries = 0' in cfg
+    assert "                errorStrategy = { task.exitStatus == 137 ? 'retry' : 'finish' }" in cfg
+    assert "                errorStrategy = 'ignore'" in cfg
+
+
+def test_sim_tag_renders_tag_directive():
+    cfg = generate_nextflow_config(executor='awsbatch', params=_awsbatch_params(sim_tag='sim946'))
+    assert "tag = 'sim946'" in cfg
+    cfg = generate_nextflow_config(executor='awsbatch', params=_awsbatch_params())
+    assert 'tag = ' not in cfg
+
+
 def test_config_default_executor_local():
     cfg = generate_nextflow_config()
     assert 'local {' in cfg
@@ -31,6 +72,7 @@ def test_config_params_render_valid_groovy_scalars():
     assert 'True' not in cfg and 'None' not in cfg
 
 
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -464,3 +506,110 @@ def test_the_cache_directive_resolves(tmp_path):
                           encoding='utf-8', errors='replace')
     assert proc.returncode == 0, proc.stderr
     assert "cache = 'lenient'" in proc.stdout
+
+
+# --- retry policy, demonstrated on the local executor ------------------------
+
+
+class _Exit1Step(Step):
+    """A deterministic fault: exits 1 (Python exception)."""
+    nextflow_directives = {'label': 'exit1'}
+
+    def inputs(self):
+        return {'seed': 'integer'}
+
+    def outputs(self):
+        return {'value': 'integer'}
+
+    def update(self, state):
+        raise ValueError('deterministic fault')
+
+
+class _Exit137Step(Step):
+    """An OOM-class death: SIGKILL, so bash reports exit 137."""
+    nextflow_directives = {'label': 'exit137'}
+
+    def inputs(self):
+        return {'seed': 'integer'}
+
+    def outputs(self):
+        return {'value': 'integer'}
+
+    def update(self, state):
+        import os
+        import signal
+        os.kill(os.getpid(), signal.SIGKILL)
+
+
+def _retry_composite(which):
+    cls = {'exit1': '_Exit1Step', 'exit137': '_Exit137Step'}[which]
+    state = {
+        'seed': 3,
+        which: {'_type': 'step',
+                'address': f'local:!process_bigraph.tests.test_nextflow_deploy.{cls}',
+                'config': {}, 'inputs': {'seed': ['seed']}, 'outputs': {'value': ['value']}},
+        'value': 0,
+    }
+    return Composite({'state': state}, core=allocate_core())
+
+
+def _read_trace(path):
+    import csv
+    with open(path) as fh:
+        return list(csv.DictReader(fh, delimiter='\t'))
+
+
+def _task_workdir(out, row):
+    """The default trace fields carry the task ``hash`` (``ab/12345c``), not
+    the work dir; resolve it under the run's work dir."""
+    prefix, rest = row['hash'].split('/', 1)
+    matches = list((out / 'work' / prefix).glob(rest + '*'))
+    assert len(matches) == 1, matches
+    return matches[0]
+
+
+def _launch_failing(tmp_path, which):
+    """Deploy one failing-step workflow under the shipped retry closure
+    (per label, so it applies on the local executor too) and return its
+    trace rows. Two separate workflows on purpose: 'finish' stops submitting
+    NEW work campaign-wide, and a retry is new work."""
+    from process_bigraph.nextflow_deploy import AWSBATCH_DEFAULTS, retry_error_strategy
+    strategy = retry_error_strategy(AWSBATCH_DEFAULTS['retry_exit_codes'])
+    out = tmp_path / which
+    trace = out / 'trace.csv'
+    with pytest.raises(subprocess.CalledProcessError):     # the campaign fails, as it must
+        deploy(_retry_composite(which), outdir=str(out), executor='local',
+               launch=True, params={'seed': 3},
+               resources={which: {'errorStrategy': strategy, 'maxRetries': 2}},
+               work_dir=str(out / 'work'), trace=trace)
+    return out, [r for r in _read_trace(trace) if r['name'].split(' ')[0] == which]
+
+
+@pytest.mark.skipif(shutil.which('nextflow') is None,
+                    reason='nextflow binary not on PATH')
+def test_retry_policy_local_exit1_runs_once_and_leaves_a_failure_record(tmp_path):
+    """A deterministic fault (exit 1) is NOT retried; its work dir holds
+    failure.json and a task_end event on .command.out."""
+    out, rows = _launch_failing(tmp_path, 'exit1')
+    assert len(rows) == 1                                   # one attempt, no retry
+    assert rows[0]['exit'] == '1' and rows[0]['status'] == 'FAILED'
+    work = _task_workdir(out, rows[0])
+    record = json.loads((work / 'failure.json').read_text())
+    assert record['exc_type'] == 'ValueError' and 'deterministic fault' in record['exc_msg']
+    evs = [json.loads(l) for l in (work / '.command.out').read_text().splitlines() if l.startswith('{')]
+    names = [e['event'] for e in evs]
+    assert names[:2] == ['span_start', 'task_start']
+    end = [e for e in evs if e['event'] == 'task_end'][0]['payload']
+    assert end['status'] == 'error' and end['exc_type'] == 'ValueError'
+
+
+@pytest.mark.skipif(shutil.which('nextflow') is None,
+                    reason='nextflow binary not on PATH')
+def test_retry_policy_local_exit137_is_retried_up_to_max_retries(tmp_path):
+    """An OOM-class death (SIGKILL -> 137) is retried maxRetries times, then
+    the campaign finishes: 1 + maxRetries attempts in trace.csv."""
+    out, rows = _launch_failing(tmp_path, 'exit137')
+    assert len(rows) == 3                                   # 1 + maxRetries
+    assert {r['exit'] for r in rows} == {'137'}
+    assert len({r['task_id'] for r in rows}) == 3           # three distinct attempts
+    assert all(r['status'] == 'FAILED' for r in rows)
