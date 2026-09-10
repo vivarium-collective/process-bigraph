@@ -1,10 +1,10 @@
 """Engine-level observability: structured events, spans and pluggable sinks.
 
 Every ``Composite.run()`` on this engine can describe itself -- run start/end,
-a wall-clock-throttled heartbeat, structural changes (division), and, when a
-process or step raises, *which* process, at what ``global_time``, with a
-compact summary of the state it was handed. Process and step authors write
-nothing for this; the engine emits the events.
+a wall-clock-throttled heartbeat, structural changes (a process added or
+removed), and, when a process or step raises, *which* process, at what
+``global_time``, with a compact summary of the state it was handed. Process
+and step authors write nothing for this; the engine emits the events.
 
 The design rules (they are load-bearing, keep them):
 
@@ -12,8 +12,9 @@ The design rules (they are load-bearing, keep them):
   raises is disabled after one ``sink_error`` event. Enabling instrumentation
   must not change simulation results, only add output.
 * **Infrastructure-agnostic.** This module imports no cloud SDK. It ships two
-  sinks -- stdout and a local file. Anything else (S3, HTTP, OTLP, ...) is a
-  plugin registered by the caller, an entry point, or a ``module:attr`` spec.
+  sinks -- stdout and a local file. Anything else (object stores, HTTP, OTLP,
+  ...) is a plugin registered by the caller, an entry point, or a
+  ``module:attr`` spec.
 * **Off by default in the library, stdout by default in the CLI entrypoints**
   (``run_composite`` / ``run_step``), so a container gets events with zero
   configuration and an importing program gets nothing unless it asks.
@@ -23,10 +24,15 @@ The design rules (they are load-bearing, keep them):
   W3C ``traceparent`` string. An OTLP exporter is one more sink, later.
 * **The engine knows no domain.** The only fields it interprets are its own
   (times, ids, the event name). Everything a CALLER wants to say about a run --
-  which campaign, which cell, which generation, which seed -- travels in
-  ``baggage``, an opaque string-to-scalar map with W3C ``baggage`` semantics
-  that the engine copies onto every event and never reads. Domain keys such
-  as a generation index belong to the caller's baggage, never to this module.
+  which experiment, which replicate, which parameter set -- travels in
+  ``baggage``, an opaque string-to-string map with W3C ``baggage`` semantics
+  that the engine copies onto every event and never reads. Domain identifiers
+  belong in ``baggage``, never in this module's schema or code.
+* **Components and dotted event names.** Every event names the ``component``
+  that emitted it (a free-form string; this module emits ``"process_bigraph"``)
+  and a dotted ``event`` name. The engine's own events are the closed set
+  below; callers use their own dotted namespaces and the engine never
+  enumerates them.
 
 Switches (all environment variables, all optional)::
 
@@ -40,18 +46,19 @@ Switches (all environment variables, all optional)::
                          'stdout' for the CLI entrypoints.
     PBG_TRACEPARENT      W3C ``00-<trace_id>-<span_id>-01`` (the short
                          ``<trace_id>-<span_id>`` form is accepted). Trace ids
-                         are whatever the dispatcher derived (viva-api hashes
-                         its correlation id) -- never assumed random. Absent:
-                         a fresh trace_id is minted and the first span opened
-                         becomes the root.
+                         are whatever the caller derived (e.g. a hash of an
+                         upstream correlation id) -- never assumed random.
+                         Absent: a fresh trace_id is minted and the first span
+                         opened becomes the root.
     PBG_TRACE_BAGGAGE    the caller's context in W3C ``baggage`` form:
                          ``k=v,k2=v2`` (values percent-encoded; no quotes,
-                         whitespace, ``$`` or backslashes -- dispatchers render
+                         whitespace, ``$`` or backslashes -- launchers render
                          env through ``docker --env``). A value starting with
-                         ``{`` is read as JSON for laptop convenience. Keys are
-                         opaque to the engine; values that parse as ints become
-                         ints, everything else stays a string. Callers add to
-                         it at runtime with ``emitter.bind(**kv)``.
+                         ``{`` is read as JSON for convenience. Keys and values
+                         are opaque strings to the engine (W3C baggage is
+                         string-to-string on the wire); consumers coerce.
+                         Callers add to it at runtime with
+                         ``emitter.bind(**kv)``.
     PBG_EVENT_TAGS       same ``key=value,...`` (or JSON) form, copied verbatim
                          onto every event's ``tags`` (job ids, backend names --
                          infrastructure identifiers live here, never in the
@@ -59,8 +66,8 @@ Switches (all environment variables, all optional)::
     PBG_EVENT_HEARTBEAT_S  seconds of wall clock between ``tick`` events
                          (default 30; 0 = every tick).
     PBG_EVENT_DETAIL     comma list of ``timing`` (per-process invoke time in
-                         ``run_end``), ``invoke`` (one ``invoke`` event per
-                         process/step call -- large), ``spans`` (a span per
+                         ``run.end``), ``invoke`` (one ``process.invoke`` event
+                         per process/step call -- large), ``spans`` (a span per
                          ``Composite.run``; always on for the task span).
     PBG_EVENT_SOURCE     label distinguishing concurrent writers of one run
                          (default ``<hostname>-<pid>``).
@@ -72,16 +79,27 @@ Deprecated aliases, honoured for one release: ``PROCESS_BIGRAPH_TRACE_FILE=<p>``
 Event schema (one JSON object per line, ``default=str`` serialisation)::
 
     {"v": 1, "ts": "<UTC ISO 8601>", "seq": <per-process counter>,
-     "layer": "engine", "event": "<name>", "level": "debug|info|warning|error",
+     "source": "<host-pid>", "component": "process_bigraph",
+     "event": "<dotted name>", "level": "debug|info|warning|error",
      "trace_id": "<32 hex>", "span_id": "<16 hex>", "parent_span_id": "<16 hex>|null",
      "global_time": <float|null>, "wall_time": <seconds since configure()>,
-     "source": "<host-pid>",
      "baggage": {<caller's opaque context>}, "tags": {...}, "payload": {...}}
 
-Engine events: ``run_start``, ``tick``, ``structural_change``, ``exception``,
-``run_end``, ``process_init``, ``invoke`` (opt-in), ``span_start``/``span_end``
-(``span_end`` repeats ``start_ts`` and carries ``duration_s`` and ``status``),
-``sink_error``, and from the CLI entrypoints ``task_start``/``task_end``.
+The engine's own events (callers use their own dotted namespaces)::
+
+    run.start / run.end      Composite.run (span ``run`` when ``spans`` detail is on)
+    tick                     the throttled heartbeat inside the run loop
+    structure.changed        a reconcile reported a structural change
+    process.exception        a Process/Step invoke raised (path, class, address,
+                             interval, global_time, state summary)
+    process.init             a protocol runtime initialised a remote process
+    runtime.error            a protocol runtime flush failed
+    task.start / task.end    the CLI entrypoints run_composite / run_step (span ``task``)
+    span.start / span.end    every span boundary (span.end repeats start_ts and
+                             carries duration_s and status)
+    sink.error               a sink raised and was disabled
+    process.invoke           opt-in: one record per invoke
+    process.timing           opt-in: per-process invoke time (inside run.end)
 """
 from __future__ import annotations
 
@@ -105,6 +123,7 @@ from typing import Any, Callable, Dict, Iterable, List, Optional
 import numpy as np
 
 SCHEMA_VERSION = 1
+ENGINE_COMPONENT = 'process_bigraph'
 ENTRY_POINT_GROUP = 'process_bigraph.event_sinks'
 DEFAULT_HEARTBEAT_S = 30.0
 LEVELS = ('debug', 'info', 'warning', 'error')
@@ -158,7 +177,7 @@ def summarize_state(state, max_roots: int = 64) -> Any:
 
     Each root store gets ``_summarize_value`` at depth 2, i.e. at most one
     nested level of dict keys -- enough to see counts, sizes and NaN/negative
-    flags without walking a whole cell. Never raises."""
+    flags without walking a whole state tree. Never raises."""
     try:
         if isinstance(state, dict):
             return {k: _summarize_value(v, 2) for k, v in list(state.items())[:max_roots]}
@@ -251,7 +270,7 @@ _SINK_FACTORIES: Dict[str, Callable[[str], EventSink]] = {}
 def register_sink_factory(scheme: str, factory: Callable[[str], EventSink]) -> None:
     """Register ``factory(spec) -> EventSink`` for specs starting with
     ``<scheme>:``. The factory receives the full spec string (e.g.
-    ``s3://bucket/prefix/``)."""
+    ``mysink://host/path``)."""
     if not callable(factory):
         raise TypeError(f'sink factory for {scheme!r} is not callable: {factory!r}')
     _SINK_FACTORIES[scheme] = factory
@@ -386,7 +405,7 @@ class Span:
         self._ended = True
         duration = _time.monotonic() - self._start_mono
         self.emitter._emit_raw(
-            'span_end', 'error' if status == 'error' else 'info', 'engine',
+            'span.end', 'error' if status == 'error' else 'info', ENGINE_COMPONENT,
             {'name': self.name, 'attrs': self.attrs, 'start_ts': self.start_ts,
              'end_ts': _utc_now(), 'duration_s': round(duration, 6),
              'status': status, 'error': error},
@@ -474,7 +493,7 @@ class EventEmitter:
         ctx = SpanContext(self.trace_id, mint_span_id(), parent_id)
         token = _current_span.set(ctx)
         span = Span(self, span_name, ctx, dict(attrs), token)
-        self._emit_raw('span_start', 'info', 'engine',
+        self._emit_raw('span.start', 'info', ENGINE_COMPONENT,
                        {'name': span_name, 'attrs': dict(attrs), 'start_ts': span.start_ts},
                        ctx=ctx)
         return span
@@ -492,13 +511,15 @@ class EventEmitter:
 
     # -- events --------------------------------------------------------- #
 
-    def event(self, event_name: str, /, level: str = 'info', layer: str = 'engine',
-              global_time=None, **payload) -> None:
-        """Emit one event. ``global_time`` lands in the top-level field;
-        everything else (any key, including ``name``) in ``payload``."""
+    def event(self, event_name: str, /, level: str = 'info',
+              component: str = ENGINE_COMPONENT, global_time=None, **payload) -> None:
+        """Emit one event. ``event_name`` is a dotted name in the caller's
+        namespace; ``component`` names the emitting code (free-form string);
+        ``global_time`` lands in the top-level field; everything else (any
+        key, including ``name``) in ``payload``."""
         if not self._sinks:
             return
-        self._emit_raw(event_name, level, layer, payload, global_time=global_time)
+        self._emit_raw(event_name, level, component, payload, global_time=global_time)
 
     def count(self, **counters) -> None:
         """Accumulate per-heartbeat counters without emitting."""
@@ -524,7 +545,7 @@ class EventEmitter:
         payload['ticks_total'] = self._ticks_total
         self._counters = {}
         self._ticks_since = 0
-        self._emit_raw('tick', 'debug', 'engine', payload, global_time=global_time)
+        self._emit_raw('tick', 'debug', ENGINE_COMPONENT, payload, global_time=global_time)
         return True
 
     def reset_run_counters(self) -> None:
@@ -537,10 +558,13 @@ class EventEmitter:
     def ticks_total(self) -> int:
         return self._ticks_total
 
-    def exception(self, exc: BaseException, **ctx) -> None:
-        """Record an exception with its engine context. Attaches
-        ``exc.pbg_context`` (innermost hook wins) and a note on 3.11+; the
-        caller re-raises the original exception unchanged."""
+    def exception(self, exc: BaseException, *, event_name: str = 'process.exception',
+                  **ctx) -> None:
+        """Record an exception with its engine context as ``event_name``
+        (``process.exception`` for a raising invoke, ``runtime.error`` for a
+        protocol-runtime flush). Attaches ``exc.pbg_context`` (innermost hook
+        wins) and a note on 3.11+; the caller re-raises the original exception
+        unchanged."""
         context = {'exc_type': type(exc).__name__, 'exc_msg': str(exc)[:2000]}
         context.update(ctx)
         try:
@@ -554,7 +578,7 @@ class EventEmitter:
             pass
         if not self._sinks:
             return
-        self._emit_raw('exception', 'error', 'engine', context,
+        self._emit_raw(event_name, 'error', ENGINE_COMPONENT, context,
                        global_time=ctx.get('global_time'))
 
     def invoke(self, path, instance, state, interval, update) -> None:
@@ -562,7 +586,7 @@ class EventEmitter:
         if not self._sinks or not self.detail_invoke:
             return
         gt = state.get('global_time') if isinstance(state, dict) else None
-        self._emit_raw('invoke', 'debug', 'engine', {
+        self._emit_raw('process.invoke', 'debug', ENGINE_COMPONENT, {
             'path': '/'.join(str(p) for p in path) if isinstance(path, (list, tuple)) else str(path),
             'cls': type(instance).__name__,
             'interval': interval,
@@ -586,7 +610,7 @@ class EventEmitter:
 
     # -- internals ------------------------------------------------------ #
 
-    def _build(self, name, level, layer, payload, *, ctx=None, global_time=None):
+    def _build(self, name, level, component, payload, *, ctx=None, global_time=None):
         ctx = ctx or _current_span.get()
         with self._lock:
             self._seq += 1
@@ -595,7 +619,7 @@ class EventEmitter:
             'v': SCHEMA_VERSION,
             'ts': _utc_now(),
             'seq': seq,
-            'layer': layer,
+            'component': str(component),
             'event': name,
             'level': level if level in LEVELS else 'info',
             'trace_id': ctx.trace_id if ctx else self.trace_id,
@@ -609,11 +633,11 @@ class EventEmitter:
             'payload': payload,
         }
 
-    def _emit_raw(self, name, level, layer, payload, *, ctx=None, global_time=None) -> None:
+    def _emit_raw(self, name, level, component, payload, *, ctx=None, global_time=None) -> None:
         if not self._sinks:
             return
         try:
-            event = self._build(name, level, layer, payload, ctx=ctx, global_time=global_time)
+            event = self._build(name, level, component, payload, ctx=ctx, global_time=global_time)
         except Exception:
             return
         self._dispatch(event)
@@ -631,7 +655,7 @@ class EventEmitter:
                 if not self._in_sink_error:
                     self._in_sink_error = True
                     try:
-                        self._emit_raw('sink_error', 'error', 'engine',
+                        self._emit_raw('sink.error', 'error', ENGINE_COMPONENT,
                                        {'sink': type(sink).__name__, 'error': repr(exc)})
                     finally:
                         self._in_sink_error = False
@@ -647,9 +671,10 @@ _EMITTER_LOCK = threading.RLock()   # re-entrant: get_emitter() -> configure() n
 
 def parse_baggage(raw: Optional[str]) -> Dict[str, Any]:
     """W3C ``baggage`` form ``k=v,k2=v2`` (values percent-encoded), or a JSON
-    object when the value starts with ``{``. Keys are opaque; a value that
-    parses as an int becomes an int, everything else stays a string. Never
-    raises; malformed entries are skipped."""
+    object when the value starts with ``{``. Keys and values are opaque to
+    the engine: no coercion (W3C baggage is string-to-string on the wire;
+    JSON scalars are kept as parsed). Never raises; malformed entries are
+    skipped."""
     if not raw or not raw.strip():
         return {}
     raw = raw.strip()
@@ -672,12 +697,6 @@ def parse_baggage(raw: Optional[str]) -> Dict[str, Any]:
                 continue
             # W3C baggage allows ``;``-separated properties after the value
             out[key] = unquote(value.split(';', 1)[0].strip())
-    for key, value in list(out.items()):
-        if isinstance(value, str):
-            try:
-                out[key] = int(value)
-            except ValueError:
-                pass
     return out
 
 
@@ -748,14 +767,16 @@ def traceback_tail(exc: BaseException, lines: int = 40) -> str:
     return '\n'.join(text.splitlines()[-lines:])
 
 
-def failure_record(exc: BaseException, **extra) -> Dict[str, Any]:
-    """A JSON-safe record describing a failed run/task, including the engine
-    context attached by ``EventEmitter.exception`` when there is one."""
+def exception_record(exc: BaseException, **extra) -> Dict[str, Any]:
+    """A JSON-safe record describing an exception that ended a run or task,
+    including the engine context attached by ``EventEmitter.exception`` and
+    the emitter's current baggage."""
     record: Dict[str, Any] = {
         'exc_type': type(exc).__name__,
         'exc_msg': str(exc)[:2000],
         'traceback_tail': traceback_tail(exc),
         'pbg_context': getattr(exc, 'pbg_context', None),
+        'baggage': dict(get_emitter().baggage),
         'ts': _utc_now(),
     }
     record.update(extra)
@@ -767,5 +788,6 @@ __all__ = [
     'register_sink_factory', 'resolve_sink', 'resolve_sinks',
     'SpanContext', 'Span', 'EventEmitter', 'configure', 'get_emitter',
     'set_emitter', 'parse_traceparent', 'parse_baggage', 'mint_trace_id', 'mint_span_id',
-    'summarize_state', 'failure_record', 'traceback_tail', 'SCHEMA_VERSION',
+    'summarize_state', 'exception_record', 'traceback_tail', 'SCHEMA_VERSION',
+    'ENGINE_COMPONENT',
 ]

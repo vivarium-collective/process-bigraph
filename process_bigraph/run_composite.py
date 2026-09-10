@@ -72,7 +72,8 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
                   state_out_path: Optional[str] = None,
                   failure_out: Optional[str] = None,
                   summary_out: Optional[str] = None,
-                  span_name: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                  span_name: Optional[str] = None,
+                  export_context: bool = False) -> Optional[Dict[str, Any]]:
     """Run a Composite for ``steps`` and optionally write its outputs.
 
     ``state_out_path``, if given, is best-effort: if the full
@@ -126,18 +127,21 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
         or (Path(document_path).stem if document_path else 'composite')
     failure_path = failure_out or _default_sidecar(out_paths, state_out_path, 'failure.json')
     span = em.start_span('task', name=label, steps=float(steps))
-    os.environ['PBG_TRACEPARENT'] = em.current_traceparent()
-    em.event('task_start', name=label, steps=float(steps), layer='engine')
+    if export_context:
+        # CLI only: let subprocesses inherit the task span. Library callers
+        # never get their environment mutated.
+        os.environ['PBG_TRACEPARENT'] = em.current_traceparent()
+    em.event('task.start', name=label, steps=float(steps))
     try:
         composite.run(float(steps))
     except BaseException as exc:
-        record = _events.failure_record(exc, task=label, steps=float(steps))
+        record = _events.exception_record(exc, task=label, steps=float(steps))
         if failure_path:
             try:
                 _write_json(failure_path, record)
             except Exception:
                 pass
-        em.event('task_end', level='error', status='error', name=label,
+        em.event('task.end', level='error', status='error', name=label,
                  exc_type=record['exc_type'], exc_msg=record['exc_msg'],
                  traceback_tail=record['traceback_tail'], failure_path=failure_path)
         span.end('error', f"{record['exc_type']}: {record['exc_msg']}")
@@ -152,7 +156,7 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
             'framework_time': ts.framework_time,
             'per_process': {'/'.join(str(p) for p in k): v for k, v in ts.per_process.items()},
         })
-    em.event('task_end', status='ok', name=label, global_time=composite.state.get('global_time'))
+    em.event('task.end', status='ok', name=label, global_time=composite.state.get('global_time'))
     span.end('ok')
     em.flush()
 
@@ -312,7 +316,8 @@ def main(argv=None) -> int:
         state_out_path=args.state_out_path,
         failure_out=args.failure_out,
         summary_out=args.summary_out,
-        span_name=args.span_name)
+        span_name=args.span_name,
+        export_context=True)
     return 0
 
 

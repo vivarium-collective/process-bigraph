@@ -1500,7 +1500,7 @@ class Composite(Process):
                     flush()
                 except BaseException as exc:
                     self._em.exception(
-                        exc, runtime=type(rt).__name__,
+                        exc, event_name='runtime.error', runtime=type(rt).__name__,
                         global_time=self.state.get('global_time'))
                     raise
 
@@ -2572,14 +2572,14 @@ class Composite(Process):
         run_start = _time.monotonic()
 
         # Observability (process_bigraph.events): a ``run`` span when spans
-        # are on, ``run_start``/``run_end`` always (no-ops when no sink is
+        # are on, ``run.start``/``run.end`` always (no-ops when no sink is
         # configured), heartbeat counters reset per run.
         em = self._events = _events.get_emitter()
         if em.detail_timing:
             self._profile_per_process = True
-        em.reset_run_counters()
+        self._run_ticks = 0     # per-Composite, so nested runs do not clobber the outer count
         span = em.start_span('run', interval=interval) if (em.enabled and em.detail_spans) else None
-        em.event('run_start', interval=interval,
+        em.event('run.start', interval=interval,
                  n_processes=len(self.process_paths), n_steps=len(self.step_paths),
                  parallel=bool(getattr(self, '_parallel_processes', False)),
                  global_time=self.state.get('global_time'))
@@ -2605,7 +2605,7 @@ class Composite(Process):
                     'total': round(total, 6),
                     'process_time': round(self.process_update_time, 6),
                     'framework_time': round(total - self.process_update_time, 6),
-                    'ticks': em.ticks_total,
+                    'ticks': self._run_ticks,
                     'global_time': self.state.get('global_time'),
                 }
                 if self._per_process_time:
@@ -2613,7 +2613,7 @@ class Composite(Process):
                     payload['top5'] = [
                         ['/'.join(str(p) for p in k) if isinstance(k, tuple) else str(k), round(v, 6)]
                         for k, v in top]
-                em.event('run_end', level='error' if status == 'error' else 'info', **payload)
+                em.event('run.end', level='error' if status == 'error' else 'info', **payload)
                 if span is not None:
                     span.end(status, error)
 
@@ -2629,6 +2629,7 @@ class Composite(Process):
         em = self._em
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
+            self._run_ticks = getattr(self, '_run_ticks', 0) + 1
             em.heartbeat(global_time=self.state['global_time'])
 
             # Partition processes: ones whose runtime opts into batched
@@ -3032,8 +3033,8 @@ class Composite(Process):
         # Invoke the process and retrieve a wrapped SyncUpdate object.
         # On failure, record WHICH process/step, at what global_time, with a
         # summary of the state it was handed (process_bigraph.events), then
-        # re-raise the ORIGINAL exception unchanged -- callers such as
-        # v2ecoli's lineage runner classify division by exception type.
+        # re-raise the ORIGINAL exception unchanged -- callers may classify
+        # control-flow exceptions by type, so the type must propagate as is.
         t0 = _time.monotonic()
         try:
             update = process['instance'].invoke(clean_state, interval)
@@ -3235,7 +3236,7 @@ class Composite(Process):
                 had_structural_sentinels = True
                 self._em.count(structural_changes=1)
                 self._em.event(
-                    'structural_change', n_paths=len(update_paths),
+                    'structure.changed', n_paths=len(update_paths),
                     sample_paths=['/'.join(str(p) for p in path) for path in update_paths[:8]],
                     global_time=self.state.get('global_time'))
 

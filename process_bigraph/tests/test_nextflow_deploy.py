@@ -24,7 +24,7 @@ def _awsbatch_params(**extra):
 
 def test_awsbatch_error_strategy_retries_only_reclaim_class_exits():
     """A code fault (exit 1) is never retried; OOM/SIGTERM-class exits are,
-    up to maxRetries; then the campaign finishes instead of terminating."""
+    up to maxRetries; then the workflow finishes instead of terminating."""
     cfg = generate_nextflow_config(executor='awsbatch', params=_awsbatch_params())
     assert ("errorStrategy = { (task.exitStatus in [137, 143, 104, 134, 139]) "
             "&& task.attempt <= task.maxRetries ? 'retry' : 'finish' }") in cfg
@@ -40,18 +40,18 @@ def test_awsbatch_error_strategy_retries_only_reclaim_class_exits():
 def test_label_can_override_retry_policy():
     cfg = generate_nextflow_config(
         executor='awsbatch', params=_awsbatch_params(),
-        resources={'lineage': {'cpus': 4, 'maxRetries': 0,
-                               'errorStrategy': "{ task.exitStatus == 137 ? 'retry' : 'finish' }"},
-                   'analysis': {'errorStrategy': 'ignore'}})
-    assert 'withLabel: lineage {' in cfg
+        resources={'heavy': {'cpus': 4, 'maxRetries': 0,
+                             'errorStrategy': "{ task.exitStatus == 137 ? 'retry' : 'finish' }"},
+                   'reporting': {'errorStrategy': 'ignore'}})
+    assert 'withLabel: heavy {' in cfg
     assert '                maxRetries = 0' in cfg
     assert "                errorStrategy = { task.exitStatus == 137 ? 'retry' : 'finish' }" in cfg
     assert "                errorStrategy = 'ignore'" in cfg
 
 
-def test_sim_tag_renders_tag_directive():
-    cfg = generate_nextflow_config(executor='awsbatch', params=_awsbatch_params(sim_tag='sim946'))
-    assert "tag = 'sim946'" in cfg
+def test_run_tag_renders_tag_directive():
+    cfg = generate_nextflow_config(executor='awsbatch', params=_awsbatch_params(run_tag='task-a'))
+    assert "tag = 'task-a'" in cfg
     cfg = generate_nextflow_config(executor='awsbatch', params=_awsbatch_params())
     assert 'tag = ' not in cfg
 
@@ -572,12 +572,12 @@ def _launch_failing(tmp_path, which):
     """Deploy one failing-step workflow under the shipped retry closure
     (per label, so it applies on the local executor too) and return its
     trace rows. Two separate workflows on purpose: 'finish' stops submitting
-    NEW work campaign-wide, and a retry is new work."""
+    NEW work workflow-wide, and a retry is new work."""
     from process_bigraph.nextflow_deploy import AWSBATCH_DEFAULTS, retry_error_strategy
     strategy = retry_error_strategy(AWSBATCH_DEFAULTS['retry_exit_codes'])
     out = tmp_path / which
     trace = out / 'trace.csv'
-    with pytest.raises(subprocess.CalledProcessError):     # the campaign fails, as it must
+    with pytest.raises(subprocess.CalledProcessError):     # the workflow fails, as it must
         deploy(_retry_composite(which), outdir=str(out), executor='local',
                launch=True, params={'seed': 3},
                resources={which: {'errorStrategy': strategy, 'maxRetries': 2}},
@@ -598,8 +598,8 @@ def test_retry_policy_local_exit1_runs_once_and_leaves_a_failure_record(tmp_path
     assert record['exc_type'] == 'ValueError' and 'deterministic fault' in record['exc_msg']
     evs = [json.loads(l) for l in (work / '.command.out').read_text().splitlines() if l.startswith('{')]
     names = [e['event'] for e in evs]
-    assert names[:2] == ['span_start', 'task_start']
-    end = [e for e in evs if e['event'] == 'task_end'][0]['payload']
+    assert names[:2] == ['span.start', 'task.start']
+    end = [e for e in evs if e['event'] == 'task.end'][0]['payload']
     assert end['status'] == 'error' and end['exc_type'] == 'ValueError'
 
 
@@ -607,7 +607,7 @@ def test_retry_policy_local_exit1_runs_once_and_leaves_a_failure_record(tmp_path
                     reason='nextflow binary not on PATH')
 def test_retry_policy_local_exit137_is_retried_up_to_max_retries(tmp_path):
     """An OOM-class death (SIGKILL -> 137) is retried maxRetries times, then
-    the campaign finishes: 1 + maxRetries attempts in trace.csv."""
+    the workflow finishes: 1 + maxRetries attempts in trace.csv."""
     out, rows = _launch_failing(tmp_path, 'exit137')
     assert len(rows) == 3                                   # 1 + maxRetries
     assert {r['exit'] for r in rows} == {'137'}

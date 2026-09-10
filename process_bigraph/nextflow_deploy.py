@@ -39,7 +39,7 @@ def _resource_value(value: Any) -> str:
 
 def retry_error_strategy(exit_codes) -> str:
     """The Groovy ``errorStrategy`` closure that retries only ``exit_codes``
-    (up to ``task.maxRetries``) and otherwise lets the campaign ``finish``.
+    (up to ``task.maxRetries``) and otherwise lets the workflow ``finish``.
     Shared by the awsbatch profile and by callers that want the same policy
     on another executor via a per-label ``resources`` entry."""
     codes = '[' + ', '.join(str(int(c)) for c in exit_codes) + ']'
@@ -162,8 +162,7 @@ AWSBATCH_REQUIRED_PARAMS = ('container_image', 'queue', 'aws_region')
 # on it), 143 (SIGTERM, an instance draining), and the nf-core set 104/134/139
 # (I/O, abort, segfault under memory pressure). A Python exception exits 1 and
 # is NOT in the list: retrying a deterministic fault re-runs the whole task N
-# times and reports "running" the whole while (measured on a 30-minute task
-# that died 7 s after its checkpoint, three times over). Spot reclaim is
+# times and reports "running" the whole while. Spot reclaim is
 # Batch's own retry (``maxSpotAttempts``) and never reaches errorStrategy
 # unless those attempts are exhausted.
 AWSBATCH_DEFAULTS = {
@@ -199,11 +198,11 @@ def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
         if params.get(key) is not None:
             opts[key] = params[key]
     retry_strategy = retry_error_strategy(opts['retry_exit_codes'])
-    # Optional identity in the Batch job name: nf-amazon derives the job name
-    # from the task name, which includes the ``tag`` directive.
+    # Optional run label in the executor's job name: nf-amazon derives the
+    # job name from the task name, which includes the ``tag`` directive.
     tag_line = ''
-    if params.get('sim_tag'):
-        tag_line = f"\n            tag = {_resource_value(str(params['sim_tag']))}"
+    if params.get('run_tag'):
+        tag_line = f"\n            tag = {_resource_value(str(params['run_tag']))}"
 
     # AWS_DEFAULT_REGION is the executor's own requirement, so it is always
     # emitted. Anything else the image needs is the CALLER's business, not this

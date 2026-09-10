@@ -132,6 +132,7 @@ def run_step(
     failure_out: Optional[str] = None,
     summary_out: Optional[str] = None,
     span_name: Optional[str] = None,
+    export_context: bool = False,
 ) -> Dict[str, Any]:
     """Instantiate the Step, run ``update(state)``, write outputs.
 
@@ -155,19 +156,22 @@ def run_step(
     anchor = update_json_path or next(iter((out_paths or {}).values()), None)
     failure_path = failure_out or (str(Path(anchor).parent / 'failure.json') if anchor else None)
     span = em.start_span('task', name=label, step_class=fq_class)
-    os.environ['PBG_TRACEPARENT'] = em.current_traceparent()
-    em.event('task_start', name=label, step_class=fq_class)
+    if export_context:
+        # CLI only: let subprocesses inherit the task span. Library callers
+        # never get their environment mutated.
+        os.environ['PBG_TRACEPARENT'] = em.current_traceparent()
+    em.event('task.start', name=label, step_class=fq_class)
     _t0 = _time.monotonic()
     try:
         update = instance.invoke(state or {}).update
     except BaseException as exc:
-        record = _events.failure_record(exc, task=label, step_class=fq_class)
+        record = _events.exception_record(exc, task=label, step_class=fq_class)
         if failure_path:
             try:
                 _write_json(failure_path, record)
             except Exception:
                 pass
-        em.event('task_end', level='error', status='error', name=label,
+        em.event('task.end', level='error', status='error', name=label,
                  exc_type=record['exc_type'], exc_msg=record['exc_msg'],
                  traceback_tail=record['traceback_tail'], failure_path=failure_path)
         span.end('error', f"{record['exc_type']}: {record['exc_msg']}")
@@ -176,7 +180,7 @@ def run_step(
     if summary_out:
         _write_json(summary_out, {'task': label, 'step_class': fq_class, 'status': 'ok',
                                   'total': _time.monotonic() - _t0})
-    em.event('task_end', status='ok', name=label)
+    em.event('task.end', status='ok', name=label)
     span.end('ok')
     em.flush()
 
@@ -251,6 +255,7 @@ def main(argv: Optional[list] = None) -> int:
         failure_out=args.failure_out,
         summary_out=args.summary_out,
         span_name=args.span_name,
+        export_context=True,
     )
     return 0
 

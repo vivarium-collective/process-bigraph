@@ -139,9 +139,12 @@ def test_run_composite_writes_failure_json_and_exits_nonzero(tmp_path):
     doc = tmp_path / 'doc.json'
     doc.write_text(json.dumps(_boom_document()))
     events.set_emitter(None)
+    import os
     import pytest
+    before = os.environ.get('PBG_TRACEPARENT')
     with pytest.raises(ZeroDivisionError):
         run_composite(str(doc), steps=3.0, state_out_path=str(tmp_path / 'out' / 'state.json'))
+    assert os.environ.get('PBG_TRACEPARENT') == before    # the library never mutates env
     record = json.loads((tmp_path / 'out' / 'failure.json').read_text())
     assert record['exc_type'] == 'ZeroDivisionError'
     assert record['pbg_context']['path'] == 'boom'
@@ -156,8 +159,9 @@ def test_run_composite_writes_failure_json_and_exits_nonzero(tmp_path):
     assert proc.returncode != 0
     stdout_events = [json.loads(l) for l in proc.stdout.splitlines() if l.startswith('{')]
     names = [e['event'] for e in stdout_events]
-    assert 'task_start' in names and 'exception' in names and 'task_end' in names
-    assert [e for e in stdout_events if e['event'] == 'task_end'][0]['payload']['status'] == 'error'
+    assert 'task.start' in names and 'process.exception' in names and 'task.end' in names
+    assert [e for e in stdout_events if e['event'] == 'task.end'][0]['payload']['status'] == 'error'
+    assert all(e['component'] == 'process_bigraph' for e in stdout_events)
     assert (tmp_path / 'cli' / 'failure.json').exists()
 
 

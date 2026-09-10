@@ -3182,9 +3182,9 @@ def test_per_process_timing_is_opt_in():
     assert loud.state['level'] == off.state['level']
     assert json.dumps(loud.serialize_state(), sort_keys=True, default=str) == \
         json.dumps(off.serialize_state(), sort_keys=True, default=str)
-    assert [e['event'] for e in sink][0] == 'span_start'
-    assert [e['event'] for e in sink][-1] == 'span_end'
-    assert any(e['event'] == 'invoke' for e in sink)
+    assert [e['event'] for e in sink][0] == 'span.start'
+    assert [e['event'] for e in sink][-1] == 'span.end'
+    assert any(e['event'] == 'process.invoke' for e in sink)
 
 
 def test_omitted_interval_takes_the_schema_default():

@@ -102,22 +102,23 @@ def test_events_off_by_default_emits_nothing(capsys, monkeypatch):
 
 def test_stdout_sink_emits_run_start_and_run_end_with_baggage(capsys):
     events.configure('stdout', env={
-        'PBG_TRACE_BAGGAGE': json.dumps({'campaign': '946', 'cell': 0, 'replicate': 3}),
+        'PBG_TRACE_BAGGAGE': json.dumps({'experiment': 'exp-1', 'replicate': 3, 'stage': 'pilot'}),
         'PBG_EVENT_TAGS': json.dumps({'backend': 'test'}),
         'PBG_EVENT_HEARTBEAT_S': '3600'})
     sim = Composite({'state': _two_increasers()}, core=allocate_core())
     sim.run(3.0)
     recs = _lines(capsys)
     names = [r['event'] for r in recs]
-    assert names[0] == 'run_start' and names[-1] == 'run_end'
+    assert names[0] == 'run.start' and names[-1] == 'run.end'
     assert 'tick' not in names[1:-1] or names.count('tick') == 1   # first tick only
     for r in recs:
         assert r['v'] == events.SCHEMA_VERSION
-        assert r['layer'] == 'engine'
-        assert r['baggage'] == {'campaign': 946, 'cell': 0, 'replicate': 3}   # opaque, ints coerced
+        assert isinstance(r['component'], str) and r['component'] == 'process_bigraph'
+        assert r['baggage'] == {'experiment': 'exp-1', 'replicate': 3, 'stage': 'pilot'}   # opaque
         assert r['tags'] == {'backend': 'test'}
-        assert set(r) == {'v', 'ts', 'seq', 'layer', 'event', 'level', 'trace_id', 'span_id',
-                          'parent_span_id', 'global_time', 'wall_time', 'source',
+        # the wire schema, frozen: engine fields + three opaque maps, nothing else
+        assert set(r) == {'v', 'ts', 'seq', 'source', 'component', 'event', 'level',
+                          'trace_id', 'span_id', 'parent_span_id', 'global_time', 'wall_time',
                           'baggage', 'tags', 'payload'}
         assert len(r['trace_id']) == 32
     end = recs[-1]['payload']
@@ -151,13 +152,13 @@ def test_exception_event_names_process_and_reraises_original_type(capsys):
     assert exc.pbg_context['global_time'] == 2.0
     assert exc.pbg_context['cls'] == '_Boom'
     recs = _lines(capsys)
-    ev = [r for r in recs if r['event'] == 'exception']
+    ev = [r for r in recs if r['event'] == 'process.exception']
     assert len(ev) == 1
     p = ev[0]['payload']
     assert p['exc_type'] == 'ZeroDivisionError'
     assert p['path'] == 'boom' and p['is_step'] is False and p['interval'] == 1.0
     assert p['state_summary']['level'] == 2.0
-    end = [r for r in recs if r['event'] == 'run_end'][0]
+    end = [r for r in recs if r['event'] == 'run.end'][0]
     assert end['payload']['status'] == 'error'
     assert end['level'] == 'error'
     assert 'ZeroDivisionError' in end['payload']['error']
@@ -170,9 +171,9 @@ def test_a_raising_sink_never_breaks_the_sim():
     sim = Composite({'state': _two_increasers()}, core=allocate_core())
     sim.run(3.0)                                  # no exception
     assert bad.calls == 1                         # disabled after the first failure
-    errors = [e for e in good.events if e['event'] == 'sink_error']
+    errors = [e for e in good.events if e['event'] == 'sink.error']
     assert len(errors) == 1 and errors[0]['payload']['sink'] == '_RaisingSink'
-    assert [e['event'] for e in good.events][-1] == 'run_end'
+    assert [e['event'] for e in good.events][-1] == 'run.end'
 
 
 def test_sink_resolution_registry_entry_point_and_module_attr(monkeypatch, tmp_path):
@@ -226,8 +227,8 @@ def test_file_sink_and_deprecated_aliases(tmp_path, capsys):
     sim.run(2.0)
     em.flush()
     recs = [json.loads(line) for line in trace.read_text().splitlines()]
-    assert any(r['event'] == 'invoke' and r['payload']['path'] in ('a', 'b') for r in recs)
-    assert [r for r in recs if r['event'] == 'run_end'][0]['payload']['top5']
+    assert any(r['event'] == 'process.invoke' and r['payload']['path'] in ('a', 'b') for r in recs)
+    assert [r for r in recs if r['event'] == 'run.end'][0]['payload']['top5']
     assert _lines(capsys) == []          # nothing leaked to stdout
 
 
@@ -257,8 +258,8 @@ def test_spans_nest_and_span_end_carries_start_ts(capsys):
         sim = Composite({'state': _two_increasers()}, core=allocate_core())
         sim.run(1.0)
     recs = _lines(capsys)
-    starts = [r for r in recs if r['event'] == 'span_start']
-    ends = [r for r in recs if r['event'] == 'span_end']
+    starts = [r for r in recs if r['event'] == 'span.start']
+    ends = [r for r in recs if r['event'] == 'span.end']
     assert [s['payload']['name'] for s in starts] == ['task', 'run']
     run_start = starts[1]
     assert run_start['parent_span_id'] == outer.span_id
@@ -266,28 +267,31 @@ def test_spans_nest_and_span_end_carries_start_ts(capsys):
     assert run_end['payload']['start_ts'] == run_start['payload']['start_ts']
     assert run_end['payload']['duration_s'] >= 0 and run_end['payload']['status'] == 'ok'
     # events inside the run carry the run span
-    assert [r for r in recs if r['event'] == 'run_end'][0]['span_id'] == run_start['span_id']
+    assert [r for r in recs if r['event'] == 'run.end'][0]['span_id'] == run_start['span_id']
     assert em.current_context() is None            # restored after the task span
 
 
 def test_baggage_and_tags_accept_w3c_key_value_form_and_stay_opaque():
-    """Dispatchers render env through ``docker --env`` (no quotes/whitespace),
-    so the primary form is W3C baggage; JSON stays accepted for laptops. The
-    engine interprets no key: whatever a caller puts there comes out as-is,
-    with int-looking values coerced."""
+    """Launchers render env through ``docker --env`` (no quotes/whitespace),
+    so the primary form is W3C baggage; JSON stays accepted for convenience.
+    The engine interprets no key and coerces no value: W3C baggage is
+    string-to-string on the wire, so ``replicate=3`` arrives as ``'3'`` and
+    the consumer decides what it is."""
     em = events.configure(env={
-        'PBG_TRACE_BAGGAGE': 'campaign=946,label=run3%20pilot,cell=0,replicate=3,stage=x',
-        'PBG_EVENT_TAGS': 'backend=nextflow,job=abc-123;prop=ignored,attempt=2',
+        'PBG_TRACE_BAGGAGE': 'experiment=exp-1,label=dry%20run,replicate=3,stage=pilot,id=007',
+        'PBG_EVENT_TAGS': 'backend=local,job=abc-123;prop=ignored,attempt=2',
         'PBG_TRACEPARENT': '00-' + '0123456789abcdef' * 2 + '-' + 'fedcba9876543210' + '-01'})
-    assert em.baggage == {'campaign': 946, 'label': 'run3 pilot', 'cell': 0, 'replicate': 3, 'stage': 'x'}
-    assert em.tags == {'backend': 'nextflow', 'job': 'abc-123', 'attempt': 2}
+    assert em.baggage == {'experiment': 'exp-1', 'label': 'dry run', 'replicate': '3',
+                          'stage': 'pilot', 'id': '007'}
+    assert em.tags == {'backend': 'local', 'job': 'abc-123', 'attempt': '2'}
     assert em.trace_id == '0123456789abcdef' * 2 and em.root_span_id == 'fedcba9876543210'
-    assert events.parse_baggage('{"a": "1", "b": "two"}') == {'a': 1, 'b': 'two'}
+    assert events.parse_baggage('{"a": "1", "b": 2}') == {'a': '1', 'b': 2}   # JSON scalars kept as parsed
     assert events.parse_baggage('') == {} and events.parse_baggage('novalue,=x') == {}
     assert events.parse_baggage('{not json') == {}                      # never raises
-    # bind() adds/overwrites/removes, any key
-    em.bind(stage='y', extra=7, cell=None)
-    assert em.baggage == {'campaign': 946, 'label': 'run3 pilot', 'replicate': 3, 'stage': 'y', 'extra': 7}
+    # bind() adds/overwrites/removes, any key, any scalar
+    em.bind(stage='done', extra=7, id=None)
+    assert em.baggage == {'experiment': 'exp-1', 'label': 'dry run', 'replicate': '3',
+                          'stage': 'done', 'extra': 7}
 
 
 def test_local_run_mints_trace_id_when_no_traceparent():
@@ -304,8 +308,8 @@ def test_span_context_survives_the_parallel_layer():
     sim = Composite({'state': state, 'parallel_processes': True}, core=allocate_core())
     assert sim._parallel_processes
     sim.run(2.0)
-    run_span = [e for e in sink.events if e['event'] == 'span_start'][0]['span_id']
-    invokes = [e for e in sink.events if e['event'] == 'invoke']
+    run_span = [e for e in sink.events if e['event'] == 'span.start'][0]['span_id']
+    invokes = [e for e in sink.events if e['event'] == 'process.invoke']
     assert len(invokes) >= 2
     assert all(e['span_id'] == run_span for e in invokes)
 
@@ -318,25 +322,26 @@ def test_tree_reconstructable_from_jsonl(capsys):
             Composite({'state': _two_increasers()}, core=allocate_core()).run(1.0)
     recs = _lines(capsys)
 
-    # A 20-line reference reconstructor: spans from span_start/span_end, events
-    # attached to their span_id, children by parent_span_id.
+    # A 20-line reference reconstructor: spans from span.start/span.end, events
+    # attached to their span_id, children by parent_span_id. It reads only the
+    # engine's own fields; whatever a caller put in baggage rides along unread.
     spans, children = {}, {}
     for r in recs:
-        if r['event'] == 'span_start':
+        if r['event'] == 'span.start':
             spans[r['span_id']] = {'name': r['payload']['name'], 'parent': r['parent_span_id'],
                                    'events': [], 'end': None}
             children.setdefault(r['parent_span_id'], []).append(r['span_id'])
     for r in recs:
-        if r['event'] == 'span_end':
+        if r['event'] == 'span.end':
             spans[r['span_id']]['end'] = r['payload']
-        elif r['event'] != 'span_start' and r['span_id'] in spans:
+        elif r['event'] != 'span.start' and r['span_id'] in spans:
             spans[r['span_id']]['events'].append(r['event'])
     roots = [sid for sid, s in spans.items() if s['parent'] not in spans]
     assert len(roots) == 1 and spans[roots[0]]['name'] == 'task'
     kids = children[roots[0]]
     assert [spans[k]['name'] for k in kids] == ['run', 'run']
     for k in kids:
-        assert spans[k]['events'][0] == 'run_start' and spans[k]['events'][-1] == 'run_end'
+        assert spans[k]['events'][0] == 'run.start' and spans[k]['events'][-1] == 'run.end'
         assert spans[k]['end']['status'] == 'ok'
 
 
@@ -360,14 +365,15 @@ def test_summarize_state_flags_nan_and_negatives():
     assert events.summarize_state(object()).startswith('<')
 
 
-def test_failure_record_carries_engine_context():
-    events.configure(env={})
+def test_exception_record_carries_engine_context_and_baggage():
+    events.configure(env={'PBG_TRACE_BAGGAGE': 'experiment=exp-1'})
     sim = Composite({'state': _boom_state(at=1.0)}, core=allocate_core())
     with pytest.raises(ZeroDivisionError) as raised:
         sim.run(3.0)
-    rec = events.failure_record(raised.value, task='t')
+    rec = events.exception_record(raised.value, task='t')
     assert rec['exc_type'] == 'ZeroDivisionError'
     assert rec['pbg_context']['path'] == 'boom' and rec['task'] == 't'
+    assert rec['baggage'] == {'experiment': 'exp-1'}
     assert 'ZeroDivisionError' in rec['traceback_tail']
 
 
@@ -389,7 +395,7 @@ def test_instrumentation_does_not_change_results(tmp_path):
     events.get_emitter().close()
     assert on_state == off_state
     assert on.state['level'] == off.state['level']
-    assert (tmp_path / 'e.jsonl').read_text().count('"invoke"') >= 20
+    assert (tmp_path / 'e.jsonl').read_text().count('"process.invoke"') >= 20
 
 
 # ---------------------------------------------------------------------------
@@ -405,9 +411,9 @@ def test_ray_batch_update_error_names_the_proc_id():
 
     class _Bad:
         def update(self, inputs, interval):
-            raise ValueError('cell exploded')
+            raise ValueError('boom')
     actor.composites = {7: _Bad()}
-    with pytest.raises(RuntimeError, match=r'proc_id=7 class=_Bad .*ValueError: cell exploded'):
+    with pytest.raises(RuntimeError, match=r'proc_id=7 class=_Bad .*ValueError: boom'):
         actor.batch_update([(7, {})], 1.0)
 
 
@@ -436,14 +442,15 @@ def test_contract_two_increasers_stream(capsys):
     sim = Composite({'state': _two_increasers()}, core=allocate_core())
     sim.run(3.0)
     names = [r['event'] for r in _lines(capsys)]
-    assert names[:3] == ['span_start', 'run_start', 'tick']
-    assert names[-2:] == ['run_end', 'span_end']
-    assert names.count('tick') == 3 and names.count('invoke') == 6
+    assert names[:3] == ['span.start', 'run.start', 'tick']
+    assert names[-2:] == ['run.end', 'span.end']
+    assert names.count('tick') == 3 and names.count('process.invoke') == 6
 
 
 def test_contract_grow_divide_division_is_a_structural_change(capsys):
-    """A real division (grow_divide_agent, tests.py::test_grow_divide) shows up as
-    ``structural_change`` between ticks, and the on/off states are identical."""
+    """The engine's own growth-division example (grow_divide_agent,
+    tests.py::test_grow_divide): each division is a ``structure.changed`` between
+    ticks, and the on/off states are identical."""
     core = allocate_core()
     events.set_emitter(None)
     quiet = _grow_divide_composite(core)
@@ -455,15 +462,15 @@ def test_contract_grow_divide_division_is_a_structural_change(capsys):
     loud.update({'environment': {'0': {'mass': 1.1}}}, 50.0)
     recs = _lines(capsys)
     names = [r['event'] for r in recs]
-    assert names[0] == 'span_start' and names[1] == 'run_start'
-    assert 'structural_change' in names
-    first_div = names.index('structural_change')
-    assert 'tick' in names[:first_div]                  # ticks before the division
-    assert names[-2:] == ['run_end', 'span_end']
+    assert names[0] == 'span.start' and names[1] == 'run.start'
+    assert 'structure.changed' in names
+    first_div = names.index('structure.changed')
+    assert 'tick' in names[:first_div]                  # ticks before the first division
+    assert names[-2:] == ['run.end', 'span.end']
     div = recs[first_div]
     assert div['global_time'] is not None
     assert any('environment' in p for p in div['payload']['sample_paths'])
-    end = [r for r in recs if r['event'] == 'run_end'][-1]['payload']
+    end = [r for r in recs if r['event'] == 'run.end'][-1]['payload']
     assert end['status'] == 'ok' and end['top5']
 
     assert '0_0_0_0_1' in loud.state['environment']
@@ -498,10 +505,10 @@ def test_contract_gillespie_composite_stream(capsys):
     gillespie.update({'DNA': {'A gene': 11.0, 'B gene': 5.0},
                       'mRNA': {'A mRNA': 33.0, 'B mRNA': 2.0}}, 100.0)
     recs = _lines(capsys)
-    invokes = [r['payload'] for r in recs if r['event'] == 'invoke']
+    invokes = [r['payload'] for r in recs if r['event'] == 'process.invoke']
     assert {i['path'] for i in invokes} >= {'event', 'interval', 'emitter'}
     assert all(i['interval'] == -1.0 for i in invokes if i['path'] in ('interval', 'emitter'))
-    assert [r['event'] for r in recs][-2:] == ['run_end', 'span_end']
+    assert [r['event'] for r in recs][-2:] == ['run.end', 'span.end']
 
 
 def test_contract_injected_raising_process(capsys):
@@ -514,10 +521,10 @@ def test_contract_injected_raising_process(capsys):
     with pytest.raises(ZeroDivisionError):
         sim.run(10.0)
     recs = _lines(capsys)
-    ex = [r for r in recs if r['event'] == 'exception']
+    ex = [r for r in recs if r['event'] == 'process.exception']
     assert len(ex) == 1
     assert ex[0]['payload']['path'] == 'boom' and ex[0]['global_time'] == 5.0
     assert set(ex[0]['payload']['state_summary']) == {'level', 'global_time'}
-    assert [r['event'] for r in recs][-2:] == ['run_end', 'span_end']
+    assert [r['event'] for r in recs][-2:] == ['run.end', 'span.end']
     assert recs[-2]['payload']['status'] == 'error'
     assert recs[-1]['payload']['status'] == 'error'
