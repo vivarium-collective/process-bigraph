@@ -46,6 +46,15 @@ def _resource_lines(resources: Optional[Dict[str, Dict[str, Any]]]) -> str:
         for key in ('cpus', 'memory', 'time'):
             if key in res:
                 lines.append(f'                {key} = {_resource_value(res[key])}')
+        # Per-label retry policy. ``maxRetries`` is an int; ``errorStrategy``
+        # is rendered RAW when it is a Groovy closure (starts with ``{``) and
+        # quoted otherwise ('ignore', 'terminate', ...).
+        if 'maxRetries' in res:
+            lines.append(f'                maxRetries = {int(res["maxRetries"])}')
+        if 'errorStrategy' in res:
+            strategy = str(res['errorStrategy']).strip()
+            rendered = strategy if strategy.startswith('{') else _resource_value(strategy)
+            lines.append(f'                errorStrategy = {rendered}')
         lines.append('            }')
         blocks.append('\n'.join(lines))
     return '\n'.join(blocks)
@@ -137,10 +146,21 @@ AWSBATCH_REQUIRED_PARAMS = ('container_image', 'queue', 'aws_region')
 #
 # Nextflow's own default for errorStrategy is 'terminate', so without the second
 # row a single failed task takes the whole campaign with it.
+#
+# ``retry_exit_codes`` narrows the Nextflow-level retry to exits that a fresh
+# attempt can plausibly fix: 137 (SIGKILL / OOM -- the memory closures scale
+# on it), 143 (SIGTERM, an instance draining), and the nf-core set 104/134/139
+# (I/O, abort, segfault under memory pressure). A Python exception exits 1 and
+# is NOT in the list: retrying a deterministic fault re-runs the whole task N
+# times and reports "running" the whole while (measured on a 30-minute
+# generation that died 7 s after division, three times over). Spot reclaim is
+# Batch's own retry (``maxSpotAttempts``) and never reaches errorStrategy
+# unless those attempts are exhausted.
 AWSBATCH_DEFAULTS = {
     'max_spot_attempts': 10,
     'max_transfer_attempts': 10,
     'max_retries': 3,
+    'retry_exit_codes': [137, 143, 104, 134, 139],
 }
 
 
@@ -168,6 +188,12 @@ def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
     for key in opts:
         if params.get(key) is not None:
             opts[key] = params[key]
+    retry_codes = '[' + ', '.join(str(int(c)) for c in opts['retry_exit_codes']) + ']'
+    # Optional identity in the Batch job name: nf-amazon derives the job name
+    # from the task name, which includes the ``tag`` directive.
+    tag_line = ''
+    if params.get('sim_tag'):
+        tag_line = f"\n            tag = {_resource_value(str(params['sim_tag']))}"
 
     # AWS_DEFAULT_REGION is the executor's own requirement, so it is always
     # emitted. Anything else the image needs is the CALLER's business, not this
@@ -197,8 +223,10 @@ def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
             // 'finish' rather than vEcoli's 'ignore': ignore is safe there only
             // because it also sets workflow.failOnIgnore, and an ignored failed
             // task is a campaign that goes green having produced no science.
-            errorStrategy = {{ task.attempt <= task.maxRetries ? 'retry' : 'finish' }}
-            maxRetries = {opts['max_retries']}
+            // ...and only for exit classes a fresh attempt can fix (see
+            // AWSBATCH_DEFAULTS['retry_exit_codes']); a code fault is not retried.
+            errorStrategy = {{ (task.exitStatus in {retry_codes}) && task.attempt <= task.maxRetries ? 'retry' : 'finish' }}
+            maxRetries = {opts['max_retries']}{tag_line}
             // Hash inputs by name+size, NOT last-modified. The default mode
             // includes the timestamp, and a re-render rewrites each task's
             // staged config with identical content and a new mtime -- so every
@@ -228,7 +256,7 @@ def _awsbatch_profile(res_block: str, params: Optional[Dict[str, Any]]) -> str:
 # directive (not a Nextflow `params.<name>` lookup), so rendering them into the
 # params block would be noise at best -- and `container_env`, being a dict, has
 # no Groovy literal at all.
-PROFILE_ONLY_PARAMS = ('container_env',)
+PROFILE_ONLY_PARAMS = ('container_env', 'retry_exit_codes')
 
 
 def generate_nextflow_config(executor: str = 'local',
