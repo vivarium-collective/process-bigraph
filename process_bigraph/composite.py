@@ -38,76 +38,14 @@ def get_current_composite():
 
 
 # ---------------------------------------------------------------------------
-# Optional invocation tracing
+# Observability
 # ---------------------------------------------------------------------------
-# When the env var ``PROCESS_BIGRAPH_TRACE_FILE`` is set to a writable path,
-# every invocation of ``Composite.process_update`` (i.e. every Process/Step
-# call routed through the framework) writes one JSONL record describing the
-# call: path, class, global_time, interval, an input summary, and an output
-# summary. Useful for diagnosing per-step divergence between two runs by
-# diffing two trace files. No overhead when the env var is unset.
-_TRACE_PATH = os.environ.get('PROCESS_BIGRAPH_TRACE_FILE')
-_TRACE_FH = open(_TRACE_PATH, 'a', buffering=1) if _TRACE_PATH else None
-
-# Default for Composite._profile_per_process (per-path invoke attribution in
-# TimingSummary.per_process). Off by default — the write is on the hot path —
-# and flippable per-run via the env var without a code change.
-_PROFILE_PER_PROCESS_DEFAULT = bool(
-    os.environ.get('PROCESS_BIGRAPH_PROFILE_PROCESSES'))
-
-
-def _summarize_value(value, depth=0):
-    """Lightweight, JSON-safe summary of an update fragment.
-
-    Tries to surface the values most useful for diffing two traces:
-    - Scalars and short strings inlined.
-    - Numpy arrays summarized as ``{shape, sum, mean, head}``.
-    - Dicts recursed (capped depth).
-    - Lists/tuples shown as their first few items.
-    """
-    if depth > 3:
-        return f'<{type(value).__name__}>'
-    if value is None or isinstance(value, (bool, int, float, str)):
-        return value
-    if isinstance(value, np.ndarray):
-        try:
-            return {
-                '_np': True,
-                'shape': list(value.shape),
-                'dtype': str(value.dtype),
-                'sum': float(value.sum()) if value.dtype.kind in 'fi' else None,
-                'head': value.flatten()[:5].tolist() if value.size else [],
-            }
-        except Exception:
-            return f'<ndarray shape={value.shape}>'
-    if isinstance(value, dict):
-        return {k: _summarize_value(v, depth + 1) for k, v in list(value.items())[:32]}
-    if isinstance(value, (list, tuple)):
-        return [_summarize_value(v, depth + 1) for v in value[:10]]
-    return f'<{type(value).__name__}>'
-
-
-def _trace_invoke(path, instance, state, interval, update):
-    """Append one JSONL record describing a process/step invocation."""
-    if _TRACE_FH is None:
-        return
-    try:
-        gt = state.get('global_time') if isinstance(state, dict) else None
-        rec = {
-            'path': list(path) if isinstance(path, tuple) else path,
-            'cls': type(instance).__name__,
-            'gt': gt,
-            'interval': interval,
-            'input': _summarize_value(state),
-            'output': _summarize_value(update),
-        }
-        _TRACE_FH.write(json.dumps(rec, default=str) + '\n')
-    except Exception as exc:
-        # Tracing must never break a sim. Log a single line and continue.
-        try:
-            _TRACE_FH.write(json.dumps({'trace_error': str(exc)}) + '\n')
-        except Exception:
-            pass
+# Invocation tracing, per-process profiling, the run heartbeat and exception
+# context all live in ``process_bigraph.events`` (one module, one set of
+# switches -- see its docstring). ``_summarize_value`` is re-exported here for
+# callers that imported it from ``composite``.
+from process_bigraph import events as _events
+from process_bigraph.events import _summarize_value  # noqa: F401  (re-export)
 
 from dataclasses import dataclass, field
 from typing import (
@@ -1302,6 +1240,16 @@ class Composite(Process):
     # Initialization & Configuration
     # ==============================
 
+    @property
+    def _em(self) -> '_events.EventEmitter':
+        """The process-wide event emitter (process_bigraph.events); resolved
+        lazily so a Composite built before ``events.configure()`` still
+        picks up the configured sinks."""
+        em = self.__dict__.get('_events')
+        if em is None:
+            em = self._events = _events.get_emitter()
+        return em
+
     def initialize(self, config: Optional[Dict[str, Any]] = None) -> None:
         """
         Initialize the composite model from its config.
@@ -1505,7 +1453,8 @@ class Composite(Process):
         # ``run()`` to get the per-path breakdown. Defaults to the
         # ``PROCESS_BIGRAPH_PROFILE_PROCESSES`` env var so a run can be profiled
         # without code changes.
-        self._profile_per_process: bool = _PROFILE_PER_PROCESS_DEFAULT
+        self._events = _events.get_emitter()
+        self._profile_per_process: bool = self._events.detail_timing
 
         # Precompile view/project operations for fast runtime access.
         self._compiled_links = {}
@@ -1548,7 +1497,13 @@ class Composite(Process):
         for rt in runtimes:
             flush = getattr(rt, 'flush_pending', None)
             if flush is not None:
-                flush()
+                try:
+                    flush()
+                except BaseException as exc:
+                    self._em.exception(
+                        exc, runtime=type(rt).__name__,
+                        global_time=self.state.get('global_time'))
+                    raise
 
     def _partition_processes_by_runtime(self):
         """Inspect every process_path and split into:
@@ -2617,6 +2572,20 @@ class Composite(Process):
         self._per_process_time = {}
         run_start = _time.monotonic()
 
+        # Observability (process_bigraph.events): a ``run`` span when spans
+        # are on, ``run_start``/``run_end`` always (no-ops when no sink is
+        # configured), heartbeat counters reset per run.
+        em = self._events = _events.get_emitter()
+        if em.detail_timing:
+            self._profile_per_process = True
+        em.reset_run_counters()
+        span = em.start_span('run', interval=interval) if (em.enabled and em.detail_spans) else None
+        em.event('run_start', interval=interval,
+                 n_processes=len(self.process_paths), n_steps=len(self.step_paths),
+                 parallel=bool(getattr(self, '_parallel_processes', False)),
+                 global_time=self.state.get('global_time'))
+        status, error = 'ok', None
+
         # Set the current-Composite contextvar so nested Steps can
         # reach the parent Composite (e.g. for CompositeDivision to
         # read parent cell tree state without going through wires).
@@ -2625,8 +2594,29 @@ class Composite(Process):
         _cc_token = current_composite_var.set(self)
         try:
             return self._run_inner(interval, force_complete, run_start)
+        except BaseException as exc:
+            status, error = 'error', f'{type(exc).__name__}: {exc}'
+            raise
         finally:
             current_composite_var.reset(_cc_token)
+            if em.enabled:
+                total = _time.monotonic() - run_start
+                payload = {
+                    'status': status, 'error': error,
+                    'total': round(total, 6),
+                    'process_time': round(self.process_update_time, 6),
+                    'framework_time': round(total - self.process_update_time, 6),
+                    'ticks': em.ticks_total,
+                    'global_time': self.state.get('global_time'),
+                }
+                if self._per_process_time:
+                    top = sorted(self._per_process_time.items(), key=lambda kv: kv[1], reverse=True)[:5]
+                    payload['top5'] = [
+                        ['/'.join(str(p) for p in k) if isinstance(k, tuple) else str(k), round(v, 6)]
+                        for k, v in top]
+                em.event('run_end', level='error' if status == 'error' else 'info', **payload)
+                if span is not None:
+                    span.end(status, error)
 
     def _run_inner(self, interval: float, force_complete: bool,
                    run_start: float) -> None:
@@ -2637,8 +2627,10 @@ class Composite(Process):
             self.run_steps(self.to_run)
             self.to_run = []
 
+        em = self._em
         while self.state['global_time'] < end_time or force_complete:
             full_step = math.inf
+            em.heartbeat(global_time=self.state['global_time'])
 
             # Partition processes: ones whose runtime opts into batched
             # tick_lifecycle vs the regular per-process path. The
@@ -2991,7 +2983,11 @@ class Composite(Process):
 
         if len(due) > 1:
             pool = self._get_step_executor(len(due))
-            results = list(pool.map(_invoke, due))
+            # Carry the observability span context (a ContextVar) into the
+            # worker threads: each call runs in its own copy of this thread's
+            # context, so events emitted from a worker carry the run's ids.
+            snapshot = contextvars.copy_context()
+            results = list(pool.map(lambda item: snapshot.copy().run(_invoke, item), due))
         else:
             results = [_invoke(due[0])]
 
@@ -3034,9 +3030,25 @@ class Composite(Process):
         # Strip schema-specific metadata from the state (once, unless caller did)
         clean_state = states if already_clean else strip_schema_keys(states)
 
-        # Invoke the process and retrieve a wrapped SyncUpdate object
+        # Invoke the process and retrieve a wrapped SyncUpdate object.
+        # On failure, record WHICH process/step, at what global_time, with a
+        # summary of the state it was handed (process_bigraph.events), then
+        # re-raise the ORIGINAL exception unchanged -- callers such as
+        # v2ecoli's lineage runner classify division by exception type.
         t0 = _time.monotonic()
-        update = process['instance'].invoke(clean_state, interval)
+        try:
+            update = process['instance'].invoke(clean_state, interval)
+        except BaseException as exc:
+            self._em.exception(
+                exc,
+                path='/'.join(str(p) for p in path) if isinstance(path, (list, tuple)) else str(path),
+                cls=type(process['instance']).__name__,
+                address=process.get('address'),
+                is_step=(interval == -1.0),
+                interval=interval,
+                global_time=self.state.get('global_time') if isinstance(self.state, dict) else None,
+                state_summary=_events.summarize_state(clean_state))
+            raise
         dt = _time.monotonic() - t0
         self.process_update_time += dt
         # Per-process attribution is opt-in (a dict write on the hot path);
@@ -3046,7 +3058,7 @@ class Composite(Process):
         if self._profile_per_process:
             key = tuple(path) if isinstance(path, (list, tuple)) else (path,)
             self._per_process_time[key] = self._per_process_time.get(key, 0.0) + dt
-        if _TRACE_FH is not None:
+        if self._em.detail_invoke:
             # Resolve SyncUpdate / Defer to plain dict for the trace; the
             # invoke return is opaque (SyncUpdate wraps a dict). We only need
             # a snapshot for the trace, so pull .get() if available.
@@ -3054,7 +3066,7 @@ class Composite(Process):
                 resolved = update.get() if hasattr(update, 'get') else update
             except Exception:
                 resolved = '<unresolvable>'
-            _trace_invoke(path, process['instance'], clean_state, interval, resolved)
+            self._em.invoke(path, process['instance'], clean_state, interval, resolved)
 
         # Return a deferred object that will project the update when requested.
         # The projector is the module-level ``_project_process_update`` (not a
@@ -3219,8 +3231,14 @@ class Composite(Process):
             finally:
                 uninstall_reconcile_sink(prev_sink)
             update_paths = summary.paths
+            self._em.count(leaf_paths_touched=len(update_paths))
             if summary.has_structural:
                 had_structural_sentinels = True
+                self._em.count(structural_changes=1)
+                self._em.event(
+                    'structural_change', n_paths=len(update_paths),
+                    sample_paths=['/'.join(str(p) for p in path) for path in update_paths[:8]],
+                    global_time=self.state.get('global_time'))
 
             if combined_update:
                 # NOTE: previously this path also forced
