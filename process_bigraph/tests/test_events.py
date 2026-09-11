@@ -481,8 +481,13 @@ def test_contract_grow_divide_division_is_a_structural_change(capsys):
 
 def test_contract_gillespie_composite_stream(capsys):
     """tests.py::test_gillespie_composite with events on: steps and processes
-    both appear as invokes; the emitter step is a Step (interval -1)."""
+    both appear as invokes; the emitter step is a Step (interval -1).
+
+    The Gillespie interval is ``np.random.exponential``, so the horizon is
+    seeded: unseeded, the ``event`` process fires 0..3 times in 100 time
+    units and the assertion below flaked about one run in three."""
     _loud(PBG_EVENT_HEARTBEAT_S='3600')
+    np.random.seed(1234)
     gillespie = Composite({
         'bridge': {'inputs': {'DNA': ['DNA'], 'mRNA': ['mRNA']},
                    'outputs': {'time': ['global_time'], 'DNA': ['DNA'], 'mRNA': ['mRNA']}},
