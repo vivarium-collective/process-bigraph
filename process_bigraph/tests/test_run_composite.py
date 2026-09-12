@@ -113,3 +113,91 @@ def test_run_composite_state_out_roundtrips_as_initial_state(tmp_path):
     final = json.loads(second_out.read_text())
     expected_level = float(handoff_document['state']['level'])
     assert float(final['state']['level']) == expected_level
+
+
+def _boom_document():
+    return {
+        'state': {
+            'boom': {'_type': 'process',
+                     'address': 'local:!process_bigraph.tests.test_events._Boom',
+                     'config': {'at': 1.0}, 'interval': 1.0,
+                     'inputs': {'level': ['level'], 'global_time': ['global_time']},
+                     'outputs': {'level': ['level']}},
+            'level': 0.0,
+        }
+    }
+
+
+def test_run_composite_writes_failure_json_and_exits_nonzero(tmp_path):
+    """A failing run leaves a machine-readable ``failure.json`` next to its
+    output (engine context included) and still propagates the exception, so
+    the CLI's exit code is unchanged."""
+    import subprocess
+    import sys
+    from process_bigraph import events
+    from process_bigraph.run_composite import run_composite
+    doc = tmp_path / 'doc.json'
+    doc.write_text(json.dumps(_boom_document()))
+    events.set_emitter(None)
+    import os
+    import pytest
+    before = os.environ.get('PBG_TRACEPARENT')
+    with pytest.raises(ZeroDivisionError):
+        run_composite(str(doc), steps=3.0, state_out_path=str(tmp_path / 'out' / 'state.json'))
+    assert os.environ.get('PBG_TRACEPARENT') == before    # the library never mutates env
+    record = json.loads((tmp_path / 'out' / 'failure.json').read_text())
+    assert record['exc_type'] == 'ZeroDivisionError'
+    assert record['pbg_context']['path'] == 'boom'
+    assert record['pbg_context']['global_time'] == 1.0
+    assert 'ZeroDivisionError' in record['traceback_tail']
+
+    # The CLI: non-zero exit, events on stdout by default, failure.json where asked.
+    proc = subprocess.run(
+        [sys.executable, '-m', 'process_bigraph.run_composite', '--document', str(doc),
+         '--steps', '3', '--failure-out', str(tmp_path / 'cli' / 'failure.json')],
+        capture_output=True, text=True, env={**__import__('os').environ, 'PBG_EVENT_HEARTBEAT_S': '3600'})
+    assert proc.returncode != 0
+    stdout_events = [json.loads(l) for l in proc.stdout.splitlines() if l.startswith('{')]
+    names = [e['event'] for e in stdout_events]
+    assert 'task.start' in names and 'process.exception' in names and 'task.end' in names
+    assert [e for e in stdout_events if e['event'] == 'task.end'][0]['payload']['status'] == 'error'
+    assert all(e['component'] == 'process_bigraph' for e in stdout_events)
+    assert (tmp_path / 'cli' / 'failure.json').exists()
+
+
+def test_run_composite_summary_out_on_success(tmp_path):
+    from process_bigraph import events
+    from process_bigraph.run_composite import run_composite
+    doc = tmp_path / 'doc.json'
+    doc.write_text(json.dumps(_incr_document()))
+    events.set_emitter(None)
+    run_composite(str(doc), steps=3.0, summary_out=str(tmp_path / 'summary.json'))
+    summary = json.loads((tmp_path / 'summary.json').read_text())
+    assert summary['status'] == 'ok' and summary['global_time'] == 3.0
+    assert summary['total'] >= summary['process_time'] >= 0.0
+
+
+def test_run_step_writes_failure_json_and_reraises(tmp_path):
+    from process_bigraph import events
+    from process_bigraph.run_step import run_step
+    import pytest
+    events.set_emitter(None)
+    with pytest.raises(ZeroDivisionError):
+        run_step('process_bigraph.tests.test_run_composite._BoomStep', config={},
+                 state={}, update_json_path=str(tmp_path / 'u' / 'update.json'))
+    record = json.loads((tmp_path / 'u' / 'failure.json').read_text())
+    assert record['exc_type'] == 'ZeroDivisionError' and record['step_class'].endswith('_BoomStep')
+
+
+from process_bigraph.composite import Step as _Step
+
+
+class _BoomStep(_Step):
+    def inputs(self):
+        return {}
+
+    def outputs(self):
+        return {'x': 'float'}
+
+    def update(self, state):
+        raise ZeroDivisionError('step boom')

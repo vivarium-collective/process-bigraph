@@ -38,10 +38,12 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import os
 import sys
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
+from process_bigraph import events as _events
 from process_bigraph.workflow import recipe as _recipe
 
 
@@ -67,7 +69,11 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
                   provision: Optional[Iterable] = None,
                   initial_state: Optional[Dict[str, Any]] = None,
                   out_paths: Optional[Dict[str, str]] = None,
-                  state_out_path: Optional[str] = None) -> Optional[Dict[str, Any]]:
+                  state_out_path: Optional[str] = None,
+                  failure_out: Optional[str] = None,
+                  summary_out: Optional[str] = None,
+                  span_name: Optional[str] = None,
+                  export_context: bool = False) -> Optional[Dict[str, Any]]:
     """Run a Composite for ``steps`` and optionally write its outputs.
 
     ``state_out_path``, if given, is best-effort: if the full
@@ -112,7 +118,47 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
         core = allocate_core()
         composite = Composite(document, core=core)
 
-    composite.run(float(steps))
+    # Observability: the whole task is one span (child of whatever
+    # PBG_TRACEPARENT handed us); a failure writes ``failure.json`` next to
+    # the first output and re-raises unchanged so the exit code still says
+    # so. See process_bigraph.events.
+    em = _events.get_emitter()
+    label = span_name or (build_doc.get('composite') if build_path is not None else None) \
+        or (Path(document_path).stem if document_path else 'composite')
+    failure_path = failure_out or _default_sidecar(out_paths, state_out_path, 'failure.json')
+    span = em.start_span('task', name=label, steps=float(steps))
+    if export_context:
+        # CLI only: let subprocesses inherit the task span. Library callers
+        # never get their environment mutated.
+        os.environ['PBG_TRACEPARENT'] = em.current_traceparent()
+    em.event('task.start', name=label, steps=float(steps))
+    try:
+        composite.run(float(steps))
+    except BaseException as exc:
+        record = _events.exception_record(exc, task=label, steps=float(steps))
+        if failure_path:
+            try:
+                _write_json(failure_path, record)
+            except Exception:
+                pass
+        em.event('task.end', level='error', status='error', name=label,
+                 exc_type=record['exc_type'], exc_msg=record['exc_msg'],
+                 traceback_tail=record['traceback_tail'], failure_path=failure_path)
+        span.end('error', f"{record['exc_type']}: {record['exc_msg']}")
+        em.flush()
+        raise
+    if summary_out:
+        ts = composite.timing_summary()
+        _write_json(summary_out, {
+            'task': label, 'steps': float(steps), 'status': 'ok',
+            'global_time': composite.state.get('global_time'),
+            'total': ts.total, 'process_time': ts.process_time,
+            'framework_time': ts.framework_time,
+            'per_process': {'/'.join(str(p) for p in k): v for k, v in ts.per_process.items()},
+        })
+    em.event('task.end', status='ok', name=label, global_time=composite.state.get('global_time'))
+    span.end('ok')
+    em.flush()
 
     bridge_outputs = composite.read_bridge()
     for port, path in (out_paths or {}).items():
@@ -145,6 +191,16 @@ def run_composite(document_path: Optional[str] = None, *, steps: float,
         _write_json(state_out_path, state_document)
 
     return bridge_outputs
+
+
+def _default_sidecar(out_paths: Optional[Dict[str, str]], state_out_path: Optional[str],
+                     filename: str) -> Optional[str]:
+    """``<dir of the first output>/<filename>``, or None when the task writes
+    no file at all."""
+    anchor = state_out_path or next(iter((out_paths or {}).values()), None)
+    if not anchor:
+        return None
+    return str(Path(anchor).parent / filename)
 
 
 def _parse_out_args(pairs):
@@ -219,6 +275,13 @@ def _build_parser() -> argparse.ArgumentParser:
                    help='Write the final {schema, state} document here '
                         '(best-effort: a marker document is written instead '
                         'if serialization fails)')
+    p.add_argument('--failure-out', dest='failure_out',
+                   help='Where to write failure.json on error '
+                        '(default: next to the first --out/--state-out)')
+    p.add_argument('--summary-out', dest='summary_out',
+                   help='Write a run summary (timing, final global_time) here on success')
+    p.add_argument('--span-name', dest='span_name',
+                   help='Name of the task span in the event stream (default: composite id)')
     return p
 
 
@@ -229,6 +292,10 @@ def main(argv=None) -> int:
         raw = args.initial_state[1:] if args.initial_state.startswith('@') else args.initial_state
         with open(raw) as fh:
             initial_state = json.load(fh)
+
+    # CLI default: events on stdout (PBG_EVENT_SINKS overrides); the
+    # library default stays silent. See process_bigraph.events.
+    _events.configure(default='stdout')
 
     steps = args.steps
     if args.build_path is not None and steps is None:
@@ -246,7 +313,11 @@ def main(argv=None) -> int:
         provision=args.provision_specs,
         initial_state=initial_state,
         out_paths=_parse_out_args(args.out_pairs),
-        state_out_path=args.state_out_path)
+        state_out_path=args.state_out_path,
+        failure_out=args.failure_out,
+        summary_out=args.summary_out,
+        span_name=args.span_name,
+        export_context=True)
     return 0
 
 

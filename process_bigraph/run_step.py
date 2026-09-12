@@ -53,7 +53,9 @@ from __future__ import annotations
 import argparse
 import importlib
 import json
+import os
 import sys
+import time as _time
 from pathlib import Path
 from typing import Any, Dict, Iterable, Optional
 
@@ -127,6 +129,10 @@ def run_step(
     out_paths: Optional[Dict[str, str]] = None,
     update_json_path: Optional[str] = None,
     provision: Optional[list] = None,
+    failure_out: Optional[str] = None,
+    summary_out: Optional[str] = None,
+    span_name: Optional[str] = None,
+    export_context: bool = False,
 ) -> Dict[str, Any]:
     """Instantiate the Step, run ``update(state)``, write outputs.
 
@@ -134,6 +140,7 @@ def run_step(
     path in ``out_paths`` and (if given) ``update_json_path``.
     """
     from bigraph_schema import allocate_core
+    from process_bigraph import events as _events
     from process_bigraph.workflow.provision import provision_core
 
     core = allocate_core()
@@ -142,7 +149,40 @@ def run_step(
     cls = _resolve_class(fq_class)
     instance = cls(config or {}, core=core)
 
-    update = instance.invoke(state or {}).update
+    # Observability: the Step is one task span; a failure writes
+    # ``failure.json`` next to the first output and re-raises unchanged.
+    em = _events.get_emitter()
+    label = span_name or cls.__name__
+    anchor = update_json_path or next(iter((out_paths or {}).values()), None)
+    failure_path = failure_out or (str(Path(anchor).parent / 'failure.json') if anchor else None)
+    span = em.start_span('task', name=label, step_class=fq_class)
+    if export_context:
+        # CLI only: let subprocesses inherit the task span. Library callers
+        # never get their environment mutated.
+        os.environ['PBG_TRACEPARENT'] = em.current_traceparent()
+    em.event('task.start', name=label, step_class=fq_class)
+    _t0 = _time.monotonic()
+    try:
+        update = instance.invoke(state or {}).update
+    except BaseException as exc:
+        record = _events.exception_record(exc, task=label, step_class=fq_class)
+        if failure_path:
+            try:
+                _write_json(failure_path, record)
+            except Exception:
+                pass
+        em.event('task.end', level='error', status='error', name=label,
+                 exc_type=record['exc_type'], exc_msg=record['exc_msg'],
+                 traceback_tail=record['traceback_tail'], failure_path=failure_path)
+        span.end('error', f"{record['exc_type']}: {record['exc_msg']}")
+        em.flush()
+        raise
+    if summary_out:
+        _write_json(summary_out, {'task': label, 'step_class': fq_class, 'status': 'ok',
+                                  'total': _time.monotonic() - _t0})
+    em.event('task.end', status='ok', name=label)
+    span.end('ok')
+    em.flush()
 
     for port, path in (out_paths or {}).items():
         if port not in update:
@@ -179,11 +219,23 @@ def _build_parser() -> argparse.ArgumentParser:
                    help='Provider spec for core provisioning (module:attr or JSON tuple); repeatable')
     p.add_argument('--update-json', dest='update_json_path',
                    help='Write the full update dict to this path')
+    p.add_argument('--failure-out', dest='failure_out',
+                   help='Where to write failure.json on error '
+                        '(default: next to the first --out/--update-json)')
+    p.add_argument('--summary-out', dest='summary_out',
+                   help='Write a small run summary here on success')
+    p.add_argument('--span-name', dest='span_name',
+                   help='Name of the task span in the event stream (default: the Step class)')
     return p
 
 
 def main(argv: Optional[list] = None) -> int:
     args = _build_parser().parse_args(argv)
+
+    # CLI default: events on stdout (PBG_EVENT_SINKS overrides); the
+    # library default stays silent. See process_bigraph.events.
+    from process_bigraph import events as _events
+    _events.configure(default='stdout')
 
     config = _load_json_file(args.config_path) if args.config_path else {}
     state: Dict[str, Any] = {}
@@ -200,6 +252,10 @@ def main(argv: Optional[list] = None) -> int:
         out_paths=out_paths,
         update_json_path=args.update_json_path,
         provision=provision,
+        failure_out=args.failure_out,
+        summary_out=args.summary_out,
+        span_name=args.span_name,
+        export_context=True,
     )
     return 0
 

@@ -65,6 +65,8 @@ Usage
 
 from __future__ import annotations
 
+import time as _time
+from process_bigraph import events as _events
 import os
 import json
 import hashlib
@@ -484,7 +486,15 @@ def _batch_actor_class():
                         f"_RayBatchActor.batch_update: proc_id "
                         f"{proc_id} not initialized — driver must "
                         f"call init_cell before first batch_update.")
-                out[proc_id] = composite.update(inputs, float(interval))
+                try:
+                    out[proc_id] = composite.update(inputs, float(interval))
+                except BaseException as exc:
+                    # One bad composite must not surface as an anonymous
+                    # RayTaskError: name the proc_id, its class and the tick.
+                    raise RuntimeError(
+                        f"_RayBatchActor.batch_update failed for proc_id={proc_id} "
+                        f"class={type(composite).__name__} interval={interval}: "
+                        f"{type(exc).__name__}: {exc}") from exc
             return out
 
         def ping(self) -> str:
@@ -615,8 +625,12 @@ class RayProtocolRuntime:
             shard_idx = self._shard_index_for(pool, proc_id)
             if proc_id not in pool.proc_initialized:
                 actor = pool.actors[shard_idx]
+                _t0 = _time.monotonic()
                 ray.get(actor.init_cell.remote(proc_id, config))
                 pool.proc_initialized.add(proc_id)
+                _events.get_emitter().event(
+                    'process.init', proc_id=proc_id, class_name=class_name,
+                    shard=shard_idx, seconds=round(_time.monotonic() - _t0, 3))
             pool.pending[shard_idx].append((proc_id, inputs, float(interval)))
 
     def collect(self, proc_id: int) -> dict:
@@ -646,8 +660,15 @@ class RayProtocolRuntime:
                 futures.append(fut)
                 manifest.append(batch)
                 pool.pending[shard_idx] = []
-        # Wait on all in parallel.
-        results_list = ray.get(futures)
+        # Wait on all in parallel. A failing shard is reported with its
+        # index and the proc_ids it carried before the error propagates.
+        try:
+            results_list = ray.get(futures)
+        except BaseException as exc:
+            _events.get_emitter().exception(
+                exc, event_name='runtime.error', runtime='RayProtocolRuntime', shards=len(futures),
+                proc_ids=[[pid for pid, _, _ in batch][:8] for batch in manifest])
+            raise
         # Scatter into self._results keyed by proc_id.
         for batch, results in zip(manifest, results_list):
             for proc_id, _, _ in batch:
