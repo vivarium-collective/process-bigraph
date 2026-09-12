@@ -533,3 +533,110 @@ def test_contract_injected_raising_process(capsys):
     assert [r['event'] for r in recs][-2:] == ['run.end', 'span.end']
     assert recs[-2]['payload']['status'] == 'error'
     assert recs[-1]['payload']['status'] == 'error'
+
+
+# ---------------------------------------------------------------------------
+# run.start / run.end rate limit (per Composite)
+#
+# A protocol runtime drives one Composite.run per remote step, so an
+# unthrottled pair is 2 x cells x ticks events. The contract: the first run and
+# any run ending in error always emit; otherwise at most one pair per
+# heartbeat_s, with the skipped runs folded into the next run.end.
+# ---------------------------------------------------------------------------
+
+def _run_events(sink):
+    return [e for e in sink.events if e['event'] in ('run.start', 'run.end')]
+
+
+def test_repeated_runs_emit_one_pair_not_one_per_run():
+    """Ten runs on one Composite inside a single heartbeat window: one pair."""
+    sink = _ListSink()
+    events.set_emitter(events.EventEmitter([sink], heartbeat_s=3600))
+    sim = Composite({'state': _two_increasers()}, core=allocate_core())
+    for _ in range(10):
+        sim.run(1.0)
+    names = [e['event'] for e in _run_events(sink)]
+    assert names == ['run.start', 'run.end'], names
+
+
+def test_folded_runs_are_counted_and_summed_into_the_next_run_end():
+    """The suppressed runs are not lost: they arrive as runs=N with summed totals."""
+    sink = _ListSink()
+    events.set_emitter(events.EventEmitter([sink], heartbeat_s=0))   # every run emits
+    sim = Composite({'state': _two_increasers()}, core=allocate_core())
+    sim.run(1.0)
+    assert [e for e in _run_events(sink) if e['event'] == 'run.end'][0]['payload']['runs'] == 1
+
+    sink2 = _ListSink()
+    events.set_emitter(events.EventEmitter([sink2], heartbeat_s=3600))
+    sim2 = Composite({'state': _two_increasers()}, core=allocate_core())
+    for _ in range(4):
+        sim2.run(1.0)
+    sim2._run_emitted_at = None          # force the next run to emit
+    sim2.run(1.0)
+    ends = [e for e in _run_events(sink2) if e['event'] == 'run.end']
+    assert len(ends) == 2
+    folded = ends[-1]['payload']
+    # runs 2..5: the three suppressed plus the one that emitted
+    assert folded['runs'] == 4
+    assert folded['total'] >= folded['process_time'] >= 0.0
+    assert folded['ticks'] >= 4
+
+
+def test_first_run_always_emits_even_with_a_long_heartbeat():
+    sink = _ListSink()
+    events.set_emitter(events.EventEmitter([sink], heartbeat_s=86400))
+    sim = Composite({'state': _two_increasers()}, core=allocate_core())
+    sim.run(1.0)
+    assert [e['event'] for e in _run_events(sink)] == ['run.start', 'run.end']
+
+
+def test_a_failing_run_always_reports_even_when_rate_limited():
+    """The rate limit must never swallow a failure."""
+    sink = _ListSink()
+    events.set_emitter(events.EventEmitter([sink], heartbeat_s=3600))
+    core = allocate_core()
+    sim = Composite({'state': _two_increasers()}, core=core)
+    sim.run(1.0)                                   # first pair emits
+    n_before = len(_run_events(sink))
+    boom = Composite({'state': _boom_state(at=0.0)}, core=core)
+    boom._run_emitted_at = sim._run_emitted_at     # pretend it is inside the window
+    boom._runs_folded = 2
+    with pytest.raises(ZeroDivisionError):
+        boom.run(3.0)
+    ends = [e for e in _run_events(sink)[n_before:] if e['event'] == 'run.end']
+    assert len(ends) == 1
+    assert ends[0]['level'] == 'error'
+    assert ends[0]['payload']['status'] == 'error'
+    # unbalanced by design: the error overrode a suppressed start
+    assert ends[0]['payload']['start_suppressed'] is True
+    assert ends[0]['payload']['runs'] == 3
+
+
+def test_rate_limit_is_per_composite_not_global():
+    """Two Composites each get their own first-run pair."""
+    sink = _ListSink()
+    events.set_emitter(events.EventEmitter([sink], heartbeat_s=3600))
+    core = allocate_core()
+    a = Composite({'state': _two_increasers()}, core=core)
+    b = Composite({'state': _two_increasers()}, core=core)
+    a.run(1.0)
+    b.run(1.0)
+    assert [e['event'] for e in _run_events(sink)] == [
+        'run.start', 'run.end', 'run.start', 'run.end']
+
+
+def test_rate_limit_does_not_change_the_simulation():
+    """The invariant this whole module protects, for the throttled path too."""
+    core = allocate_core()
+    events.set_emitter(None)
+    quiet = Composite({'state': _two_increasers()}, core=core)
+    for _ in range(5):
+        quiet.run(1.0)
+
+    sink = _ListSink()
+    events.set_emitter(events.EventEmitter([sink], heartbeat_s=3600))
+    loud = Composite({'state': _two_increasers()}, core=allocate_core())
+    for _ in range(5):
+        loud.run(1.0)
+    assert loud.state['level'] == quiet.state['level']

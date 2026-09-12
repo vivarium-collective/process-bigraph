@@ -87,7 +87,14 @@ Event schema (one JSON object per line, ``default=str`` serialisation)::
 
 The engine's own events (callers use their own dotted namespaces)::
 
-    run.start / run.end      Composite.run (span ``run`` when ``spans`` detail is on)
+    run.start / run.end      Composite.run (span ``run`` when ``spans`` detail is on).
+                             Rate-limited per Composite: the first run and any
+                             run ending in error always emit; otherwise at most
+                             one pair per ``heartbeat_s``, with the runs skipped
+                             in between folded into the next ``run.end`` as
+                             ``runs=N`` and summed ``total``/``process_time``/
+                             ``framework_time``/``ticks``. An error whose start
+                             was suppressed carries ``start_suppressed``.
     tick                     the throttled heartbeat inside the run loop
     structure.changed        a reconcile reported a structural change
     process.exception        a Process/Step invoke raised (path, class, address,

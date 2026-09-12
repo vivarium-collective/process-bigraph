@@ -1454,6 +1454,17 @@ class Composite(Process):
         # without code changes.
         self._events = _events.get_emitter()
         self._profile_per_process: bool = self._events.detail_timing
+        # ``run.start``/``run.end`` rate limit (per Composite instance). A
+        # protocol runtime drives one Composite.run per remote step, so an
+        # unthrottled pair is 2 x cells x ticks events. The first run and any
+        # run that ends in error always emit; otherwise at most one pair per
+        # ``heartbeat_s``, and the runs skipped in between are folded into the
+        # next ``run.end`` (``runs=N`` with the summed totals).
+        self._run_emitted_at: Optional[float] = None
+        self._runs_folded: int = 0
+        self._folded_total: float = 0.0
+        self._folded_process_time: float = 0.0
+        self._folded_ticks: int = 0
 
         # Precompile view/project operations for fast runtime access.
         self._compiled_links = {}
@@ -2578,11 +2589,20 @@ class Composite(Process):
         if em.detail_timing:
             self._profile_per_process = True
         self._run_ticks = 0     # per-Composite, so nested runs do not clobber the outer count
-        span = em.start_span('run', interval=interval) if (em.enabled and em.detail_spans) else None
-        em.event('run.start', interval=interval,
-                 n_processes=len(self.process_paths), n_steps=len(self.step_paths),
-                 parallel=bool(getattr(self, '_parallel_processes', False)),
-                 global_time=self.state.get('global_time'))
+        # Rate limit: emit this pair if it is the first run on this Composite or
+        # ``heartbeat_s`` has elapsed since the last emitted pair. An error at
+        # the end overrides the decision (see ``finally``), because a failure is
+        # never the event to drop.
+        emit_pair = (
+            self._run_emitted_at is None
+            or (run_start - self._run_emitted_at) >= em.heartbeat_s)
+        span = em.start_span('run', interval=interval) if (
+            em.enabled and em.detail_spans and emit_pair) else None
+        if emit_pair:
+            em.event('run.start', interval=interval,
+                     n_processes=len(self.process_paths), n_steps=len(self.step_paths),
+                     parallel=bool(getattr(self, '_parallel_processes', False)),
+                     global_time=self.state.get('global_time'))
         status, error = 'ok', None
 
         # Set the current-Composite contextvar so nested Steps can
@@ -2600,20 +2620,42 @@ class Composite(Process):
             current_composite_var.reset(_cc_token)
             if em.enabled:
                 total = _time.monotonic() - run_start
-                payload = {
-                    'status': status, 'error': error,
-                    'total': round(total, 6),
-                    'process_time': round(self.process_update_time, 6),
-                    'framework_time': round(total - self.process_update_time, 6),
-                    'ticks': self._run_ticks,
-                    'global_time': self.state.get('global_time'),
-                }
-                if self._per_process_time:
-                    top = sorted(self._per_process_time.items(), key=lambda kv: kv[1], reverse=True)[:5]
-                    payload['top5'] = [
-                        ['/'.join(str(p) for p in k) if isinstance(k, tuple) else str(k), round(v, 6)]
-                        for k, v in top]
-                em.event('run.end', level='error' if status == 'error' else 'info', **payload)
+                # An error always reports, even when the rate limit had
+                # suppressed this run's ``run.start``.
+                report = emit_pair or status == 'error'
+                if not report:
+                    self._runs_folded += 1
+                    self._folded_total += total
+                    self._folded_process_time += self.process_update_time
+                    self._folded_ticks += self._run_ticks
+                else:
+                    runs = self._runs_folded + 1
+                    agg_total = self._folded_total + total
+                    agg_process = self._folded_process_time + self.process_update_time
+                    payload = {
+                        'status': status, 'error': error,
+                        'runs': runs,
+                        'total': round(agg_total, 6),
+                        'process_time': round(agg_process, 6),
+                        'framework_time': round(agg_total - agg_process, 6),
+                        'ticks': self._folded_ticks + self._run_ticks,
+                        'global_time': self.state.get('global_time'),
+                    }
+                    if not emit_pair:
+                        # The pair is unbalanced: this end has no matching
+                        # start, because the error overrode the rate limit.
+                        payload['start_suppressed'] = True
+                    if self._per_process_time:
+                        top = sorted(self._per_process_time.items(), key=lambda kv: kv[1], reverse=True)[:5]
+                        payload['top5'] = [
+                            ['/'.join(str(p) for p in k) if isinstance(k, tuple) else str(k), round(v, 6)]
+                            for k, v in top]
+                    em.event('run.end', level='error' if status == 'error' else 'info', **payload)
+                    self._run_emitted_at = _time.monotonic()
+                    self._runs_folded = 0
+                    self._folded_total = 0.0
+                    self._folded_process_time = 0.0
+                    self._folded_ticks = 0
                 if span is not None:
                     span.end(status, error)
 
