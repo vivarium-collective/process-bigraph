@@ -25,9 +25,12 @@ The design rules (they are load-bearing, keep them):
 * **The engine knows no domain.** The only fields it interprets are its own
   (times, ids, the event name). Everything a CALLER wants to say about a run --
   which experiment, which replicate, which parameter set -- travels in
-  ``baggage``, an opaque string-to-string map with W3C ``baggage`` semantics
-  that the engine copies onto every event and never reads. Domain identifiers
-  belong in ``baggage``, never in this module's schema or code.
+  ``baggage``, an opaque map with W3C ``baggage`` semantics that the engine
+  copies onto every event and never reads. It is string-to-string on the
+  wire (``PBG_TRACE_BAGGAGE``), but ``bind()`` stores values as given -- a
+  caller may bind an int -- and the engine coerces in neither direction, so a
+  consumer must not assume every value is a string. Domain identifiers belong
+  in ``baggage``, never in this module's schema or code.
 * **Components and dotted event names.** Every event names the ``component``
   that emitted it (a free-form string; this module emits ``"process_bigraph"``)
   and a dotted ``event`` name. The engine's own events are the closed set
@@ -55,10 +58,12 @@ Switches (all environment variables, all optional)::
                          whitespace, ``$`` or backslashes -- launchers render
                          env through ``docker --env``). A value starting with
                          ``{`` is read as JSON for convenience. Keys and values
-                         are opaque strings to the engine (W3C baggage is
-                         string-to-string on the wire); consumers coerce.
-                         Callers add to it at runtime with
-                         ``emitter.bind(**kv)``.
+                         are opaque to the engine: strings when they arrive
+                         this way (W3C baggage is string-to-string on the
+                         wire), JSON scalars kept as parsed, and whatever type
+                         a caller passes to ``emitter.bind(**kv)`` at runtime.
+                         The engine never coerces; consumers coerce and must
+                         not assume strings.
     PBG_EVENT_TAGS       same ``key=value,...`` (or JSON) form, copied verbatim
                          onto every event's ``tags`` (job ids, backend names --
                          infrastructure identifiers live here, never in the
@@ -471,9 +476,28 @@ class EventEmitter:
     def enabled(self) -> bool:
         return bool(self._sinks)
 
+    def add_sink(self, sink: EventSink) -> 'EventEmitter':
+        """Attach one more sink to a live emitter (idempotent per instance).
+        The public way for an embedder to add a destination after
+        ``configure()`` -- e.g. a file next to a task's output -- without
+        reaching into the emitter's internals."""
+        with self._lock:
+            if not any(existing is sink for existing in self._sinks):
+                self._sinks.append(sink)
+        return self
+
+    def remove_sink(self, sink: EventSink) -> 'EventEmitter':
+        """Detach a sink added earlier (no-op when absent). The sink is not
+        closed; the caller owns its lifetime."""
+        with self._lock:
+            self._sinks = [existing for existing in self._sinks if existing is not sink]
+        return self
+
     def bind(self, **baggage) -> 'EventEmitter':
         """Add to (or overwrite in) the opaque baggage copied onto every
-        event. Any key; a value of ``None`` removes the key."""
+        event. Any key; a value of ``None`` removes the key. Values are stored
+        as given (not coerced to ``str``), so an event's ``baggage`` may mix
+        strings from ``PBG_TRACE_BAGGAGE`` with whatever a caller bound."""
         for key, value in baggage.items():
             if value is None:
                 self.baggage.pop(key, None)

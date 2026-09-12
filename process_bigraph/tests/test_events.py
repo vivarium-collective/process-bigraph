@@ -217,6 +217,33 @@ def test_sink_resolution_registry_entry_point_and_module_attr(monkeypatch, tmp_p
     assert events.resolve_sink('none') is None
 
 
+def test_add_sink_and_remove_sink_are_public(capsys):
+    """An embedder attaches a destination after configure() without touching
+    ``_sinks``; adding the same instance twice is a no-op; removing it
+    silences the emitter again."""
+    class Collect(events.EventSink):
+        def __init__(self):
+            self.events = []
+
+        def emit(self, event):
+            self.events.append(event)
+
+    em = events.configure('none', env={'PBG_EVENT_HEARTBEAT_S': '3600'})
+    assert not em.enabled
+    sink = Collect()
+    assert em.add_sink(sink) is em
+    em.add_sink(sink)                       # idempotent per instance
+    assert em.enabled
+    em.event('caller.ping', component='caller')
+    assert [e['event'] for e in sink.events] == ['caller.ping']
+    em.remove_sink(sink)
+    em.remove_sink(sink)                    # absent: no-op
+    assert not em.enabled
+    em.event('caller.ping', component='caller')
+    assert len(sink.events) == 1
+    assert _lines(capsys) == []
+
+
 def test_file_sink_and_deprecated_aliases(tmp_path, capsys):
     trace = tmp_path / 'trace.jsonl'
     em = events.configure(env={'PROCESS_BIGRAPH_TRACE_FILE': str(trace),
