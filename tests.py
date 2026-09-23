@@ -28,12 +28,12 @@ from process_bigraph.emitter import (
     gather_emitter_results, add_emitter_to_composite,
 )
 
-# SQLiteEmitter + friends now live in the focused pbg-emitters library and
+# SQLiteEmitter + friends now live in the focused viva-emitters library and
 # are re-exported from process_bigraph.emitter only when that package is
 # installed. Guard the import here so the rest of the test module loads
 # cleanly without the optional dep; individual SQLite tests call
-# ``pytest.importorskip("pbg_emitters")`` so they skip (rather than fail)
-# when pbg-emitters is absent.
+# ``pytest.importorskip("viva_emitters")`` so they skip (rather than fail)
+# when viva-emitters is absent.
 try:
     from process_bigraph.emitter import (
         SQLiteEmitter,
@@ -1173,7 +1173,7 @@ def test_ram_emitter_unbounded_by_default(core):
 
 
 def test_sqlite_emitter(core, tmp_path=None):
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp_dir = tmp_path or tempfile.mkdtemp(prefix='sqlite_emitter_')
     composite_spec = {
         'increase': {
@@ -1220,7 +1220,7 @@ def test_sqlite_emitter_retrieval_helpers(core):
     '''The standalone helpers must let callers inspect and load a run
     without touching a Composite or a core — this is the main post-hoc
     analysis use case.'''
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp = tempfile.mkdtemp(prefix='sqlite_retrieval_')
     db_path = os.path.join(tmp, 'history.db')
 
@@ -1278,7 +1278,7 @@ def test_sqlite_emitter_retrieval_helpers(core):
 def test_sqlite_emitter_query_paths_kwarg(core):
     '''``query()`` should accept the new ``paths`` kwarg and still accept
     the legacy ``query`` kwarg for back-compat.'''
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp = tempfile.mkdtemp(prefix='sqlite_paths_kwarg_')
     e = SQLiteEmitter({
         'emit': {'global_time': 'node', 'a': 'node', 'b': 'node'},
@@ -1305,7 +1305,7 @@ def test_sqlite_emitter_query_paths_kwarg(core):
 def test_sqlite_emitter_subsample(core):
     '''subsample=N writes every Nth composite tick (first tick always
     kept) and preserves the original step number in the stored row.'''
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp = tempfile.mkdtemp(prefix='sqlite_subsample_')
     e = SQLiteEmitter({
         'emit': {'global_time': 'node', 'v': 'node'},
@@ -1338,7 +1338,7 @@ def test_sqlite_emitter_subsample(core):
 
 def test_sqlite_emitter_subsample_rejects_bad_value(core):
     '''subsample < 1 is nonsensical — refuse at construction time.'''
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp = tempfile.mkdtemp(prefix='sqlite_subsample_bad_')
     with pytest.raises(ValueError):
         SQLiteEmitter({
@@ -1351,7 +1351,7 @@ def test_sqlite_emitter_subsample_rejects_bad_value(core):
 def test_sqlite_emitter_batch_size(core):
     '''batch_size buffers up to N rows and flushes them in one transaction.
     Close and query must flush pending rows so no data is lost.'''
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp = tempfile.mkdtemp(prefix='sqlite_batch_')
     e = SQLiteEmitter({
         'emit': {'global_time': 'node', 'v': 'node'},
@@ -1404,7 +1404,7 @@ def test_sqlite_emitter_batch_size(core):
 
 def test_sqlite_emitter_batch_size_rejects_bad_value(core):
     '''batch_size < 1 makes no sense — refuse at construction.'''
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp = tempfile.mkdtemp(prefix='sqlite_batch_bad_')
     with pytest.raises(ValueError):
         SQLiteEmitter({
@@ -1417,7 +1417,7 @@ def test_sqlite_emitter_batch_size_rejects_bad_value(core):
 def test_sqlite_emitter_close(core):
     '''close() should release the connection deterministically, make further
     updates fail loudly, and leave the db usable from a fresh connection.'''
-    pytest.importorskip('pbg_emitters')
+    pytest.importorskip('viva_emitters')
     tmp = tempfile.mkdtemp(prefix='sqlite_close_')
     e = SQLiteEmitter({
         'emit': {'global_time': 'node'},
@@ -5023,7 +5023,7 @@ def test_the_harness_gates_a_downstream_member():
 def test_finalize_survives_an_emitter_that_redefines_finalize():
     """A durable emitter already uses `finalize` for something else.
 
-    The vivarium lineage (`pbg_emitters.BufferedEmitter`) defines
+    The vivarium lineage (`viva_emitters.BufferedEmitter`) defines
     `finalize(*, success: bool) -> None`: it flushes buffers, closes the
     store, and raises if called twice. Asking *that* for a results handle
     silently produced none — and consumed the buffer close on the way — so a
