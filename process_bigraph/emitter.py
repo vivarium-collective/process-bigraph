@@ -584,6 +584,16 @@ class ConsoleEmitter(Emitter):
 def tree_copy(state):
     '''Deep copy utility for nested simulation state (excluding Edge instances).'''
     if isinstance(state, dict):
+        # A realized process/step node carries its live Edge under 'instance'.
+        # Its remaining keys (address/config/inputs/outputs/interval/_type) are
+        # static wiring, not observable state — deep-copying them every tick is
+        # a large, pointless cost for composites that embed a process under each
+        # agent (e.g. cells/<id>/chemotaxis: ~34 of 49 nodes/cell are the process
+        # spec, a ~15x blow-up paid every emit). The live Edge was already
+        # dropped below; drop the whole node so process specs never reach the
+        # emitted history.
+        if isinstance(state.get('instance'), Edge):
+            return None
         return {k: v for k, v in ((k, tree_copy(v)) for k, v in state.items()) if v is not None}
     if isinstance(state, np.ndarray):
         return state.copy()
