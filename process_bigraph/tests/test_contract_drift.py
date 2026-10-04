@@ -1,7 +1,7 @@
 from process_bigraph import allocate_core
 from process_bigraph.composite import Process, Step
 from process_bigraph.draft_process import DraftProcess
-from process_bigraph.contract_drift import audit_process_drift, audit_registry_drift, Finding, AuditReport, _declared_ports, _update_ast, _state_param, _read_ports, _written_ports
+from process_bigraph.contract_drift import audit_process_drift, audit_registry_drift, AuditReport, _declared_ports, _update_ast, _state_param, _read_ports, _written_ports
 
 
 class _BareProcess(Process):     # no update override → inherits the base no-op
