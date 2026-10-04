@@ -1,7 +1,7 @@
 from process_bigraph import allocate_core
 from process_bigraph.composite import Process, Step
 from process_bigraph.draft_process import DraftProcess
-from process_bigraph.contract_drift import audit_process_drift, Finding, AuditReport, _declared_ports
+from process_bigraph.contract_drift import audit_process_drift, Finding, AuditReport, _declared_ports, _update_ast, _state_param, _read_ports
 
 
 class _BareProcess(Process):     # no update override → inherits the base no-op
@@ -41,3 +41,32 @@ def test_declared_ports_from_class_and_instance():
     inst = _RealProcess({}, core=core)
     ins2, outs2 = _declared_ports(inst, core)
     assert ins2 == {'x'} and outs2 == {'y'}
+
+
+class _Reader(Process):
+    def inputs(self): return {'a': 'float', 'b': 'float'}
+    def outputs(self): return {'c': 'float'}
+    def update(self, state, interval):
+        total = state['a'] + state.get('b', 0.0) + state['ghost']
+        return {'c': total}
+
+
+def test_read_ports_and_state_param():
+    fn = _update_ast(_Reader)
+    assert fn is not None
+    assert _state_param(fn) == 'state'
+    reads, unan = _read_ports(fn, 'state')
+    assert reads == {'a', 'b', 'ghost'} and unan == []
+
+
+class _Opaque(Process):
+    def inputs(self): return {'a': 'float'}
+    def outputs(self): return {'c': 'float'}
+    def update(self, state, interval):
+        return {'c': self.core.helper(state)}      # state passed whole
+
+
+def test_opaque_state_use_is_unanalyzable():
+    fn = _update_ast(_Opaque)
+    reads, unan = _read_ports(fn, _state_param(fn))
+    assert unan and any('whole' in r for r in unan)

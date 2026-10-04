@@ -44,6 +44,63 @@ def _is_draft(cls):
     return isinstance(cls, type) and issubclass(cls, DraftProcess)
 
 
+def _update_ast(cls):
+    """The FunctionDef for cls.update, or None if source is unavailable/unparsable."""
+    try:
+        source = inspect.getsource(cls.update)
+    except (OSError, TypeError):
+        return None
+    try:
+        tree = ast.parse(textwrap.dedent(source))
+    except SyntaxError:
+        return None
+    for node in ast.walk(tree):
+        if isinstance(node, ast.FunctionDef) and node.name == 'update':
+            return node
+    return None
+
+
+def _state_param(fn_node):
+    """The name of the state parameter (first after self), or None."""
+    args = fn_node.args.args
+    return args[1].arg if len(args) > 1 else None
+
+
+def _const_str(node):
+    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+
+def _read_ports(fn_node, state_name):
+    """Ports read off the state param, plus reasons the read is unanalyzable.
+
+    Catches ``state['x']`` and ``state.get('x')`` with constant keys. A
+    non-constant subscript or the whole ``state`` passed to a call is recorded
+    as unanalyzable rather than a port.
+    """
+    reads = set()
+    unanalyzable = []
+    if not state_name:
+        return reads, ['no state parameter']
+    for node in ast.walk(fn_node):
+        if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == state_name:
+            key = _const_str(node.slice)
+            if key is not None:
+                reads.add(key)
+            else:
+                unanalyzable.append('non-constant subscript on state')
+        elif (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute)
+              and isinstance(node.func.value, ast.Name) and node.func.value.id == state_name
+              and node.func.attr == 'get' and node.args):
+            key = _const_str(node.args[0])
+            if key is not None:
+                reads.add(key)
+        elif isinstance(node, ast.Call):
+            for arg in node.args:
+                if isinstance(arg, ast.Name) and arg.id == state_name:
+                    unanalyzable.append('state passed whole to a call')
+    return reads, unanalyzable
+
+
 def _declared_ports(proc_or_cls, core):
     """(inputs, outputs) declared port-name sets. Accepts a class or instance;
     never raises — an unreadable face yields an empty set on that side.
