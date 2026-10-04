@@ -184,6 +184,8 @@ def test_off_mode_does_not_check():
     sim = _composite('off')
     sim.run(3.0)
     assert sim.state['level'] > 0
+    # TODO: assert a contract.violation event reaches the composite emitter
+    # (needs a recording event sink wired into the test composite).
 
 
 def test_raise_mode_halts_on_violation():
@@ -196,3 +198,10 @@ def test_record_mode_continues():
     sim = _composite('record')
     sim.run(3.0)
     assert sim.state['level'] > 0
+
+
+def test_eval_conditions_swallows_evaluation_errors():
+    # a condition that divides by zero must be SKIPPED, not raise out
+    conds = [_cond('invariant', 'inputs.a / inputs.b <= tol', tol=0.0, name='div')]
+    env = {('inputs', 'a'): 1.0, ('inputs', 'b'): 0.0}
+    assert _eval_conditions(conds, env) == []   # ZeroDivisionError swallowed → skip

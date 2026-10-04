@@ -85,7 +85,8 @@ def compile_contract(contract):
 def _eval_conditions(conditions, env):
     """Evaluate each compiled condition against env; return (condition, reason)
     for the ones that fail. A condition referencing a name absent from env is
-    skipped (cannot be evaluated). Never raises out of this function.
+    skipped (cannot be evaluated). Never raises out of this function;
+    unevaluable conditions are skipped.
     """
     fails = []
     for cc in conditions:
@@ -93,8 +94,9 @@ def _eval_conditions(conditions, env):
             continue   # missing binding → unevaluable → skip
         try:
             ok = evaluate(cc.ast, env, tol=cc.tol)
-        except ExprError:
-            continue   # defensive: treat an unexpected binding error as a skip
+        except Exception:  # noqa: BLE001
+            # an unevaluable condition — div-by-zero, type/array mismatch — is skipped, never fatal
+            continue
         if not ok:
             fails.append((cc, f'{cc.kind} {cc.name!r} failed: {_fmt(cc, env)}'))
     return fails
