@@ -103,3 +103,29 @@ def _eval_conditions(conditions, env):
 def _fmt(cc, env):
     referenced = {f'{".".join(n)}={env.get(n)!r}' for n in cc.names if n in env}
     return ', '.join(sorted(referenced))
+
+
+def _bounds_violations(bounds, values, direction):
+    """(code, reason) for each port whose numeric value is out of [lo, hi].
+    Non-numeric values are skipped (can't bound-check)."""
+    code = f'{direction}_bounds'
+    out = []
+    for port, (lo, hi) in bounds.items():
+        value = values.get(port)
+        if not isinstance(value, (int, float)) or isinstance(value, bool):
+            continue
+        if lo is not None and value < lo:
+            out.append((code, f'{direction} {port!r}={value} below _min {lo}'))
+        if hi is not None and value > hi:
+            out.append((code, f'{direction} {port!r}={value} above _max {hi}'))
+    return out
+
+
+def check_pre(compiled, inputs):
+    """Violations from `pre` conditions + input-port bounds, against the input
+    state (port-keyed dict). Returns [(code, reason)]."""
+    env = {('inputs', port): value for port, value in inputs.items()}
+    fails = [('pre', reason) for _cc, reason in
+             _eval_conditions([c for c in compiled.conditions if c.kind == 'pre'], env)]
+    fails.extend(_bounds_violations(compiled.input_bounds, inputs, 'input'))
+    return fails

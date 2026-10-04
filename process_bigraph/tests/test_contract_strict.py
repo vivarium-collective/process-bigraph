@@ -1,5 +1,5 @@
 from bigraph_schema.contract import ProcessContract, narrow_condition
-from process_bigraph.contract_strict import compile_contract, CompiledContract, ContractViolation, _eval_conditions, _compile_condition
+from process_bigraph.contract_strict import compile_contract, CompiledContract, ContractViolation, _eval_conditions, _compile_condition, check_pre
 
 
 def _contract():
@@ -47,3 +47,25 @@ def test_eval_conditions_passes_when_satisfied():
 def test_missing_binding_is_skipped():
     conds = [_cond('pre', 'inputs.ghost >= 0')]
     assert _eval_conditions(conds, {('inputs', 'm'): 1.0}) == []   # 'ghost' absent → skip, no crash
+
+
+def test_check_pre_flags_precondition_and_bounds():
+    c = ProcessContract(face={'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 10}}, 'outputs': {}})
+    c = narrow_condition(c, 'pre', 'inputs.m >= 1', name='min_in')
+    compiled = compile_contract(c)
+    # m = 20 → over the _max=10 bound AND satisfies >=1
+    fails = check_pre(compiled, {'m': 20.0})
+    assert any(code == 'input_bounds' for code, _ in fails)
+    # m = 0 → within bounds but violates the >=1 precondition
+    fails2 = check_pre(compiled, {'m': 0.0})
+    assert any('min_in' in reason for _, reason in fails2)
+
+
+def test_check_pre_clean():
+    c = ProcessContract(face={'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 10}}, 'outputs': {}})
+    assert check_pre(compile_contract(c), {'m': 5.0}) == []
+
+
+def test_check_pre_int_value_not_flagged():
+    c = ProcessContract(face={'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 10}}, 'outputs': {}})
+    assert check_pre(compile_contract(c), {'m': 5}) == []   # int within range → ok (lenient)
