@@ -108,3 +108,32 @@ def test_sentinel_delta_skipped():
     c = ProcessContract(face={'inputs': {}, 'outputs': {'m': {'_type': 'float', '_min': 0}}})
     compiled = compile_contract(c)
     assert check_post(compiled, {}, {'m': {'_add': {'x': 1}}}) == []   # sentinel → skip, no false violation
+
+
+import pytest
+from process_bigraph.contract_strict import handle_violations, ContractViolation
+
+
+class _RecordingEmitter:
+    def __init__(self): self.events = []
+    def event(self, name, level='info', **payload): self.events.append((name, level, payload))
+
+
+def test_raise_mode_raises():
+    with pytest.raises(ContractViolation) as e:
+        handle_violations([('pre', "pre 'x' failed: inputs.x=-1")], mode='raise',
+                          phase='pre', path=('p',), cls='P', emitter=None, global_time=0.0)
+    assert 'x' in str(e.value)
+
+
+def test_record_mode_emits_and_continues():
+    em = _RecordingEmitter()
+    handle_violations([('invariant', "invariant 'cons' failed")], mode='record',
+                      phase='post', path=('p',), cls='P', emitter=em, global_time=1.0)
+    assert em.events and em.events[0][0] == 'contract.violation' and em.events[0][1] == 'warning'
+
+
+def test_no_violations_is_noop():
+    em = _RecordingEmitter()
+    handle_violations([], mode='raise', phase='pre', path=('p',), cls='P', emitter=em, global_time=0.0)
+    assert em.events == []

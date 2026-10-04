@@ -156,3 +156,19 @@ def check_post(compiled, inputs, delta):
     fails = [(cc.kind, reason) for cc, reason in _eval_conditions(checked, env)]
     fails.extend(_bounds_violations(compiled.output_bounds, outputs, 'output'))
     return fails
+
+
+def handle_violations(violations, *, mode, phase, path, cls, emitter, global_time):
+    """Dispatch contract violations. raise → ContractViolation (fail-loud);
+    record → one contract.violation event, then continue. No-op if empty."""
+    if not violations:
+        return
+    summary = '; '.join(f'[{code}] {reason}' for code, reason in violations)
+    where = '.'.join(str(p) for p in (path or ()))
+    if mode == 'raise':
+        raise ContractViolation(f'{cls} at {where!r} ({phase}): {summary}')
+    if mode == 'record' and emitter is not None:
+        emitter.event('contract.violation', level='warning', component='contract',
+                      path=list(path or ()), cls=cls, phase=phase,
+                      violations=[{'code': c, 'reason': r} for c, r in violations],
+                      global_time=global_time)
