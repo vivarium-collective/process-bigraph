@@ -54,7 +54,7 @@ def test_nested_wire_is_unanalyzable():
     assert _resolve_wire((), ['..', 'level']) is None        # relative wire
 
 
-from process_bigraph.composite_audit import _check_store_compat
+from process_bigraph.composite_audit import _check_store_compat, _check_boundary_override
 
 def _graph(writer_schema, reader_schema):
     return {('s',): {'writers': [('W', 'out', writer_schema)],
@@ -84,3 +84,26 @@ def test_unbounded_members_are_quiet():
 def test_store_with_only_writer_is_not_flagged():
     findings = _check_store_compat({('s',): {'writers': [('W', 'out', {'_min': 0, '_max': 100})], 'readers': []}})
     assert findings == []
+
+
+class _FakeComposite:
+    """Minimal stand-in exposing the two things _check_boundary_override reads:
+    the declared interface-output override and the bridge-output wiring."""
+    def __init__(self, declared_outputs, bridge_outputs):
+        self.config = {'interface': {'outputs': declared_outputs}}
+        self._bridge_outputs = bridge_outputs
+    def read_bridge_outputs(self):
+        return self._bridge_outputs
+
+def test_boundary_override_underclaims_flagged():
+    # boundary declares output 'y' bounded [0,5], but it is wired to store ('s',)
+    # whose writer produces [0,100] → boundary under-claims → warning
+    graph = {('s',): {'writers': [('W', 'out', {'_min': 0, '_max': 100})], 'readers': []}}
+    comp = _FakeComposite(declared_outputs={'y': {'_type': 'float', '_min': 0, '_max': 5}},
+                          bridge_outputs={'y': ['s']})
+    findings = _check_boundary_override(comp, graph)
+    assert any(f.severity == 'warning' and 'y' in f.where for f in findings)
+
+def test_no_override_no_finding():
+    comp = _FakeComposite(declared_outputs={}, bridge_outputs={})
+    assert _check_boundary_override(comp, {}) == []

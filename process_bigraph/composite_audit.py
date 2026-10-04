@@ -131,3 +131,46 @@ def _check_store_compat(graph):
                         f'store {where!r}: {w_addr}.{w_port} units not convertible to '
                         f'{r_addr}.{r_port} ({reason})'))
     return findings
+
+
+def _bridge_outputs(composite):
+    """The composite's boundary output wires {port: wire}, best-effort."""
+    reader = getattr(composite, 'read_bridge_outputs', None)
+    if callable(reader):
+        try:
+            return dict(reader() or {})
+        except Exception:  # noqa: BLE001
+            return {}
+    bridge = (getattr(composite, 'config', None) or {}).get('bridge') or {}
+    return dict(bridge.get('outputs') or {})
+
+
+def _check_boundary_override(composite, graph):
+    """A declared interface.outputs override must subsume what the internal
+    writers of the store it wires to actually produce. No override → no check.
+    """
+    findings = []
+    config = getattr(composite, 'config', None) or {}
+    declared = (config.get('interface') or {}).get('outputs') or {}
+    if not declared:
+        return findings
+    bridge = _bridge_outputs(composite)
+    parent = ()
+    for port, declared_schema in declared.items():
+        wire = bridge.get(port)
+        store = _resolve_wire(parent, wire) if wire is not None else None
+        if store is None or store not in graph:
+            continue
+        for _w_addr, _w_port, w_schema in graph[store]['writers']:
+            if w_schema is None:
+                continue
+            ok, reason = range_subsumes(declared_schema, w_schema)  # declared boundary must accept producer
+            if not ok:
+                findings.append(Finding('warning', 'boundary_override_mismatch', f'outputs.{port}',
+                    f'declared boundary output {port!r} does not accept what the internal '
+                    f'producer yields ({reason})'))
+            ok, reason = units_compatible(declared_schema, w_schema)
+            if not ok:
+                findings.append(Finding('warning', 'boundary_override_units', f'outputs.{port}',
+                    f'declared boundary output {port!r} units mismatch ({reason})'))
+    return findings
