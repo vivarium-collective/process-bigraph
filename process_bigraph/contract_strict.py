@@ -129,3 +129,30 @@ def check_pre(compiled, inputs):
              _eval_conditions([c for c in compiled.conditions if c.kind == 'pre'], env)]
     fails.extend(_bounds_violations(compiled.input_bounds, inputs, 'input'))
     return fails
+
+
+def _reconstruct_outputs(inputs, delta):
+    """Post-state values per output port. For a numeric delta, inputs[port] +
+    delta (or the delta itself when the port has no input). A non-numeric,
+    sentinel, or list delta is omitted (its output check is skipped)."""
+    out = {}
+    if not isinstance(delta, dict):
+        return out
+    for port, change in delta.items():
+        if isinstance(change, bool) or not isinstance(change, (int, float)):
+            continue   # sentinel / dict / list / non-numeric → skip this port
+        base = inputs.get(port)
+        out[port] = (base + change) if isinstance(base, (int, float)) and not isinstance(base, bool) else change
+    return out
+
+
+def check_post(compiled, inputs, delta):
+    """Violations from `post`+`invariant` conditions and output-port bounds,
+    against the reconstructed post-state. Returns [(code, reason)]."""
+    outputs = _reconstruct_outputs(inputs, delta)
+    env = {('inputs', port): value for port, value in inputs.items()}
+    env.update({('outputs', port): value for port, value in outputs.items()})
+    checked = [c for c in compiled.conditions if c.kind in ('post', 'invariant')]
+    fails = [(cc.kind, reason) for cc, reason in _eval_conditions(checked, env)]
+    fails.extend(_bounds_violations(compiled.output_bounds, outputs, 'output'))
+    return fails

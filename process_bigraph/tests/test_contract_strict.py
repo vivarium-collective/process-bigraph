@@ -1,5 +1,5 @@
 from bigraph_schema.contract import ProcessContract, narrow_condition
-from process_bigraph.contract_strict import compile_contract, CompiledContract, ContractViolation, _eval_conditions, _compile_condition, check_pre
+from process_bigraph.contract_strict import compile_contract, CompiledContract, ContractViolation, _eval_conditions, _compile_condition, check_pre, check_post
 
 
 def _contract():
@@ -69,3 +69,42 @@ def test_check_pre_clean():
 def test_check_pre_int_value_not_flagged():
     c = ProcessContract(face={'inputs': {'m': {'_type': 'float', '_min': 0, '_max': 10}}, 'outputs': {}})
     assert check_pre(compile_contract(c), {'m': 5}) == []   # int within range → ok (lenient)
+
+
+def _conserving():
+    c = ProcessContract(face={'inputs': {'m': {'_type': 'float', '_min': 0}},
+                              'outputs': {'m': {'_type': 'float', '_min': 0}}})
+    return compile_contract(narrow_condition(c, 'invariant', 'outputs.m - inputs.m <= tol',
+                                             name='cons', tol=1e-9))
+
+
+def test_post_conservation_pass_and_fail():
+    compiled = _conserving()
+    # inputs m=5, delta +0 → outputs m=5, conserved → clean
+    assert check_post(compiled, {'m': 5.0}, {'m': 0.0}) == []
+    # inputs m=5, delta +4 → outputs m=9 > 5 → violates conservation
+    fails = check_post(compiled, {'m': 5.0}, {'m': 4.0})
+    assert any('cons' in reason for _, reason in fails)
+
+
+def test_negative_delta_within_bounds_not_flagged():
+    # Nonnegative output port; delta is -3 (a decrement). Reconstructed post = 10-3 = 7 ≥ 0 → OK.
+    c = ProcessContract(face={'inputs': {'m': {'_type': 'float', '_min': 0}},
+                              'outputs': {'m': {'_type': 'float', '_min': 0}}})
+    compiled = compile_contract(c)
+    assert check_post(compiled, {'m': 10.0}, {'m': -3.0}) == []   # NOT flagged (the delta alone is negative)
+
+
+def test_output_bounds_flag_reconstructed_out_of_range():
+    c = ProcessContract(face={'inputs': {'m': {'_type': 'float', '_min': 0}},
+                              'outputs': {'m': {'_type': 'float', '_min': 0}}})
+    compiled = compile_contract(c)
+    # inputs 2, delta -5 → reconstructed -3 < 0 → flagged
+    fails = check_post(compiled, {'m': 2.0}, {'m': -5.0})
+    assert any(code == 'output_bounds' for code, _ in fails)
+
+
+def test_sentinel_delta_skipped():
+    c = ProcessContract(face={'inputs': {}, 'outputs': {'m': {'_type': 'float', '_min': 0}}})
+    compiled = compile_contract(c)
+    assert check_post(compiled, {}, {'m': {'_add': {'x': 1}}}) == []   # sentinel → skip, no false violation
