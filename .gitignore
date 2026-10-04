@@ -16,3 +16,4 @@ out/
 .devenv*
 devenv.lock
 containers/
+.superpowers/
