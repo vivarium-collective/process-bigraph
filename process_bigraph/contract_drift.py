@@ -30,9 +30,19 @@ except ImportError:  # bigraph-schema predates contract_audit (PyPI 1.6.0)
 
 
 def _is_noop_update(cls):
-    """True iff cls has not overridden update — it is still the base no-op."""
+    """True iff cls is a concrete process that has not overridden update AND
+    does not do its work via an invoke() override. The base Process/Step
+    classes and invoke-delegating processes (e.g. CompositeTask) are exempt."""
     from process_bigraph.composite import Process, Step
-    return cls.update is Process.update or cls.update is Step.update
+    if cls is Process or cls is Step:
+        return False
+    if not (cls.update is Process.update or cls.update is Step.update):
+        return False
+    base_invokes = {getattr(Process, 'invoke', None), getattr(Step, 'invoke', None)}
+    cls_invoke = getattr(cls, 'invoke', None)
+    if cls_invoke is not None and cls_invoke not in base_invokes:
+        return False   # work delegated to invoke()
+    return True
 
 
 def _is_draft(cls):
@@ -83,6 +93,8 @@ def _read_ports(fn_node, state_name):
         return reads, ['no state parameter']
     for node in ast.walk(fn_node):
         if isinstance(node, ast.Subscript) and isinstance(node.value, ast.Name) and node.value.id == state_name:
+            if isinstance(node.ctx, ast.Store):
+                continue
             key = _const_str(node.slice)
             if key is not None:
                 reads.add(key)
@@ -197,16 +209,24 @@ def audit_process_drift(proc_or_cls, core=None):
 
     state_name = _state_param(fn_node)
     reads, read_unanalyzable = _read_ports(fn_node, state_name)
-    for port in sorted(reads - declared_inputs):
-        findings.append(Finding('warning', 'undeclared_input_read', f'{cls.__name__}.update',
-                                 f'reads state[{port!r}] but {port!r} is not a declared input port'))
+    if declared_inputs:
+        for port in sorted(reads - declared_inputs):
+            findings.append(Finding('warning', 'undeclared_input_read', f'{cls.__name__}.update',
+                                     f'reads state[{port!r}] but {port!r} is not a declared input port'))
+    else:
+        findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update',
+                                 'declared input ports are empty or indeterminate; skipping input-drift check'))
     for reason in read_unanalyzable:
         findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update', reason))
 
     writes, write_unanalyzable = _written_ports(fn_node)
-    for port in sorted(writes - declared_outputs):
-        findings.append(Finding('warning', 'undeclared_output_write', f'{cls.__name__}.update',
-                                 f'writes {port!r} but {port!r} is not a declared output port'))
+    if declared_outputs:
+        for port in sorted(writes - declared_outputs):
+            findings.append(Finding('warning', 'undeclared_output_write', f'{cls.__name__}.update',
+                                     f'writes {port!r} but {port!r} is not a declared output port'))
+    else:
+        findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update',
+                                 'declared output ports are empty or indeterminate; skipping output-drift check'))
     for reason in write_unanalyzable:
         findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update', reason))
 

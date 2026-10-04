@@ -150,3 +150,38 @@ def test_end_to_end_drift_surfaced():
     codes = {(f.code, f.severity) for f in report.findings}
     assert ('undeclared_input_read', 'warning') in codes
     assert report.ok is True
+
+
+def test_empty_declared_ports_skips_drift_as_info():
+    class _EmptyFace(Process):
+        def inputs(self): return {}
+        def outputs(self): return {}
+        def update(self, state, interval): return {'y': state['x']}
+    report = audit_process_drift(_EmptyFace, allocate_core())
+    assert not any(f.severity == 'warning' for f in report.findings)
+    assert any(f.code == 'unanalyzable_update' for f in report.findings)
+
+
+def test_invoke_delegating_noop_exempt():
+    class _InvokeWorker(Process):
+        def inputs(self): return {'x': 'float'}
+        def outputs(self): return {'y': 'float'}
+        def invoke(self, interval=None): return {'y': 1.0}
+    report = audit_process_drift(_InvokeWorker, allocate_core())
+    assert not any(f.code == 'noop_update' for f in report.findings)
+
+
+def test_base_process_and_step_not_flagged_noop():
+    assert not any(f.code == 'noop_update' for f in audit_process_drift(Process).findings)
+    assert not any(f.code == 'noop_update' for f in audit_process_drift(Step).findings)
+
+
+def test_state_store_subscript_not_counted_as_read():
+    class _Mutator(Process):
+        def inputs(self): return {'x': 'float'}
+        def outputs(self): return {'y': 'float'}
+        def update(self, state, interval):
+            state['tmp'] = 1.0
+            return {'y': state['x']}
+    report = audit_process_drift(_Mutator, allocate_core())
+    assert not any(f.code == 'undeclared_input_read' for f in report.findings)
