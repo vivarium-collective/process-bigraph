@@ -174,3 +174,20 @@ def _check_boundary_override(composite, graph):
                 findings.append(Finding('warning', 'boundary_override_units', f'outputs.{port}',
                     f'declared boundary output {port!r} units mismatch ({reason})'))
     return findings
+
+
+def audit_composite(composite, core=None):
+    """Audit a BUILT composite for internal inconsistencies construction does
+    not catch: cross-member store bounds/units, and boundary-output overrides.
+    Advisory — returns AuditReport(ok=True) with warning/info findings. (A
+    composite with conflicting member TYPES fails at construction and never
+    reaches this audit.)
+    """
+    findings = []
+    wirings = _member_wirings(composite)
+    graph, unanalyzable = _store_graph(wirings)
+    findings.extend(_check_store_compat(graph))
+    findings.extend(_check_boundary_override(composite, graph))
+    for reason in unanalyzable:
+        findings.append(Finding('info', 'unanalyzable_wire', 'composite', reason))
+    return AuditReport(ok=True, findings=findings)

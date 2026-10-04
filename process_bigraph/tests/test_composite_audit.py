@@ -107,3 +107,40 @@ def test_boundary_override_underclaims_flagged():
 def test_no_override_no_finding():
     comp = _FakeComposite(declared_outputs={}, bridge_outputs={})
     assert _check_boundary_override(comp, {}) == []
+
+
+from process_bigraph.composite_audit import audit_composite
+
+def test_audit_requires_built_composite_and_is_clean_when_consistent():
+    composite, _ = _two_process_composite()   # float↔float, no bounds → clean
+    report = audit_composite(composite)
+    assert report.ok is True
+    assert not any(f.severity == 'warning' for f in report.findings)
+
+def test_end_to_end_bounds_mismatch_surfaced():
+    """A producer whose declared output range exceeds a consumer's declared
+    input range on a shared store is flagged — the check build-time type-merge
+    does not perform."""
+    core = allocate_core()
+
+    class _WideSrc(Process):
+        def inputs(self): return {}
+        def outputs(self): return {'level': {'_type': 'float', '_min': 0, '_max': 100}}
+        def update(self, state, interval): return {'level': 1.0}
+
+    class _NarrowSink(Process):
+        def inputs(self): return {'level': {'_type': 'float', '_min': 0, '_max': 5}}
+        def outputs(self): return {}
+        def update(self, state, interval): return {}
+
+    core.register_link('_WideSrc', _WideSrc)
+    core.register_link('_NarrowSink', _NarrowSink)
+    composite = Composite({'state': {
+        'src': {'_type': 'process', 'address': 'local:_WideSrc', 'config': {},
+                'inputs': {}, 'outputs': {'level': ['level']}},
+        'snk': {'_type': 'process', 'address': 'local:_NarrowSink', 'config': {},
+                'inputs': {'level': ['level']}, 'outputs': {}},
+        'level': 0.0}}, core=core)
+    report = audit_composite(composite)
+    assert report.ok is True
+    assert any(f.code == 'store_bounds_mismatch' for f in report.findings)
