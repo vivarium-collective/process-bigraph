@@ -44,6 +44,27 @@ def _is_draft(cls):
     return isinstance(cls, type) and issubclass(cls, DraftProcess)
 
 
+def _declared_ports(proc_or_cls, core):
+    """(inputs, outputs) declared port-name sets. Accepts a class or instance;
+    never raises — an unreadable face yields an empty set on that side.
+    """
+    instance = proc_or_cls
+    if isinstance(proc_or_cls, type):
+        try:
+            instance = proc_or_cls({}, core=core) if core is not None else proc_or_cls.__new__(proc_or_cls)
+        except Exception:  # noqa: BLE001 - construction may need real config; fall back
+            instance = proc_or_cls.__new__(proc_or_cls)
+    try:
+        inputs = set((instance.inputs() or {}).keys())
+    except Exception:  # noqa: BLE001 - face read may fail on a bare __new__'d instance
+        inputs = set()
+    try:
+        outputs = set((instance.outputs() or {}).keys())
+    except Exception:  # noqa: BLE001
+        outputs = set()
+    return inputs, outputs
+
+
 def audit_process_drift(proc_or_cls, core=None):
     """Audit one process (class or instance) for declaration/implementation
     drift. Returns an AuditReport; never raises on a malformed process.
