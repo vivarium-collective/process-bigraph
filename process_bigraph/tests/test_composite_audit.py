@@ -52,3 +52,35 @@ def test_nested_wire_is_unanalyzable():
     assert _resolve_wire(('a',), ['x']) == ('a', 'x')
     assert _resolve_wire((), {'sub': ['level']}) is None    # nested dict wire
     assert _resolve_wire((), ['..', 'level']) is None        # relative wire
+
+
+from process_bigraph.composite_audit import _check_store_compat
+
+def _graph(writer_schema, reader_schema):
+    return {('s',): {'writers': [('W', 'out', writer_schema)],
+                     'readers': [('R', 'in', reader_schema)]}}
+
+def test_store_bounds_mismatch_flagged():
+    # writer produces [0,100]; reader requires [0,5] → 100 doesn't fit → warning
+    findings = _check_store_compat(_graph(
+        {'_type': 'float', '_min': 0, '_max': 100}, {'_type': 'float', '_min': 0, '_max': 5}))
+    assert any(f.severity == 'warning' and 's' in f.where for f in findings)
+
+def test_store_bounds_compatible_clean():
+    # writer [0,3] ⊆ reader [0,5] → ok
+    findings = _check_store_compat(_graph(
+        {'_type': 'float', '_min': 0, '_max': 3}, {'_type': 'float', '_min': 0, '_max': 5}))
+    assert findings == []
+
+def test_store_units_mismatch_flagged():
+    findings = _check_store_compat(_graph({'_type': 'float', '_units': 'mg'},
+                                          {'_type': 'float', '_units': 'second'}))
+    assert any(f.severity == 'warning' for f in findings)
+
+def test_unbounded_members_are_quiet():
+    findings = _check_store_compat(_graph('float', 'float'))
+    assert findings == []
+
+def test_store_with_only_writer_is_not_flagged():
+    findings = _check_store_compat({('s',): {'writers': [('W', 'out', {'_min': 0, '_max': 100})], 'readers': []}})
+    assert findings == []

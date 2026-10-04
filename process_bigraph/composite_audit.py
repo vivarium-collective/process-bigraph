@@ -103,3 +103,31 @@ def _store_graph(wirings):
             _slot(store)['readers'].append((wiring.address, port, wiring.inputs_face.get(port)))
 
     return graph, unanalyzable
+
+
+def _check_store_compat(graph):
+    """For each shared store, each writer's output must fit every reader's
+    required bounds/units (writer-produced ⊆ reader-accepted). Returns warnings.
+    """
+    findings = []
+    for store, slot in graph.items():
+        writers = slot.get('writers', [])
+        readers = slot.get('readers', [])
+        if not writers or not readers:
+            continue
+        where = '.'.join(store)
+        for w_addr, w_port, w_schema in writers:
+            for r_addr, r_port, r_schema in readers:
+                if w_schema is None or r_schema is None:
+                    continue
+                ok, reason = range_subsumes(r_schema, w_schema)   # required=reader, candidate=writer
+                if not ok:
+                    findings.append(Finding('warning', 'store_bounds_mismatch', where,
+                        f'store {where!r}: {w_addr}.{w_port} produces a range not accepted by '
+                        f'{r_addr}.{r_port} ({reason})'))
+                ok, reason = units_compatible(r_schema, w_schema)
+                if not ok:
+                    findings.append(Finding('warning', 'store_units_mismatch', where,
+                        f'store {where!r}: {w_addr}.{w_port} units not convertible to '
+                        f'{r_addr}.{r_port} ({reason})'))
+    return findings
