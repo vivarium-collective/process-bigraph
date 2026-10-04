@@ -211,3 +211,23 @@ def audit_process_drift(proc_or_cls, core=None):
         findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update', reason))
 
     return AuditReport(ok=True, findings=findings)
+
+
+def audit_registry_drift(core):
+    """Audit every registered process for drift. Returns {address: AuditReport}.
+
+    Skips registry entries that cannot be resolved to a class, rather than
+    failing the whole sweep.
+    """
+    from process_bigraph.core_introspection import list_processes
+    reports = {}
+    for address in list_processes(core):
+        edge_class = core.link_registry.get(address)
+        if edge_class is None:
+            continue
+        try:
+            reports[address] = audit_process_drift(edge_class, core)
+        except Exception as error:  # noqa: BLE001 - one bad process must not sink the sweep
+            reports[address] = AuditReport(
+                ok=True, findings=[Finding('info', 'unanalyzable_update', address, f'audit raised: {error}')])
+    return reports

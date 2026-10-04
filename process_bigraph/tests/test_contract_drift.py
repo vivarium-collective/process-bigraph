@@ -1,7 +1,7 @@
 from process_bigraph import allocate_core
 from process_bigraph.composite import Process, Step
 from process_bigraph.draft_process import DraftProcess
-from process_bigraph.contract_drift import audit_process_drift, Finding, AuditReport, _declared_ports, _update_ast, _state_param, _read_ports, _written_ports
+from process_bigraph.contract_drift import audit_process_drift, audit_registry_drift, Finding, AuditReport, _declared_ports, _update_ast, _state_param, _read_ports, _written_ports
 
 
 class _BareProcess(Process):     # no update override → inherits the base no-op
@@ -130,3 +130,23 @@ def test_source_unavailable_is_info_not_crash(monkeypatch):
     monkeypatch.setattr(cd, '_update_ast', lambda cls: None)
     report = audit_process_drift(_RealProcess, allocate_core())   # must not raise
     assert any(f.code == 'unanalyzable_update' and f.severity == 'info' for f in report.findings)
+
+
+def test_registry_driver_audits_registered_processes():
+    core = allocate_core()
+    core.register_link('bare_proc', _BareProcess)
+    core.register_link('real_proc', _RealProcess)
+    reports = audit_registry_drift(core)
+    assert 'bare_proc' in reports and 'real_proc' in reports
+    assert any(f.code == 'noop_update' for f in reports['bare_proc'].findings)
+    assert not any(f.severity == 'warning' for f in reports['real_proc'].findings)
+
+
+def test_end_to_end_drift_surfaced():
+    """A process whose update reads/writes ports it never declared is flagged
+    on exactly those ports; a faithful one is clean."""
+    core = allocate_core()
+    report = audit_process_drift(_Reader, core)
+    codes = {(f.code, f.severity) for f in report.findings}
+    assert ('undeclared_input_read', 'warning') in codes
+    assert report.ok is True
