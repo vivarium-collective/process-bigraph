@@ -7,7 +7,7 @@ what a member writes must fit the bounds/units each reading member requires;
 and a declared boundary-output override must subsume what members produce.
 Advisory only (warning/info, never error). Purely additive.
 """
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 from bigraph_schema.subsumption import range_subsumes, units_compatible
 from bigraph_schema.contract_audit import Finding, AuditReport
