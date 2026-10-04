@@ -111,7 +111,7 @@ def test_sentinel_delta_skipped():
 
 
 import pytest
-from process_bigraph.contract_strict import handle_violations, ContractViolation
+from process_bigraph.contract_strict import handle_violations
 
 
 class _RecordingEmitter:
@@ -137,3 +137,62 @@ def test_no_violations_is_noop():
     em = _RecordingEmitter()
     handle_violations([], mode='raise', phase='pre', path=('p',), cls='P', emitter=em, global_time=0.0)
     assert em.events == []
+
+
+# --- integration: gated hooks in the live Composite run path ---------------
+from process_bigraph import Composite, allocate_core
+from process_bigraph.composite import Process
+
+
+class _Grower(Process):
+    """Adds `rate` to level each tick, but its contract FALSELY claims conservation."""
+    contract = narrow_condition(
+        ProcessContract(face={'inputs': {'level': 'float'}, 'outputs': {'level': 'float'}}),
+        'invariant', 'outputs.level - inputs.level <= tol', name='conservation', tol=1e-9)
+    config_schema = {'rate': 'float'}
+
+    def inputs(self):
+        return {'level': 'float'}
+
+    def outputs(self):
+        return {'level': 'float'}
+
+    def update(self, state, interval):
+        return {'level': self.config['rate']}
+
+
+def _composite(strict):
+    core = allocate_core()
+    core.register_link('_Grower', _Grower)
+    doc = {'state': {
+        'grow': {'_type': 'process', 'address': 'local:_Grower', 'config': {'rate': 1.0},
+                 'inputs': {'level': ['level']}, 'outputs': {'level': ['level']},
+                 'interval': 1.0},
+        'level': 0.0}}
+    if strict is not None:
+        doc['contract_strict'] = strict
+    return Composite(doc, core=core)
+
+
+def test_default_is_off():
+    sim = _composite(None)
+    assert sim._contract_strict == 'off'
+    assert sim._compiled_contracts == {}
+
+
+def test_off_mode_does_not_check():
+    sim = _composite('off')
+    sim.run(3.0)
+    assert sim.state['level'] > 0
+
+
+def test_raise_mode_halts_on_violation():
+    sim = _composite('raise')
+    with pytest.raises(ContractViolation):
+        sim.run(3.0)
+
+
+def test_record_mode_continues():
+    sim = _composite('record')
+    sim.run(3.0)
+    assert sim.state['level'] > 0
