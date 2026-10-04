@@ -1,0 +1,82 @@
+"""Opt-in runtime contract checking (spec §6).
+
+A core setting ``contract_strict`` in {off, raise, record}; off by default and
+zero-cost. When on, the Composite seam checks each process's ``pre`` conditions
+and input-port bounds before update(), and ``post``/``invariant`` conditions and
+output-port bounds after. Output values are reconstructed post-state
+(inputs[port] + delta[port]) for numeric deltas; non-numeric/sentinel deltas are
+skipped. Units are not enforced at runtime (metadata; handled at wire-compile).
+
+Scope (v1): only the Composite.process_update / _project_process_update seam is
+checked. _run_tick_lifecycle, direct run_step invokes, and pooled/ray reconfigure
+validity re-checks are NOT checked. Advisory framing: strict mode verifies the
+contract on the trajectories actually run — a check, not a proof.
+"""
+from dataclasses import dataclass, field
+
+from bigraph_schema.contract_expr import parse, names_in, evaluate, ExprError
+
+
+class ContractViolation(Exception):
+    """Raised (in 'raise' mode) when a process violates its contract at runtime."""
+
+
+@dataclass
+class CompiledCondition:
+    kind: str
+    name: str
+    ast: object
+    names: frozenset
+    tol: float
+
+
+@dataclass
+class CompiledContract:
+    conditions: list = field(default_factory=list)   # pre/post/invariant only
+    input_bounds: dict = field(default_factory=dict)   # {port: (lo, hi)}
+    output_bounds: dict = field(default_factory=dict)
+
+
+def _bounds(port_schema):
+    """(lo, hi) numeric bounds from a port schema (raw dict or resolved Range);
+    (None, None) when unbounded or non-numeric."""
+    if isinstance(port_schema, dict):
+        lo, hi = port_schema.get('_min'), port_schema.get('_max')
+    else:
+        lo, hi = getattr(port_schema, '_min', None), getattr(port_schema, '_max', None)
+    lo = lo if isinstance(lo, (int, float)) else None
+    hi = hi if isinstance(hi, (int, float)) else None
+    return lo, hi
+
+
+def _compile_condition(condition):
+    try:
+        ast = parse(condition['expr'])
+    except (ExprError, KeyError):
+        return None
+    return CompiledCondition(
+        kind=condition['kind'], name=condition.get('name', '?'),
+        ast=ast, names=frozenset(names_in(ast)), tol=condition.get('tol', 0.0) or 0.0)
+
+
+def compile_contract(contract):
+    """Pre-parse a ProcessContract's conditions + port bounds once, for fast
+    per-tick checking. Returns None if there is no contract."""
+    if contract is None:
+        return None
+    compiled = CompiledContract()
+    for condition in contract.conditions():
+        cc = _compile_condition(condition)
+        if cc is None or cc.kind == 'validity':   # validity (config-domain) deferred in v1
+            continue
+        compiled.conditions.append(cc)
+    face = getattr(contract, 'face', None) or {}
+    for port, schema in (face.get('inputs') or {}).items():
+        lo, hi = _bounds(schema)
+        if lo is not None or hi is not None:
+            compiled.input_bounds[port] = (lo, hi)
+    for port, schema in (face.get('outputs') or {}).items():
+        lo, hi = _bounds(schema)
+        if lo is not None or hi is not None:
+            compiled.output_bounds[port] = (lo, hi)
+    return compiled
