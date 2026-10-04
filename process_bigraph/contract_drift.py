@@ -187,5 +187,27 @@ def audit_process_drift(proc_or_cls, core=None):
                                  'non-draft process inherits the base no-op update (returns {})'))
         return AuditReport(ok=True, findings=findings)
 
-    # Port-drift analysis is added in Tasks 2-5.
+    declared_inputs, declared_outputs = _declared_ports(proc_or_cls, core)
+
+    fn_node = _update_ast(cls)
+    if fn_node is None:
+        findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update',
+                                 'update source unavailable for static drift analysis'))
+        return AuditReport(ok=True, findings=findings)
+
+    state_name = _state_param(fn_node)
+    reads, read_unanalyzable = _read_ports(fn_node, state_name)
+    for port in sorted(reads - declared_inputs):
+        findings.append(Finding('warning', 'undeclared_input_read', f'{cls.__name__}.update',
+                                 f'reads state[{port!r}] but {port!r} is not a declared input port'))
+    for reason in read_unanalyzable:
+        findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update', reason))
+
+    writes, write_unanalyzable = _written_ports(fn_node)
+    for port in sorted(writes - declared_outputs):
+        findings.append(Finding('warning', 'undeclared_output_write', f'{cls.__name__}.update',
+                                 f'writes {port!r} but {port!r} is not a declared output port'))
+    for reason in write_unanalyzable:
+        findings.append(Finding('info', 'unanalyzable_update', f'{cls.__name__}.update', reason))
+
     return AuditReport(ok=True, findings=findings)

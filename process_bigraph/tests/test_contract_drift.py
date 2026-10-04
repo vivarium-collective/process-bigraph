@@ -107,3 +107,26 @@ class _ComputedWriter(Process):
 def test_written_ports_computed_is_unanalyzable():
     writes, unan = _written_ports(_update_ast(_ComputedWriter))
     assert unan and writes == set()
+
+
+def test_undeclared_read_and_write_flagged():
+    report = audit_process_drift(_Reader, allocate_core())   # reads 'ghost' (undeclared input)
+    assert any(f.code == 'undeclared_input_read' and 'ghost' in f.message for f in report.findings)
+    assert report.ok is True   # advisory, no error
+
+
+def test_clean_process_has_no_warnings():
+    report = audit_process_drift(_RealProcess, allocate_core())
+    assert not any(f.severity == 'warning' for f in report.findings)
+
+
+def test_undeclared_output_write_flagged():
+    report = audit_process_drift(_LiteralWriter, allocate_core())  # writes 'd' (undeclared output)
+    assert any(f.code == 'undeclared_output_write' and 'd' in f.message for f in report.findings)
+
+
+def test_source_unavailable_is_info_not_crash(monkeypatch):
+    import process_bigraph.contract_drift as cd
+    monkeypatch.setattr(cd, '_update_ast', lambda cls: None)
+    report = audit_process_drift(_RealProcess, allocate_core())   # must not raise
+    assert any(f.code == 'unanalyzable_update' and f.severity == 'info' for f in report.findings)
