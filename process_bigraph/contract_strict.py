@@ -80,3 +80,26 @@ def compile_contract(contract):
         if lo is not None or hi is not None:
             compiled.output_bounds[port] = (lo, hi)
     return compiled
+
+
+def _eval_conditions(conditions, env):
+    """Evaluate each compiled condition against env; return (condition, reason)
+    for the ones that fail. A condition referencing a name absent from env is
+    skipped (cannot be evaluated). Never raises out of this function.
+    """
+    fails = []
+    for cc in conditions:
+        if not cc.names.issubset(env.keys()):
+            continue   # missing binding → unevaluable → skip
+        try:
+            ok = evaluate(cc.ast, env, tol=cc.tol)
+        except ExprError:
+            continue   # defensive: treat an unexpected binding error as a skip
+        if not ok:
+            fails.append((cc, f'{cc.kind} {cc.name!r} failed: {_fmt(cc, env)}'))
+    return fails
+
+
+def _fmt(cc, env):
+    referenced = {f'{".".join(n)}={env.get(n)!r}' for n in cc.names if n in env}
+    return ', '.join(sorted(referenced))
