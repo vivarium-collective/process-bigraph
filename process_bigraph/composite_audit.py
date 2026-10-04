@@ -60,3 +60,46 @@ def _member_wirings(composite):
             output_wires=dict(edge.get('outputs') or {}),
         ))
     return wirings
+
+
+def _resolve_wire(parent_path, wire):
+    """Absolute store path for a FLAT wire (a list of plain string segments),
+    resolved against the member's parent path. Returns None for a nested dict
+    wire or a relative ('..') / non-string segment — those are unanalyzable.
+    """
+    if not isinstance(wire, (list, tuple)):
+        return None
+    if not all(isinstance(segment, str) for segment in wire):
+        return None
+    if any(segment == '..' for segment in wire):
+        return None
+    return tuple(parent_path) + tuple(wire)
+
+
+def _store_graph(wirings):
+    """Map each resolvable store path to its writers and readers.
+
+    writers/readers are (address, port, raw_port_schema). A wire that does not
+    resolve to a flat path is recorded in the returned unanalyzable list.
+    """
+    graph = {}
+    unanalyzable = []
+
+    def _slot(store):
+        return graph.setdefault(store, {'writers': [], 'readers': []})
+
+    for wiring in wirings:
+        for port, wire in wiring.output_wires.items():
+            store = _resolve_wire(wiring.parent_path, wire)
+            if store is None:
+                unanalyzable.append(f'{wiring.address} output {port!r} wire is not a flat path')
+                continue
+            _slot(store)['writers'].append((wiring.address, port, wiring.outputs_face.get(port)))
+        for port, wire in wiring.input_wires.items():
+            store = _resolve_wire(wiring.parent_path, wire)
+            if store is None:
+                unanalyzable.append(f'{wiring.address} input {port!r} wire is not a flat path')
+                continue
+            _slot(store)['readers'].append((wiring.address, port, wiring.inputs_face.get(port)))
+
+    return graph, unanalyzable

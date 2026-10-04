@@ -1,6 +1,6 @@
 from process_bigraph import Composite, allocate_core
 from process_bigraph.composite import Process
-from process_bigraph.composite_audit import _member_wirings, MemberWiring
+from process_bigraph.composite_audit import _member_wirings, MemberWiring, _store_graph, _resolve_wire
 
 
 class _Src(Process):   # produces 'level'
@@ -36,3 +36,19 @@ def test_member_wirings_enumerates_members():
     snk = next(w for w in _member_wirings(composite) if w.input_wires)
     assert snk.input_wires == {'level': ['level']}
     assert isinstance(src, MemberWiring)
+
+
+def test_store_graph_pairs_writer_and_reader():
+    composite, _ = _two_process_composite()
+    graph, unanalyzable = _store_graph(_member_wirings(composite))
+    assert ('level',) in graph
+    assert any(port == 'level' for _, port, _ in graph[('level',)]['writers'])
+    assert any(port == 'level' for _, port, _ in graph[('level',)]['readers'])
+    assert unanalyzable == []
+
+
+def test_nested_wire_is_unanalyzable():
+    assert _resolve_wire((), ['level']) == ('level',)
+    assert _resolve_wire(('a',), ['x']) == ('a', 'x')
+    assert _resolve_wire((), {'sub': ['level']}) is None    # nested dict wire
+    assert _resolve_wire((), ['..', 'level']) is None        # relative wire
