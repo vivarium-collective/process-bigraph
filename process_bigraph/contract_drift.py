@@ -101,6 +101,58 @@ def _read_ports(fn_node, state_name):
     return reads, unanalyzable
 
 
+def _dict_keys(dict_node):
+    """(constant-string keys, has_dynamic) for an ast.Dict."""
+    keys = set()
+    has_dynamic = False
+    for key in dict_node.keys:
+        if key is None:        # ** spread
+            has_dynamic = True
+            continue
+        name = _const_str(key)
+        if name is not None:
+            keys.add(name)
+        else:
+            has_dynamic = True
+    return keys, has_dynamic
+
+
+def _written_ports(fn_node):
+    """Ports written by the update's return, plus unanalyzable reasons.
+
+    Resolves a returned dict literal and a single local assigned a dict literal
+    then returned. A computed/delegated/absent return is recorded as
+    unanalyzable rather than guessed.
+    """
+    writes = set()
+    unanalyzable = []
+    dict_locals = {}
+    for node in ast.walk(fn_node):
+        if (isinstance(node, ast.Assign) and isinstance(node.value, ast.Dict)
+                and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)):
+            dict_locals[node.targets[0].id] = _dict_keys(node.value)
+
+    returns = [n for n in ast.walk(fn_node) if isinstance(n, ast.Return) and n.value is not None]
+    if not returns:
+        return writes, ['update returns nothing']
+
+    for ret in returns:
+        value = ret.value
+        if isinstance(value, ast.Dict):
+            keys, dynamic = _dict_keys(value)
+            writes |= keys
+            if dynamic:
+                unanalyzable.append('returned dict has a non-constant or ** key')
+        elif isinstance(value, ast.Name) and value.id in dict_locals:
+            keys, dynamic = dict_locals[value.id]
+            writes |= keys
+            if dynamic:
+                unanalyzable.append('returned local dict built with a non-constant or ** key')
+        else:
+            unanalyzable.append('return value is not a dict literal')
+    return writes, unanalyzable
+
+
 def _declared_ports(proc_or_cls, core):
     """(inputs, outputs) declared port-name sets. Accepts a class or instance;
     never raises — an unreadable face yields an empty set on that side.

@@ -1,7 +1,7 @@
 from process_bigraph import allocate_core
 from process_bigraph.composite import Process, Step
 from process_bigraph.draft_process import DraftProcess
-from process_bigraph.contract_drift import audit_process_drift, Finding, AuditReport, _declared_ports, _update_ast, _state_param, _read_ports
+from process_bigraph.contract_drift import audit_process_drift, Finding, AuditReport, _declared_ports, _update_ast, _state_param, _read_ports, _written_ports
 
 
 class _BareProcess(Process):     # no update override → inherits the base no-op
@@ -70,3 +70,40 @@ def test_opaque_state_use_is_unanalyzable():
     fn = _update_ast(_Opaque)
     reads, unan = _read_ports(fn, _state_param(fn))
     assert unan and any('whole' in r for r in unan)
+
+
+class _LiteralWriter(Process):
+    def inputs(self): return {'a': 'float'}
+    def outputs(self): return {'c': 'float'}
+    def update(self, state, interval):
+        return {'c': state['a'], 'd': 1.0}
+
+
+def test_written_ports_literal():
+    writes, unan = _written_ports(_update_ast(_LiteralWriter))
+    assert writes == {'c', 'd'} and unan == []
+
+
+class _LocalWriter(Process):
+    def inputs(self): return {'a': 'float'}
+    def outputs(self): return {'c': 'float'}
+    def update(self, state, interval):
+        out = {'c': state['a']}
+        return out
+
+
+def test_written_ports_single_local_dict():
+    writes, unan = _written_ports(_update_ast(_LocalWriter))
+    assert writes == {'c'} and unan == []
+
+
+class _ComputedWriter(Process):
+    def inputs(self): return {'a': 'float'}
+    def outputs(self): return {'c': 'float'}
+    def update(self, state, interval):
+        return dict(self._compute(state))        # not a dict literal
+
+
+def test_written_ports_computed_is_unanalyzable():
+    writes, unan = _written_ports(_update_ast(_ComputedWriter))
+    assert unan and writes == set()
