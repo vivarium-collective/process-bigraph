@@ -81,3 +81,14 @@ def test_main_require_declared(monkeypatch):
     core = allocate_core(); core.register_link('good', _Good)
     monkeypatch.setattr('process_bigraph.audit_contracts.allocate_core', lambda *a, **k: core)
     assert audit_contracts.main(['--require-declared', '5']) == 1
+
+
+def test_installed_registry_has_no_contract_errors():
+    """Regression gate: no process installed in THIS venv ships a contract with
+    an error finding. (Mostly a guard today — few processes declare contracts —
+    but it fails loudly if a broken contract ever lands.)"""
+    core = allocate_core()
+    out = audit_all(core)
+    bad = [(r['cls'], r['findings']) for r in out['reports']
+           if any(f['severity'] == 'error' for f in r['findings'])]
+    assert bad == [], f"processes with contract errors: {bad}"
