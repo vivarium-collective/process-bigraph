@@ -92,6 +92,99 @@ def test_to_document_generator_passes_whole_document():
     assert doc == {"state": {"s": 9}, "skip_initial_steps": True, "flow_order": ["a"]}
 
 
+def test_from_file_reads_global_time_precision(tmp_path):
+    p = tmp_path / "gtp.composite.yaml"
+    p.write_text(textwrap.dedent("""
+        name: clocked
+        global_time_precision: 1
+        state:
+          v: 1.0
+    """), encoding="utf-8")
+    s = CompositeSpec.from_file(p)
+    assert s.global_time_precision == 1
+
+
+def test_to_document_carries_explicit_global_time_precision():
+    s = CompositeSpec(id="m.c", name="c", state={"x": 1},
+                      global_time_precision=2)
+    doc = s.to_document()
+    assert doc["global_time_precision"] == 2
+
+
+def test_to_dict_from_dict_round_trips_global_time_precision():
+    s = CompositeSpec(id="m.c", name="c", state={"x": 1},
+                      global_time_precision=3)
+    s2 = CompositeSpec.from_dict(s.to_dict())
+    assert s2.global_time_precision == 3
+    assert s2 == s
+
+
+def test_to_document_auto_defaults_precision_from_shared_interval():
+    # Every edge interval lives on the same 0.1 grid -> precision 1.
+    s = CompositeSpec(id="m.c", name="c", state={
+        "level": 5.0,
+        "grow": {"_type": "process", "address": "local:IncreaseProcess",
+                 "config": {"rate": 0.1},
+                 "inputs": {"level": ["level"]},
+                 "outputs": {"level": ["level"]},
+                 "interval": 0.1}})
+    doc = s.to_document()
+    assert doc["global_time_precision"] == 1
+
+
+def test_to_document_no_auto_default_when_intervals_differ_in_grid():
+    s = CompositeSpec(id="m.c", name="c", state={
+        "a": {"_type": "process", "address": "local:A",
+              "inputs": {}, "outputs": {}, "interval": 0.1},
+        "b": {"_type": "process", "address": "local:B",
+              "inputs": {}, "outputs": {}, "interval": 0.25}})
+    doc = s.to_document()
+    assert "global_time_precision" not in doc
+
+
+def test_explicit_precision_overrides_auto_default():
+    s = CompositeSpec(id="m.c", name="c", global_time_precision=4, state={
+        "grow": {"_type": "process", "address": "local:IncreaseProcess",
+                 "inputs": {}, "outputs": {}, "interval": 0.1}})
+    doc = s.to_document()
+    assert doc["global_time_precision"] == 4
+
+
+def test_spec_built_composite_has_exact_global_time_clock():
+    """The bug: a spec with interval 0.1 run to t=3 must emit global_time
+    exactly [0.0, 0.1, ..., 3.0] rather than a drifting float sum."""
+    from process_bigraph import allocate_core
+    from process_bigraph.emitter import (
+        add_emitter_to_composite, gather_emitter_results)
+    from process_bigraph.processes.examples import IncreaseProcess
+
+    core = allocate_core()
+    core.register_link('IncreaseProcess', IncreaseProcess)
+
+    s = CompositeSpec(
+        id="m.clock", name="clock",
+        state={
+            "level": 5.0,
+            "grow": {
+                "_type": "process",
+                "address": "local:IncreaseProcess",
+                "config": {"rate": 0.0},
+                "inputs": {"level": ["level"]},
+                "outputs": {"level": ["level"]},
+                "interval": 0.1,
+            },
+        },
+    )
+    comp = s.to_composite(core=core)
+    add_emitter_to_composite(comp, core)
+    comp.run(3.0)
+
+    history = next(iter(gather_emitter_results(comp).values()))
+    times = [row["global_time"] for row in history]
+    expected = [round(0.1 * i, 1) for i in range(31)]  # 0.0 .. 3.0
+    assert times == expected, f"got {times[:5]}..{times[-3:]}"
+
+
 def test_to_document_rejects_unknown_override():
     s = CompositeSpec(id="m.c", name="c", state={}, parameters={"seed": {"type": "integer", "default": 0}})
     with pytest.raises(KeyError):
