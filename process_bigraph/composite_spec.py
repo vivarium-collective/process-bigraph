@@ -239,6 +239,47 @@ def _resolve_builder(builder, module):
     return obj
 
 
+def _iter_edge_intervals(node):
+    """Yield the numeric ``interval`` of every edge node in a state tree.
+
+    An edge node is a dict that declares an ``interval`` together with an
+    edge marker (``_type`` of ``process``/``step`` or an ``address``). The
+    extra marker keeps an unrelated dict that happens to carry an ``interval``
+    key from being mistaken for a process.
+    """
+    if isinstance(node, dict):
+        interval = node.get("interval")
+        is_edge = (
+            node.get("_type") in ("process", "step") or "address" in node)
+        if is_edge and isinstance(interval, (int, float)) and not isinstance(
+                interval, bool):
+            yield interval
+        for value in node.values():
+            yield from _iter_edge_intervals(value)
+    elif isinstance(node, list):
+        for value in node:
+            yield from _iter_edge_intervals(value)
+
+
+def _derive_global_time_precision(doc):
+    """Derive a ``global_time_precision`` from a document's edge intervals.
+
+    Returns the shared decimal precision when every edge interval in the
+    document lives on one decimal grid (e.g. all on the 0.1 grid -> 1), else
+    ``None`` (no intervals, or a mix of grids we must not round across).
+    """
+    from process_bigraph.composite import interval_time_precision
+
+    state = doc.get("state", doc) if isinstance(doc, dict) else doc
+    precisions = {
+        interval_time_precision(interval)
+        for interval in _iter_edge_intervals(state)
+    }
+    if len(precisions) == 1:
+        return precisions.pop()
+    return None
+
+
 @dataclass
 class CompositeSpec:
     id: str
@@ -257,6 +298,7 @@ class CompositeSpec:
     default_state_ref: "str | None" = None
     module: str = ""
     core_extensions: list = field(default_factory=list)
+    global_time_precision: "float | int | None" = None
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name:
@@ -325,6 +367,7 @@ class CompositeSpec:
             builder=builder,
             default_state_ref=raw.get("default_state_ref"),
             module=raw.get("module", ""),
+            global_time_precision=raw.get("global_time_precision"),
         )
 
     def _merged_params(self, overrides):
@@ -355,7 +398,41 @@ class CompositeSpec:
             fn = _resolve_builder(self.builder, self.module)
             doc = fn(core=core, **self._merged_params(overrides))
 
+        doc = self._with_global_time_precision(doc)
         return self._with_emitters(doc, core) if emit else doc
+
+    def _with_global_time_precision(self, doc):
+        """Carry ``global_time_precision`` as a top-level document key.
+
+        A ``Composite`` reads ``global_time_precision`` from the top level of
+        its document (``config_schema['global_time_precision']``) and uses it to
+        round each step's target time. Without it, ``global_time`` is a running
+        float sum of intervals, so e.g. ten ``interval: 0.1`` steps reach
+        ``0.9999999999999999`` and non-dyadic intervals can drop a final step.
+        ``CompositeSpec`` dropped the key entirely; this restores it.
+
+        An explicit ``global_time_precision`` on the spec always wins. A
+        document that already carries one (e.g. from a generator builder) is
+        left untouched. Otherwise the precision is auto-derived from the edge
+        intervals in the document — but only when every interval shares one
+        decimal grid, so a mixed-grid document is left alone rather than
+        rounded to a grid that does not fit all of its processes.
+
+        The key is a top-level ``Composite`` config field, so it is only added
+        to a proper document (one with a ``state`` key). A builder that returns
+        a bare state tree is left untouched rather than having a config key
+        injected into its state.
+        """
+        if not isinstance(doc, dict) or "state" not in doc:
+            return doc
+        if self.global_time_precision is not None:
+            return {**doc, "global_time_precision": self.global_time_precision}
+        if "global_time_precision" in doc:
+            return doc
+        derived = _derive_global_time_precision(doc)
+        if derived is None:
+            return doc
+        return {**doc, "global_time_precision": derived}
 
     def _with_emitters(self, doc, core=None):
         """Install this spec's declared emitters into a built document.
