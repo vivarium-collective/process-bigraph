@@ -15,6 +15,7 @@ dependencies = [
     # 1.4.2 first moved the bundle Parquet writer (_save_array_parquet) into
     # bigraph-schema (layer inversion); process-bigraph no longer ships it,
     # so save_bundle needs a schema that owns it.
+    # >=1.7.0 required: contract_expr module (parse, names_in, evaluate, ExprError)
     "bigraph-schema>=1.7.0",
     # process_bigraph/protocols/rest.py imports it at module level, and
     # process_bigraph.protocols imports rest -- so every `register_types`

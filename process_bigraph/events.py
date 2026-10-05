@@ -110,6 +110,8 @@ The engine's own events (callers use their own dotted namespaces)::
     span.start / span.end    every span boundary (span.end repeats start_ts and
                              carries duration_s and status)
     sink.error               a sink raised and was disabled
+    contract.violation       strict-contract check failed in record mode (level
+                             ``warning``; path, cls, phase, violations, global_time)
     process.invoke           opt-in: one record per invoke
     process.timing           opt-in: per-process invoke time (inside run.end)
 """

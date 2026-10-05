@@ -1148,6 +1148,17 @@ def _project_process_update(update_results: Any, args: Tuple[Any, str, Any]) -> 
     to the previous per-call closure.
     """
     composite, ports_key, process_path = args
+    strict = getattr(composite, '_contract_strict', 'off')
+    if strict != 'off':
+        # v1: only a dict delta is post-checked; list-form (multi-update) is left unchecked.
+        compiled = composite._compiled_contracts.get(process_path)
+        if compiled is not None and isinstance(update_results, dict):
+            from process_bigraph.contract_strict import check_post, handle_violations
+            inputs = composite._cached_view(process_path)
+            fails = check_post(compiled, inputs, update_results)
+            handle_violations(fails, mode=strict, phase='post', path=process_path,
+                              cls='process', emitter=composite._em,
+                              global_time=composite.state.get('global_time', 0.0) if isinstance(composite.state, dict) else 0.0)
     if not isinstance(update_results, list):
         update_results = [update_results]
     return [
@@ -1215,6 +1226,8 @@ class Composite(Process):
         # step hot path releases the GIL (numpy / scipy / numba / C
         # extensions: yes; pure-Python loops: no).
         'parallel_steps': 'boolean{false}',
+        # Runtime contract checking: off (default, zero-cost) | record | raise.
+        'contract_strict': 'string{off}',
         # Time-scheduled processes: when True, the per-tick `run` loop
         # fans out invocations across a thread pool. Right tool when
         # processes' update() releases the GIL (network I/O, numpy /
@@ -1423,6 +1436,8 @@ class Composite(Process):
         # field in interface_schema for the rationale (threading vs.
         # multiprocessing for inner parallelism).
         self._parallel_steps = bool(self.config.get('parallel_steps', False))
+        self._contract_strict = self.config.get('contract_strict') or getattr(self.core, 'contract_strict', 'off')
+        self._compiled_contracts = {}
         self._parallel_processes = bool(self.config.get('parallel_processes', False))
         self._parallel_workers = self.config.get('parallel_workers')
         self._step_executor = None  # lazy: created on first run_steps need
@@ -1916,16 +1931,27 @@ class Composite(Process):
         path for any path not present.
         """
         self._compiled_links = {}
+        self._compiled_contracts = {}
 
         for path in list(self.process_paths) + list(self.step_paths):
             compiled = self.core.precompile_link(
                 self.schema, self.state, path)
             if compiled is not None:
                 self._compiled_links[path] = compiled
+            if self._contract_strict != 'off':
+                try:
+                    from process_bigraph.contract_strict import compile_contract
+                    node = self.state
+                    for key in path:
+                        node = node[key]
+                    self._compiled_contracts[path] = compile_contract(node['instance'].describe_contract())
+                except Exception:  # noqa: BLE001 - a process without a readable contract is simply unchecked
+                    self._compiled_contracts[path] = None
 
     def _invalidate_caches(self) -> None:
         """Invalidate precompiled link caches, forcing rebuild on next use."""
         self._compiled_links = {}
+        self._compiled_contracts = {}
         self._runtime_partition_cache = None
 
     def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:
@@ -3077,6 +3103,14 @@ class Composite(Process):
         # summary of the state it was handed (process_bigraph.events), then
         # re-raise the ORIGINAL exception unchanged -- callers may classify
         # control-flow exceptions by type, so the type must propagate as is.
+        if self._contract_strict != 'off':
+            compiled = self._compiled_contracts.get(path)
+            if compiled is not None:
+                from process_bigraph.contract_strict import check_pre, handle_violations
+                fails = check_pre(compiled, clean_state)
+                handle_violations(fails, mode=self._contract_strict, phase='pre', path=path,
+                                  cls=type(process['instance']).__name__, emitter=self._em,
+                                  global_time=self.state.get('global_time', 0.0) if isinstance(self.state, dict) else 0.0)
         t0 = _time.monotonic()
         try:
             update = process['instance'].invoke(clean_state, interval)
