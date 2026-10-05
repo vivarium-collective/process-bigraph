@@ -8,6 +8,10 @@ largely a regression guard; the real value is downstream workspaces running
 `python -m process_bigraph.audit_contracts` against their registries, and the
 --require-declared floor makes coverage visible.
 """
+import argparse
+import json as _json
+import sys
+
 try:
     from bigraph_schema.contract_audit import audit_contract, completeness
     from bigraph_schema.assembly import contract_of
@@ -15,6 +19,8 @@ try:
     AUDIT_AVAILABLE = True
 except Exception:  # noqa: BLE001
     AUDIT_AVAILABLE = False
+
+from process_bigraph import allocate_core
 
 _INCOMPLETE_BELOW = 0.5
 
@@ -86,3 +92,37 @@ def audit_all(core, *, require_declared=0, strict_resolve=False):
     declared_count = sum(1 for r in rows if r.get('declared'))
     exit_code = 1 if (errors > 0 or (require_declared > 0 and declared_count < require_declared)) else 0
     return {'reports': rows, 'declared': declared_count, 'errors': errors, 'exit_code': exit_code}
+
+
+def _build_parser():
+    p = argparse.ArgumentParser(prog='python -m process_bigraph.audit_contracts',
+                                description='Audit registered process contracts; exit 1 on any error finding.')
+    p.add_argument('--require-declared', type=int, default=0, metavar='N',
+                   help='fail if fewer than N processes declare a real contract (default 0 = off).')
+    p.add_argument('--strict-resolve', action='store_true', help='treat unresolvable processes as failures.')
+    p.add_argument('--json', action='store_true', help='emit the full report as JSON.')
+    return p
+
+
+def main(argv=None):
+    args = _build_parser().parse_args(argv)
+    if not AUDIT_AVAILABLE:
+        print('contract audit unavailable: bigraph-schema >= 1.7.0 required', file=sys.stderr)
+        return 2
+    core = allocate_core()
+    result = audit_all(core, require_declared=args.require_declared, strict_resolve=args.strict_resolve)
+    if args.json:
+        print(_json.dumps(result, indent=2))
+        return result['exit_code']
+    for r in sorted(result['reports'], key=lambda x: (x['status'] != 'fail', x['cls'])):
+        grade = '' if r['grade'] is None else f" {int(r['grade'] * 100)}%"
+        print(f"{r['status']:13} {r['cls']}{grade}")
+        for f in r['findings']:
+            print(f"    {f['severity']} {f['code']} {f['where']}: {f['message']}")
+    print(f"\n{result['declared']} declared, {result['errors']} error finding(s) "
+          f"-> {'FAIL' if result['exit_code'] else 'OK'}")
+    return result['exit_code']
+
+
+if __name__ == '__main__':
+    sys.exit(main())

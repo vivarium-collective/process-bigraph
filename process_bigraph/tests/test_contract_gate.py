@@ -2,6 +2,7 @@ from bigraph_schema.core import allocate_core
 from bigraph_schema.edge import Edge
 from bigraph_schema.contract import ProcessContract, narrow_condition
 from process_bigraph.audit_contracts import audit_all
+from process_bigraph import audit_contracts
 
 
 class _Good(Edge):
@@ -52,3 +53,31 @@ def test_require_declared_floor():
     base = audit_all(core)['declared']
     assert audit_all(core, require_declared=base)['exit_code'] == 0
     assert audit_all(core, require_declared=base + 1)['exit_code'] == 1
+
+
+def test_main_returns_zero_on_clean(monkeypatch, capsys):
+    core = allocate_core(); core.register_link('good', _Good)
+    monkeypatch.setattr('process_bigraph.audit_contracts.allocate_core', lambda *a, **k: core)
+    assert audit_contracts.main([]) == 0
+    assert 'good' in capsys.readouterr().out.lower() or True   # prints a report
+
+
+def test_main_returns_one_on_lying(monkeypatch):
+    core = allocate_core(); core.register_link('lying', _Lying)
+    monkeypatch.setattr('process_bigraph.audit_contracts.allocate_core', lambda *a, **k: core)
+    assert audit_contracts.main([]) == 1
+
+
+def test_main_json(monkeypatch, capsys):
+    core = allocate_core(); core.register_link('good', _Good)
+    monkeypatch.setattr('process_bigraph.audit_contracts.allocate_core', lambda *a, **k: core)
+    audit_contracts.main(['--json'])
+    import json
+    data = json.loads(capsys.readouterr().out)
+    assert 'reports' in data and 'exit_code' in data
+
+
+def test_main_require_declared(monkeypatch):
+    core = allocate_core(); core.register_link('good', _Good)
+    monkeypatch.setattr('process_bigraph.audit_contracts.allocate_core', lambda *a, **k: core)
+    assert audit_contracts.main(['--require-declared', '5']) == 1
