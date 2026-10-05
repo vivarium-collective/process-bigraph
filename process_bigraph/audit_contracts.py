@@ -49,14 +49,14 @@ def audit_all(core, *, require_declared=0, strict_resolve=False):
         if cls is None:
             reports.setdefault(f'unresolvable:{address}',
                                {'address': address, 'cls': address, 'status': 'unresolvable',
-                                'grade': None, 'findings': []})
+                                'grade': None, 'findings': [], 'declared': False})
             continue
         key = _class_key(cls)
         if key in reports:
             continue   # alias dedup
         contract = _contract_for(core, address, cls)
         if contract is None:
-            reports[key] = {'address': address, 'cls': key, 'status': 'not-declared', 'grade': None, 'findings': []}
+            reports[key] = {'address': address, 'cls': key, 'status': 'not-declared', 'grade': None, 'findings': [], 'declared': False}
             continue
         try:
             report = audit_contract(core, contract)
@@ -65,23 +65,24 @@ def audit_all(core, *, require_declared=0, strict_resolve=False):
                         for f in report.findings]
         except Exception as error:  # noqa: BLE001
             reports[key] = {'address': address, 'cls': key, 'status': 'unresolvable', 'grade': None,
-                            'findings': [{'severity': 'error', 'code': 'audit_raised', 'where': key, 'message': str(error)}]}
+                            'findings': [{'severity': 'error', 'code': 'audit_raised', 'where': key, 'message': str(error)}], 'declared': False}
             continue
-        declared = bool(contract.conditions()) or grade >= _INCOMPLETE_BELOW
+        has_contract_attr = getattr(cls, 'contract', None) is not None
+        is_declared = has_contract_attr or bool(contract.conditions())
         if any(f['severity'] == 'error' for f in findings):
             status = 'fail'
-        elif not declared:
+        elif not is_declared:
             status = 'not-declared'
         elif grade < _INCOMPLETE_BELOW:
             status = 'incomplete'
         else:
             status = 'pass'
-        reports[key] = {'address': address, 'cls': key, 'status': status, 'grade': round(grade, 3), 'findings': findings}
+        reports[key] = {'address': address, 'cls': key, 'status': status, 'grade': round(grade, 3), 'findings': findings, 'declared': is_declared}
 
     rows = list(reports.values())
     errors = sum(1 for r in rows for f in r['findings'] if f['severity'] == 'error')
     if strict_resolve:
         errors += sum(1 for r in rows if r['status'] == 'unresolvable')
-    declared_count = sum(1 for r in rows if r['status'] in ('pass', 'incomplete'))
+    declared_count = sum(1 for r in rows if r.get('declared'))
     exit_code = 1 if (errors > 0 or (require_declared > 0 and declared_count < require_declared)) else 0
     return {'reports': rows, 'declared': declared_count, 'errors': errors, 'exit_code': exit_code}

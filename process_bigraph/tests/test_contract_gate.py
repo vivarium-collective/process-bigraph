@@ -49,5 +49,6 @@ def test_alias_dedup():
 
 def test_require_declared_floor():
     core = allocate_core(); core.register_link('good', _Good)
-    assert audit_all(core, require_declared=1)['exit_code'] == 0
-    assert audit_all(core, require_declared=105)['exit_code'] == 1   # allocate_core registers ~99, require >99 fails
+    base = audit_all(core)['declared']
+    assert audit_all(core, require_declared=base)['exit_code'] == 0
+    assert audit_all(core, require_declared=base + 1)['exit_code'] == 1
