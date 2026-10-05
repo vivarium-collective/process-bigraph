@@ -59,7 +59,7 @@ def test_main_returns_zero_on_clean(monkeypatch, capsys):
     core = allocate_core(); core.register_link('good', _Good)
     monkeypatch.setattr('process_bigraph.audit_contracts.allocate_core', lambda *a, **k: core)
     assert audit_contracts.main([]) == 0
-    assert 'good' in capsys.readouterr().out.lower() or True   # prints a report
+    assert 'declared' in capsys.readouterr().out   # the summary report was printed
 
 
 def test_main_returns_one_on_lying(monkeypatch):
