@@ -44,3 +44,6 @@ jobs:
 
       - name: Run pytest
         run: uv run pytest --cov=process_bigraph --cov-report=term
+
+      - name: Contract audit gate
+        run: uv run python -m process_bigraph.audit_contracts
