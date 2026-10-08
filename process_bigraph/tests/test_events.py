@@ -667,3 +667,48 @@ def test_rate_limit_does_not_change_the_simulation():
     for _ in range(5):
         loud.run(1.0)
     assert loud.state['level'] == quiet.state['level']
+
+
+def test_file_sink_path_fields_give_each_process_its_own_file(tmp_path, monkeypatch):
+    """``{source}``/``{pid}``/``{host}`` in a file sink's path: one file per writing process, since concurrent
+    appends to one file are unsafe on network filesystems."""
+    import os
+    import socket
+
+    monkeypatch.delenv('PBG_EVENT_SOURCE', raising=False)
+    sink = events.resolve_sink(f'file:{tmp_path}/engine-{{source}}.jsonl')
+    assert sink.path == f'{tmp_path}/engine-{socket.gethostname()}-{os.getpid()}.jsonl'
+    sink.emit({'event': 'a'})
+    sink.close()
+    assert json.loads((tmp_path / os.path.basename(sink.path)).read_text())['event'] == 'a'
+
+    monkeypatch.setenv('PBG_EVENT_SOURCE', 'worker/7')
+    named = events.resolve_sink(f'file:{tmp_path}/e-{{source}}-{{pid}}.jsonl')
+    assert named.path == f'{tmp_path}/e-worker_7-{os.getpid()}.jsonl'  # a separator cannot leave the directory
+    named.close()
+
+    plain = events.resolve_sink(f'file:{tmp_path}/plain.jsonl')
+    assert plain.path == f'{tmp_path}/plain.jsonl'
+    plain.close()
+
+
+@pytest.mark.skipif(not hasattr(__import__('os'), 'fork'), reason='needs fork')
+def test_a_forked_child_writes_its_own_file(tmp_path, monkeypatch):
+    import os
+
+    monkeypatch.delenv('PBG_EVENT_SOURCE', raising=False)
+    sink = events.FileSink(f'{tmp_path}/e-{{pid}}.jsonl')
+    sink.emit({'event': 'parent'})
+    child = os.fork()
+    if child == 0:  # pragma: no cover - runs in the child
+        try:
+            sink.emit({'event': 'child'})
+            sink.flush()
+        finally:
+            os._exit(0)
+    os.waitpid(child, 0)
+    sink.emit({'event': 'parent-again'})
+    sink.close()
+    files = {p.name: [json.loads(line)['event'] for line in p.read_text().splitlines()] for p in tmp_path.iterdir()}
+    assert files[f'e-{os.getpid()}.jsonl'] == ['parent', 'parent-again']
+    assert files[f'e-{child}.jsonl'] == ['child']

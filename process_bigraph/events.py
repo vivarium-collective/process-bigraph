@@ -40,7 +40,9 @@ The design rules (they are load-bearing, keep them):
 Switches (all environment variables, all optional)::
 
     PBG_EVENT_SINKS      comma list of sink specs. ``stdout`` | ``none`` |
-                         ``file:<path>`` | ``<scheme>:<rest>`` (registered
+                         ``file:<path>`` (``{source}``, ``{pid}`` or ``{host}``
+                         in the path give each process its own file) |
+                         ``<scheme>:<rest>`` (registered
                          factory, then the ``process_bigraph.event_sinks``
                          entry-point group) | ``module:attr`` (a callable
                          taking the spec string and returning an EventSink).
@@ -238,17 +240,48 @@ class StdoutSink(EventSink):
             pass
 
 
+_PATH_FIELDS = ('{source}', '{pid}', '{host}')
+
+
+def _default_source() -> str:
+    return os.environ.get('PBG_EVENT_SOURCE') or f'{socket.gethostname()}-{os.getpid()}'
+
+
 class FileSink(EventSink):
-    """Line-buffered append to a local file."""
+    """Line-buffered append to a local file.
+
+    The path may name ``{source}``, ``{pid}`` or ``{host}``
+    (``file:/run/events/engine-{source}.jsonl``). Each process then writes its
+    own file: concurrent appends from several processes to one file are not
+    safe on a network filesystem, and a run's worker processes all inherit the
+    same ``PBG_EVENT_SINKS``. ``{source}`` is ``PBG_EVENT_SOURCE``, else
+    ``<hostname>-<pid>``, the same default as the events' ``source`` field. A
+    process forked from a writer opens its own file on its first event rather
+    than sharing its parent's."""
 
     def __init__(self, path: str):
-        self.path = path
-        parent = os.path.dirname(path)
+        self.template = path
+        self._per_process = any(field in path for field in _PATH_FIELDS)
+        self._open()
+
+    def _expand(self, path: str) -> str:
+        values = {'{source}': _default_source(), '{pid}': str(os.getpid()),
+                  '{host}': socket.gethostname()}
+        for field, value in values.items():
+            path = path.replace(field, value.replace(os.sep, '_'))
+        return path
+
+    def _open(self) -> None:
+        self._pid = os.getpid()
+        self.path = self._expand(self.template) if self._per_process else self.template
+        parent = os.path.dirname(self.path)
         if parent:
             os.makedirs(parent, exist_ok=True)
-        self._fh = open(path, 'a', buffering=1)
+        self._fh = open(self.path, 'a', buffering=1)
 
     def emit(self, event):
+        if self._per_process and os.getpid() != self._pid:
+            self._open()  # forked from a writer: do not append to the parent's file
         self._fh.write(json.dumps(event, default=str) + '\n')
 
     def flush(self):
