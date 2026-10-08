@@ -3719,6 +3719,52 @@ def test_every_unfilled_site_is_named():
     assert "'study/reference'" in message
 
 
+def test_a_schema_declared_type_does_not_hide_an_open_state_site():
+    """Case A from issue #213: a `schema` entry must not silently swallow an
+    open `site` in `state`.
+
+    Previously `realize` took the type from `schema` and dropped the site, so
+    the post-realize groundness check saw no hole and the composite ran on the
+    type's default (``a == 0.0``) with no error — a template that was never
+    filled running as if it had been. The pre-realize check inspects the raw
+    document, so the unfilled site is rejected, naming it.
+    """
+    core = allocate_core()
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        Composite(
+            {'schema': {'a': 'float'},
+             'state': {'a': {'_type': 'site', '_sort': 'float'}}},
+            core=core)
+
+    assert "'a'" in str(raised.value)
+
+
+def test_an_open_address_site_fails_loud_not_with_an_opaque_realize_crash():
+    """Case B from issue #213: a process/step node whose `address` is still a
+    site must raise the informative "not ground" error naming the open site,
+    not crash inside `realize_link` with `KeyError: 'data'`.
+    """
+    core = allocate_core()
+    face = {
+        '_type': 'link',
+        '_inputs': {'a': 'float', 'b': 'float'},
+        '_outputs': {'c': 'float'}}
+    document = {
+        'a': 1.0, 'b': 2.0, 'c': 0.0,
+        'op': {
+            '_type': 'step',
+            'address': {'_type': 'site', '_sort': face},
+            'config': {'operator': '+'},
+            'inputs': {'a': ['a'], 'b': ['b']},
+            'outputs': {'c': ['c']}}}
+
+    with pytest.raises(ValueError, match='not ground') as raised:
+        Composite({'state': document}, core=core)
+
+    assert "'op/address'" in str(raised.value)
+
+
 def test_optional_site_does_not_block_construction():
     """A site carrying a `_default` can supply its own filler, so it is not
     a required hole."""
