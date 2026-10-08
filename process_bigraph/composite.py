@@ -45,6 +45,9 @@ def get_current_composite():
 # callers that imported it from ``composite``.
 from process_bigraph import events as _events
 from process_bigraph.events import _summarize_value  # noqa: F401  (re-export)
+from process_bigraph.update_check import (
+    check_update, handle_update_violations,
+    validate_mode as validate_update_check_mode)
 
 from dataclasses import dataclass, field
 from typing import (
@@ -1138,6 +1141,49 @@ class Defer:
         return self.f(self.defer.get(), self.args)
 
 
+def _update_check_ports(composite: Any, process_path: Any, ports_key: str) -> Tuple[str, Dict[str, Any]]:
+    """``(class name, {port: schema})`` for the edge at ``process_path``.
+
+    The schemas are the edge's declared ports (``outputs()`` or ``inputs()``
+    per ``ports_key``) overlaid with any ``_outputs``/``_inputs`` override on
+    its state node. Cached per ``(path, ports_key)`` on the composite and
+    cleared with the other per-path caches in ``_invalidate_caches``."""
+    key = (tuple(process_path) if isinstance(process_path, (list, tuple)) else (process_path,), ports_key)
+    cached = composite._update_check_ports.get(key)
+    if cached is not None:
+        return cached
+    node = composite.state
+    for step in key[0]:
+        node = node[step]
+    instance = node.get('instance') if isinstance(node, dict) else None
+    ports: Dict[str, Any] = {}
+    if instance is not None:
+        declared = instance.outputs() if ports_key == 'outputs' else instance.inputs()
+        ports.update(declared or {})
+    override = node.get(f'_{ports_key}') if isinstance(node, dict) else None
+    if isinstance(override, dict):
+        ports.update(override)
+    result = (type(instance).__name__ if instance is not None else '?', ports)
+    composite._update_check_ports[key] = result
+    return result
+
+
+def _check_process_updates(
+        composite: Any, update_results: List[Any], ports_key: str,
+        process_path: Any, mode: str) -> None:
+    """Run the #99 update checks on each update a process returned."""
+    cls, ports = _update_check_ports(composite, process_path, ports_key)
+    violations = []
+    for update_result in update_results:
+        violations.extend(check_update(update_result, ports, composite.core))
+    if violations:
+        global_time = composite.state.get('global_time') if isinstance(composite.state, dict) else None
+        handle_update_violations(
+            violations, mode=mode,
+            path=tuple(process_path) if isinstance(process_path, (list, tuple)) else (process_path,),
+            cls=cls, composite=composite, global_time=global_time)
+
+
 def _project_process_update(update_results: Any, args: Tuple[Any, str, Any]) -> Any:
     """Project a resolved process update into global-state terms.
 
@@ -1161,6 +1207,9 @@ def _project_process_update(update_results: Any, args: Tuple[Any, str, Any]) -> 
                               global_time=composite.state.get('global_time', 0.0) if isinstance(composite.state, dict) else 0.0)
     if not isinstance(update_results, list):
         update_results = [update_results]
+    check_mode = getattr(composite, '_check_updates', 'off')
+    if check_mode != 'off':
+        _check_process_updates(composite, update_results, ports_key, process_path, check_mode)
     return [
         composite._cached_project(process_path, update_result, ports_key)
         for update_result in update_results
@@ -1228,6 +1277,10 @@ class Composite(Process):
         'parallel_steps': 'boolean{false}',
         # Runtime contract checking: off (default, zero-cost) | record | raise.
         'contract_strict': 'string{off}',
+        # Debug check of every process/step update: off (default, zero-cost)
+        # | record | raise. Flags writes to undeclared ports, NaN/inf values
+        # and values that do not fit the port schema. See update_check.py.
+        'check_updates': 'string{off}',
         # Time-scheduled processes: when True, the per-tick `run` loop
         # fans out invocations across a thread pool. Right tool when
         # processes' update() releases the GIL (network I/O, numpy /
@@ -1448,6 +1501,15 @@ class Composite(Process):
         self._parallel_steps = bool(self.config.get('parallel_steps', False))
         self._contract_strict = self.config.get('contract_strict') or getattr(self.core, 'contract_strict', 'off')
         self._compiled_contracts = {}
+        # Debug update checking (#99). The config value wins when it turns
+        # checking on; otherwise a core-wide ``check_updates`` attribute can.
+        check_updates = self.config.get('check_updates')
+        if check_updates in (None, '', 'off'):
+            check_updates = getattr(self.core, 'check_updates', 'off')
+        self._check_updates = validate_update_check_mode(check_updates)
+        self._update_check_ports = {}
+        self.update_violations = []
+        self.update_violations_dropped = 0
         self._parallel_processes = bool(self.config.get('parallel_processes', False))
         self._parallel_workers = self.config.get('parallel_workers')
         self._step_executor = None  # lazy: created on first run_steps need
@@ -1962,6 +2024,7 @@ class Composite(Process):
         """Invalidate precompiled link caches, forcing rebuild on next use."""
         self._compiled_links = {}
         self._compiled_contracts = {}
+        self._update_check_ports = {}
         self._runtime_partition_cache = None
 
     def _cached_view(self, path: Tuple[str, ...]) -> Dict[str, Any]:

@@ -229,6 +229,11 @@ More tutorials are added continuously and appear automatically in the index.
   *Built-in emitters (RAM, console, JSON, SQLite), how to wire them, retrieve results, store runs long-term, and write your own.*
   [docs/emitters.md](docs/emitters.md)
 
+- **Debugging a composite** — *catch malformed process updates (undeclared
+  ports, NaN/inf, type mismatches) with `check_updates`, check contracts, and
+  find slow processes with `timing_summary()`.*
+  [docs/debugging.md](docs/debugging.md)
+
 - **Tick lifecycle** — *how a step network is ordered and advanced, and how a
   protocol runtime batches remote dispatch.*
   [docs/tick_lifecycle.md](docs/tick_lifecycle.md)
