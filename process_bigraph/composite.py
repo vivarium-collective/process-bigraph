@@ -1292,6 +1292,16 @@ class Composite(Process):
         if 'global_time' not in initial_state:
             initial_state['global_time'] = 0.0
 
+        # Reject open template holes BEFORE realizing, over the document as
+        # given. Realization cannot cope with a site where it expects a type
+        # or an address: a declared `schema` entry silently swallows a `state`
+        # site (it realizes the declared type and drops the hole, so the
+        # composite runs on the type default with no error — case A), and an
+        # open `address` site crashes deep in `realize_link` with an opaque
+        # `KeyError: 'data'` (case B). Checking the raw document first turns
+        # both into the same clear "not ground" error that names the site.
+        self._require_ground_input(initial_schema, initial_state)
+
         # Generate internal schema and state structures using the core engine.
         # Top-level realize: realize_root defaults to () so no merges escape.
         self.schema, self.state, _ = self.core.realize(
@@ -2809,6 +2819,64 @@ class Composite(Process):
             per_process=dict(self._per_process_time),
         )
 
+    @staticmethod
+    def _raise_not_ground(unfilled) -> None:
+        """Raise the shared "not ground" error naming the open site paths."""
+        named = ', '.join(repr('/'.join(path)) for path in unfilled)
+        raise ValueError(
+            f'composite document is not ground — required site(s) left '
+            f'unfilled: {named}. An open site is a hole where a process '
+            f'or value should be; fill it before constructing the '
+            f'composite (bigraph_schema `fill_sites` / `build`).')
+
+    def _require_ground_input(
+            self,
+            initial_schema: Dict[str, Any],
+            initial_state: Dict[str, Any],
+    ) -> None:
+        """Reject unfilled template holes in the raw document, before realizing.
+
+        The post-realize :meth:`_require_ground_document` check sees only the
+        sites realization *kept*, which is too late for two cases:
+
+        - **A — an open site silently swallowed.** When ``schema`` declares a
+          store's type, ``realize`` takes the type from ``schema`` and drops
+          the ``site`` in ``state``; the realized schema no longer contains a
+          hole, so the post-check passes and the composite runs on the type's
+          default value with no error — a template that was never filled runs
+          as if it had been.
+        - **B — an open ``address`` site.** A process/step node whose
+          ``address`` is still a site cannot be realized at all: ``realize``
+          fails inside ``realize_link`` with an opaque ``KeyError: 'data'``
+          before the groundness check can report the real problem.
+
+        Checking the document *as given* — the ``state`` as the caller wrote
+        it, where sites still live — catches both and names the offending
+        site, exactly as the baseline (state-only) case already does. The
+        post-realize check stays as a backstop.
+
+        Checked over **sites** (a ``_default``-carrying site is optional and
+        does not block), consistent with :meth:`_require_ground_document`; see
+        :func:`process_bigraph.templates.required_open_sites`.
+        """
+        try:
+            from bigraph_schema.assembly import interfaces
+            # A site is a state-level hole: inspect the document as written,
+            # so a declared `schema` type cannot hide a `state` site.
+            accessed = self.core.access(initial_state)
+            unfilled = sorted({
+                tuple(path)
+                for path, site in interfaces(accessed)[0]._places
+                if getattr(site, '_default', None) is None})
+        except Exception:
+            # If the raw document cannot be inspected for any reason, do not
+            # mask that behind this check — fall through to realization and
+            # the post-realize backstop, preserving prior behaviour.
+            return
+
+        if unfilled:
+            self._raise_not_ground(unfilled)
+
     def _require_ground_document(self) -> None:
         """Reject a document that still has unfilled template holes.
 
@@ -2817,6 +2885,10 @@ class Composite(Process):
         downstream — wiring, scheduling, emitters — can be built over it.
         Checking here turns what would be a confusing failure deep in the run
         into a clear one at construction.
+
+        This runs *after* realization as a backstop; the primary check is
+        :meth:`_require_ground_input`, which inspects the raw document before
+        realization can swallow or crash on an open site.
 
         Deliberately checked over **sites**, not ``is_ground``: any composite
         containing a process has unwired ports by construction, so
@@ -2834,12 +2906,7 @@ class Composite(Process):
             if getattr(site, '_default', None) is None})
 
         if unfilled:
-            named = ', '.join(repr('/'.join(path)) for path in unfilled)
-            raise ValueError(
-                f'composite document is not ground — required site(s) left '
-                f'unfilled: {named}. An open site is a hole where a process '
-                f'or value should be; fill it before constructing the '
-                f'composite (bigraph_schema `fill_sites` / `build`).')
+            self._raise_not_ground(unfilled)
 
     def _require_advancing_interval(
             self,
