@@ -20,9 +20,20 @@ the state. Three problems are reported:
 - **`non_finite`**: a NaN or infinite number appears anywhere in the update,
   including inside numpy arrays. Without the check NaN spreads through every
   downstream store with no error.
-- **`type_mismatch`**: the value does not fit the port's schema (for example a
-  string sent to a `float` port). Without the check the failure surfaces later
-  as an unrelated exception that does not name the responsible process.
+- **`type_mismatch`**: the value is the wrong kind of thing for the port (for
+  example a string sent to a `float` port, or `2.5` sent to an `integer`
+  port). Without the check the failure surfaces later as an unrelated
+  exception that does not name the responsible process, or the store quietly
+  ends up holding the wrong type.
+
+  An update is a change rather than a new state, so this check accepts what
+  `apply` accepts: any Python or numpy number (`2`, `np.float32`, `np.int64`)
+  for a float port, any integer type for an integer port, a numpy array for a
+  list port, sparse `[(index, delta), ...]` updates for an array port, and
+  partial dicts for struct-like ports. Bounded types such as `range[0,1]` and
+  `nonnegative` are not bounds-checked here, since a negative change to a
+  non-negative store is normal; `contract_strict` checks bounds on the
+  resulting value.
 
 ```python
 sim = Composite({'state': doc, 'check_updates': 'raise'}, core=core)

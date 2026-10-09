@@ -1175,7 +1175,7 @@ def _check_process_updates(
     cls, ports = _update_check_ports(composite, process_path, ports_key)
     violations = []
     for update_result in update_results:
-        violations.extend(check_update(update_result, ports, composite.core))
+        violations.extend(check_update(update_result, ports, composite.core, ports_key=ports_key))
     if violations:
         global_time = composite.state.get('global_time') if isinstance(composite.state, dict) else None
         handle_update_violations(

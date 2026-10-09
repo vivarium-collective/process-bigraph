@@ -1,4 +1,5 @@
 """Debug update checking (issue #99): ``check_updates`` in {off, record, raise}."""
+import copy
 import math
 
 import numpy as np
@@ -82,6 +83,78 @@ def test_integer_port_rejects_float(core):
     assert _codes(check_update({'n': 2.5}, PORTS, core)) == ['type_mismatch']
 
 
+def test_undeclared_port_message_names_the_port_set(core):
+    violations = check_update({'zz': 1.0}, PORTS, core, ports_key='inputs')
+    assert 'not declared in inputs()' in violations[0][1]
+
+
+# Updates that ``core.check`` rejects as *states* but that ``apply`` accepts as
+# *updates* (review on #231). Each row is (schema, state before, update). The
+# test asserts both that apply succeeds and that check_update stays quiet, so
+# the rule is tied to what apply actually does.
+APPLIES_CLEANLY = [
+    ('float', 1.0, 2),                                   # int to a float port
+    ('float', 1.0, np.float32(1.5)),
+    ('float', 1.0, np.int64(2)),
+    ('float', 1.0, np.array(2.0)),                       # 0-d array
+    ('float[32]', np.float32(1.0), np.float32(1.0)),     # the declared numpy width
+    ('integer', 1, np.int64(2)),
+    ('integer', 1, np.uint8(2)),
+    ('boolean', False, np.bool_(True)),
+    ('range[0,1]', 0.5, -0.25),                          # a change, not a state:
+    ('nonnegative', 3.0, -2.0),                          # bounds are contract_strict's job
+    ('list[float]', [1.0, 1.0], np.array([1.0, 2.0])),
+    ('list[float]', [1.0, 1.0], np.array([1, 2])),
+    ('list[float]', [1.0], [2]),
+    ('list[integer]', [1, 1], np.array([1, 2], dtype=np.uint8)),
+    ('map[float]', {'a': 1.0}, {'a': 2}),
+    ('map[float]', {'a': 1.0}, {'a': np.float32(2.0)}),
+    ('tuple[float,integer]', (1.0, 1), (1, np.int32(2))),
+    ('tree[float]', {'a': {'b': 1.0}}, {'a': {'b': 2}}),
+    ('maybe[float]', 1.0, np.float16(1.0)),
+    ('overwrite[float]', 1.0, 2),
+    ({'u': 'float', 'v': 'integer'}, {'u': 1.0, 'v': 1}, {'u': 1}),   # partial update
+    ('array[(3),float]', np.zeros(3), np.array([1, 2, 3])),           # int dtype
+    ('array[(3),float]', np.zeros(3), [(0, 1.0)]),                    # sparse update
+    ('array[(3),float]', np.zeros(3), {0: 1.0}),                      # per-index update
+    ('array[(3),float]', np.zeros(3), 2.0),                           # broadcast scalar
+]
+
+
+@pytest.mark.parametrize('schema,before,delta', APPLIES_CLEANLY,
+                         ids=[f'{s}<-{type(d).__name__}' for s, _, d in APPLIES_CLEANLY])
+def test_updates_that_apply_cleanly_are_not_type_mismatches(core, schema, before, delta):
+    resolved = core.access(schema)
+    core.apply(resolved, copy.deepcopy(before), delta)   # raises if apply disagrees
+    violations = check_update({'p': delta}, {'p': schema}, core)
+    assert 'type_mismatch' not in _codes(violations), violations
+
+
+# The wrong kind of value for the port. Several of these *do* go through
+# apply, but only by storing the wrong type (an integer store becomes 3.5, a
+# float store becomes 'z', a pair loses a value), which is what the check is
+# for.
+STILL_FLAGGED = [
+    ('float', 'oops'), ('float', [1.0]), ('float', {'a': 1.0}), ('float', True),
+    ('integer', 2.5), ('integer', np.float64(2.0)), ('integer', 'x'),
+    ('boolean', 1),
+    ('list[float]', 'abc'), ('list[float]', 3.0), ('list[float]', np.array(['a'])),
+    ('list[integer]', np.array([1.5])),
+    ('map[float]', [1.0]), ('map[float]', {'a': 'z'}),
+    ('tuple[float,integer]', (1.0, 2.5)), ('tuple[float,integer]', (1.0,)),
+    ('tree[float]', {'a': 'z'}),
+    ('overwrite[float]', 'z'),
+    ({'u': 'float', 'v': 'integer'}, {'u': 'z'}),
+    ('array[(3),float]', 'abc'),
+]
+
+
+@pytest.mark.parametrize('schema,delta', STILL_FLAGGED,
+                         ids=[f'{s}<-{d!r}' for s, d in STILL_FLAGGED])
+def test_wrong_kind_of_value_is_still_flagged(core, schema, delta):
+    assert 'type_mismatch' in _codes(check_update({'p': delta}, {'p': schema}, core))
+
+
 def test_structural_delta_skips_type_check_but_not_non_finite(core):
     # ``_add`` is an instruction to the map type, not a map value: no type_mismatch.
     assert check_update({'counts': {'_add': {'z': 1.0}}}, PORTS, core) == []
@@ -127,6 +200,30 @@ class Buggy(Process):
         return {'x': 1.0}
 
 
+class NumpyFlavoured(Process):
+    """Returns the numpy and int updates real models produce."""
+
+    def inputs(self):
+        return {'x': 'float', 'v': 'list[float]', 'n': 'integer'}
+
+    def outputs(self):
+        return {'x': 'float', 'v': 'list[float]', 'n': 'integer'}
+
+    def update(self, state, interval):
+        return {'x': np.float32(0.5), 'v': np.array([1, 2]), 'n': np.int64(1)}
+
+
+class IntToFloat(Process):
+    def inputs(self):
+        return {'x': 'float'}
+
+    def outputs(self):
+        return {'x': 'float'}
+
+    def update(self, state, interval):
+        return {'x': 1}
+
+
 class NanStep(Step):
     def inputs(self):
         return {'x': 'float'}
@@ -143,6 +240,8 @@ def buggy_core():
     core = allocate_core()
     core.register_link('Buggy', Buggy)
     core.register_link('NanStep', NanStep)
+    core.register_link('NumpyFlavoured', NumpyFlavoured)
+    core.register_link('IntToFloat', IntToFloat)
     return core
 
 
@@ -211,6 +310,22 @@ def test_step_updates_are_checked(buggy_core):
         Composite({'state': doc, 'check_updates': 'raise', 'run_steps_on_init': True},
                   core=buggy_core)
     assert "NanStep at 's'" in str(excinfo.value)
+
+
+def test_numpy_and_int_updates_run_clean_in_raise_mode(buggy_core):
+    """Review on #231: correct numpy-heavy updates must not halt a run."""
+    doc = {
+        'x': 0.0, 'v': [0.0, 0.0], 'n': 0,
+        'np': {'_type': 'process', 'address': 'local:NumpyFlavoured', 'interval': 1.0,
+               'inputs': {'x': ['x'], 'v': ['v'], 'n': ['n']},
+               'outputs': {'x': ['x'], 'v': ['v'], 'n': ['n']}},
+        'it': {'_type': 'process', 'address': 'local:IntToFloat', 'interval': 1.0,
+               'inputs': {'x': ['x']}, 'outputs': {'x': ['x']}}}
+    composite = Composite({'state': doc, 'check_updates': 'raise'}, core=buggy_core)
+    composite.run(3)
+    assert composite.update_violations == []
+    assert composite.state['x'] == pytest.approx(4.5)   # 3 x (0.5 + 1)
+    assert composite.state['n'] == 3
 
 
 def test_core_wide_setting_turns_checking_on(buggy_core):
