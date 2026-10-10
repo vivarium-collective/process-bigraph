@@ -312,6 +312,36 @@ def interval_time_precision(timestep: float) -> int:
 # Process Classes
 # ===============
 
+def validate_config_keys(instance, config, core):
+    """Reject config keys not declared in ``config_schema`` when strict mode is on.
+
+    Opt-in "strict config" mode (issue #232). By default a Process/Step
+    silently ignores config keys that aren't part of its ``config_schema``,
+    so a typo'd or unsupported key passes unnoticed. When the core carries
+    ``strict_config`` truthy (set it directly or via
+    :func:`process_bigraph.allocate_core(strict=True)`), any such undeclared
+    key raises a clear :class:`ValueError` naming the offending key(s) and the
+    process type.
+
+    This is a no-op when ``strict_config`` is falsy/absent on the core, so the
+    default behavior of every existing workspace is unchanged.
+    """
+    if config is None or core is None:
+        return
+    if not getattr(core, 'strict_config', False):
+        return
+    declared = set((getattr(instance, 'config_schema', None) or {}).keys())
+    unknown = [key for key in config if key not in declared]
+    if unknown:
+        type_name = type(instance).__name__
+        raise ValueError(
+            f"{type_name} received unknown config key(s) {sorted(unknown)!r} "
+            f"that are not declared in its config_schema "
+            f"(declared keys: {sorted(declared)!r}). Strict-config mode is on "
+            f"(core.strict_config is set / allocate_core(strict=True)); pass "
+            f"only declared keys, fix the typo, or disable strict mode.")
+
+
 class SyncUpdate:
     """
     Wrapper for synchronous process updates.
@@ -347,6 +377,11 @@ class Open(Edge):
         self._command_result: Any = None
         self._pending_command: Optional[
             Tuple[str, Optional[tuple], Optional[dict]]] = None
+
+        # Opt-in strict-config check (issue #232): reject undeclared config
+        # keys before the edge fills/initializes. No-op unless the core has
+        # strict_config set, so default behavior is unchanged.
+        validate_config_keys(self, config, core)
 
         super().__init__(config, core=core)
 
