@@ -7839,12 +7839,47 @@ and how it can simplify models that would otherwise require custom Processes.</p
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=initial_id">
+</div>
+<div class="jp-Cell jp-MarkdownCell jp-Notebook-cell" id="cell-id=79d806ca">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
+</div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
+<h2 id="Setup">Setup<a class="anchor-link" href="#Setup">¶</a></h2><p><code>MathExpressionStep</code>, the <code>Tick</code> process, and the <code>plot_timeseries</code> /
+<code>plot_single_eval</code> helpers used throughout this tutorial live in the
+<a href="https://github.com/vivarium-collective/viva-basic-processes"><code>viva-basic-processes</code></a>
+package (a small, composite-agnostic companion to process-bigraph),
+installed from PyPI as <code>pbg-basic-processes</code>. The
+processes auto-register into any <code>core</code>, so they resolve by their <code>local:</code>
+addresses once the package is installed. The plotting helpers need matplotlib,
+which ships behind the optional <code>[plotting]</code> extra.</p>
+<p>Install it (the <code>[plotting]</code> extra pulls in matplotlib for the figures):</p>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=cb2cc98d">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
 <div class="jp-InputArea jp-Cell-inputArea">
-<div class="jp-InputPrompt jp-InputArea-prompt">In [23]:</div>
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div>
+<div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
+<div class="cm-editor cm-s-jupyter">
+<div class="highlight hl-ipython2"><pre><span></span><span class="c1"># Install the companion package that provides MathExpressionStep, Tick, and the</span>
+<span class="c1"># plotting helpers (uncomment to run; the [plotting] extra adds matplotlib).</span>
+<span class="o">%</span><span class="k">pip</span> install "pbg-basic-processes[plotting]&gt;=0.3.0"
+</pre></div>
+</div>
+</div>
+</div>
+</div>
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=initial_id">
+<div class="jp-Cell-inputWrapper" tabindex="0">
+<div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
+</div>
+<div class="jp-InputArea jp-Cell-inputArea">
+<div class="jp-InputPrompt jp-InputArea-prompt">In [ ]:</div>
 <div class="jp-CodeMirrorEditor jp-Editor jp-InputArea-editor" data-type="inline">
 <div class="cm-editor cm-s-jupyter">
 <div class="highlight hl-ipython2"><pre><span></span><span class="c1"># Core scientific stack</span>
@@ -7854,7 +7889,12 @@ and how it can simplify models that would otherwise require custom Processes.</p
 <span class="kn">from</span><span class="w"> </span><span class="nn">process_bigraph</span><span class="w"> </span><span class="kn">import</span> <span class="n">allocate_core</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">process_bigraph.composite</span><span class="w"> </span><span class="kn">import</span> <span class="n">Composite</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">process_bigraph.emitter</span><span class="w"> </span><span class="kn">import</span> <span class="n">emitter_from_wires</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">process_bigraph.processes.math_expression</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_timeseries</span><span class="p">,</span> <span class="n">plot_single_eval</span>
+
+<span class="c1"># MathExpressionStep and Tick ship in the viva-basic-processes package (they</span>
+<span class="c1"># auto-register, so they resolve by the local: addresses below). The plotting</span>
+<span class="c1"># helpers live there too, behind the optional [plotting] extra (see the install</span>
+<span class="c1"># cell above).</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">viva_basic_processes</span><span class="w"> </span><span class="kn">import</span> <span class="n">plot_timeseries</span><span class="p">,</span> <span class="n">plot_single_eval</span>
 
 <span class="c1"># Utilities</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">sys</span>
@@ -7872,21 +7912,6 @@ and how it can simplify models that would otherwise require custom Processes.</p
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  MathExpressionStep → </span><span class="si">{</span><span class="n">MATH_ADDR</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="sa">f</span><span class="s2">"  Tick               → </span><span class="si">{</span><span class="n">TICK_ADDR</span><span class="si">}</span><span class="s2">"</span><span class="p">)</span>
 </pre></div>
-</div>
-</div>
-</div>
-</div>
-<div class="jp-Cell-outputWrapper">
-<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
-</div>
-<div class="jp-OutputArea jp-Cell-outputArea">
-<div class="jp-OutputArea-child">
-<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>✅ Core ready
-  MathExpressionStep → local:MathExpressionStep
-  Tick               → local:Tick
-</pre>
 </div>
 </div>
 </div>
