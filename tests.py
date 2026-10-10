@@ -4240,6 +4240,114 @@ def test_the_scheduler_sees_a_round_tripped_priority():
     assert priorities['low'] == 1.0
 
 
+def test_step_cycle_is_rejected_at_build(core):
+    """Two zero-time Steps wired in a cycle (step a reads what step b writes,
+    step b reads what step a writes) must be rejected at Composite build time
+    with a clear error naming the cycle — not accepted silently and run in a
+    hash-seed-dependent order. See process-bigraph paper Supplement 1, 3.8.4:
+    "Cycles are disallowed, ensuring deterministic zero-time DAG evaluation."
+    Regression for issue #233.
+    """
+    class AddOne(Step):
+        def inputs(self):
+            return {'x': 'float'}
+        def outputs(self):
+            return {'y': 'overwrite[float]'}
+        def update(self, state):
+            return {'y': state['x'] + 1.0}
+
+    class Double(Step):
+        def inputs(self):
+            return {'y': 'float'}
+        def outputs(self):
+            return {'x': 'overwrite[float]'}
+        def update(self, state):
+            return {'x': state['y'] * 2.0}
+
+    core.register_link('AddOne', AddOne)
+    core.register_link('Double', Double)
+
+    document = {
+        'x': 1.0,
+        'y': 0.0,
+        'a': {'_type': 'step', 'address': 'local:AddOne',
+              'inputs': {'x': ['x']}, 'outputs': {'y': ['y']}},
+        'b': {'_type': 'step', 'address': 'local:Double',
+              'inputs': {'y': ['y']}, 'outputs': {'x': ['x']}},
+    }
+
+    with pytest.raises(ValueError) as excinfo:
+        Composite({'state': document}, core=core)
+
+    message = str(excinfo.value)
+    assert 'cycle' in message.lower()
+    # names both steps involved in the loop
+    assert 'a' in message and 'b' in message
+
+
+def test_valid_step_dag_builds_and_orders(core):
+    """The legitimate case — a non-cyclic chain of Steps (a -> b -> c) — must
+    still build without error and execute in dependency order. Guards against
+    the cycle check being over-eager. Companion to the #233 regression."""
+    execution_log = []
+
+    class Relay(Step):
+        config_schema = {'name': 'string'}
+        def inputs(self):
+            return {'in_val': 'float'}
+        def outputs(self):
+            return {'out_val': 'float'}
+        def update(self, state):
+            execution_log.append(self.config['name'])
+            return {'out_val': state.get('in_val', 0.0) + 1.0}
+
+    core.register_link('Relay', Relay)
+
+    composite = Composite({'state': {
+        'x': 1.0, 'y': 0.0, 'z': 0.0, 'w': 0.0,
+        'a': {'_type': 'step', 'address': 'local:Relay', 'config': {'name': 'a'},
+              'inputs': {'in_val': ['x']}, 'outputs': {'out_val': ['y']}},
+        'b': {'_type': 'step', 'address': 'local:Relay', 'config': {'name': 'b'},
+              'inputs': {'in_val': ['y']}, 'outputs': {'out_val': ['z']}},
+        'c': {'_type': 'step', 'address': 'local:Relay', 'config': {'name': 'c'},
+              'inputs': {'in_val': ['z']}, 'outputs': {'out_val': ['w']}},
+    }}, core=core)
+    composite.run(0.0)
+
+    assert execution_log == ['a', 'b', 'c']
+    assert composite.state['w'] == 4.0
+
+
+def test_steps_sharing_an_accumulator_path_are_not_a_cycle(core):
+    """Two Steps that both read AND write the same path (a shared accumulator)
+    are self-loops, scheduled together in one layer — not a stalling cycle —
+    and must still build. This is the pattern exercised by
+    ``test_the_scheduler_sees_a_round_tripped_priority``; the #233 cycle check
+    must not reject it."""
+    class Marker(Step):
+        config_schema = {'name': 'string'}
+        def inputs(self):
+            return {'seen': 'list'}
+        def outputs(self):
+            return {'seen': 'list'}
+        def update(self, state):
+            return {'seen': state['seen'] + [self.config['name']]}
+
+    core.register_link('Marker', Marker)
+
+    document = {
+        'low': {'_type': 'step', 'address': 'local:Marker',
+                'config': {'name': 'low'}, 'priority': 1.0,
+                'inputs': {'seen': ['seen']}, 'outputs': {'seen': ['seen']}},
+        'high': {'_type': 'step', 'address': 'local:Marker',
+                 'config': {'name': 'high'}, 'priority': 9.0,
+                 'inputs': {'seen': ['seen']}, 'outputs': {'seen': ['seen']}},
+        'seen': []}
+
+    # must not raise
+    Composite({'state': document}, core=core)
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================

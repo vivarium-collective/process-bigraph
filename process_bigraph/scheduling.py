@@ -434,6 +434,91 @@ def build_step_network(steps):
     return ancestors, nodes
 
 
+def find_step_cycle(ancestors, nodes):
+    """Find a dependency cycle among zero-time steps, if one exists.
+
+    The process-bigraph paper (Supplement 1, 3.8.4) guarantees that the
+    step network is a DAG: "Cycles are disallowed, ensuring deterministic
+    zero-time DAG evaluation." A cycle (step A consumes what step B produces
+    AND step B consumes what step A produces) has no valid evaluation order,
+    so ``determine_steps`` would stall and fall back to a priority tie-break
+    whose outcome depends on set-iteration order — i.e. the Python hash seed
+    (issue #233). Such cycles must be caught at build time.
+
+    The edges here are exactly the ordering constraints ``determine_steps``
+    walks: for each wired path, every producer (a step in the path's
+    ``before`` set) must run before every consumer (a step in ``after``).
+    Self-loops — a step that reads and writes the same path, e.g. a shared
+    accumulator — are already excluded from ``before`` by
+    ``build_step_network`` and run together in one layer, so they do not form
+    a cycle here.
+
+    Args:
+        ancestors: The per-step metadata from ``build_step_network`` (its
+            keys are the full set of step identifiers).
+        nodes: The path dependency map from ``build_step_network`` — each
+            value has ``before`` (producers) and ``after`` (consumers) sets.
+
+    Returns:
+        A list of step identifiers describing one cycle, as a closed loop
+        (first element repeated at the end, e.g. ``[a, b, a]``), or ``None``
+        if the step network is acyclic.
+    """
+    # Build the step -> step adjacency: an edge producer -> consumer means
+    # the producer must run strictly before the consumer.
+    graph = {step_key: set() for step_key in ancestors}
+    for node in nodes.values():
+        before = node.get('before') or ()
+        after = node.get('after') or ()
+        for producer in before:
+            if producer not in graph:
+                continue
+            for consumer in after:
+                if consumer != producer:
+                    graph[producer].add(consumer)
+
+    # Iterative DFS with three-colour marking (white/grey/black). A grey
+    # successor is a back-edge, i.e. a cycle; parent pointers reconstruct it.
+    # Successors are visited in a stable (repr-sorted) order so the reported
+    # cycle is itself deterministic.
+    WHITE, GREY, BLACK = 0, 1, 2
+    color = {node: WHITE for node in graph}
+    parent = {}
+
+    for root in graph:
+        if color[root] != WHITE:
+            continue
+        color[root] = GREY
+        stack = [(root, iter(sorted(graph[root], key=repr)))]
+        while stack:
+            node, successors = stack[-1]
+            descended = False
+            for succ in successors:
+                if color[succ] == WHITE:
+                    color[succ] = GREY
+                    parent[succ] = node
+                    stack.append((succ, iter(sorted(graph[succ], key=repr))))
+                    descended = True
+                    break
+                if color[succ] == GREY:
+                    # Back-edge node -> succ closes a cycle. Walk parents
+                    # from node back up to succ, then close the loop.
+                    cycle = [node]
+                    cursor = node
+                    while cursor != succ:
+                        cursor = parent[cursor]
+                        cycle.append(cursor)
+                    cycle.reverse()
+                    cycle.append(succ)
+                    return cycle
+                # BLACK successors are fully explored; skip them.
+            if not descended:
+                color[node] = BLACK
+                stack.pop()
+
+    return None
+
+
 def build_trigger_state(nodes, paths):
     """
     Initialize the trigger state from dependency nodes.
