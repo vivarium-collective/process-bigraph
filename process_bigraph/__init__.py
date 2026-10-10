@@ -1,4 +1,20 @@
-from bigraph_schema import allocate_core  # noqa: F401
+from bigraph_schema import allocate_core as _allocate_core
+
+
+def allocate_core(*args, strict=False, **kwargs):
+    """Allocate a core (see :func:`bigraph_schema.allocate_core`).
+
+    Adds process-bigraph's opt-in strict-config mode (issue #232): with
+    ``strict=True`` the returned core carries ``strict_config = True``, so
+    instantiating a Process/Step with a config key that is not declared in
+    its ``config_schema`` raises a clear error instead of silently ignoring
+    the key. The default (``strict=False``) preserves existing behavior
+    exactly. You can also toggle it on an existing core with
+    ``core.strict_config = True``.
+    """
+    core = _allocate_core(*args, **kwargs)
+    core.strict_config = bool(strict)
+    return core
 
 # The installed distribution's version, exposed so a run manifest can record
 # *which* engine produced an artifact. Read from installed metadata rather
