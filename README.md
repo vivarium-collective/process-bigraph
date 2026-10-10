@@ -207,7 +207,8 @@ rendered to HTML and published automatically on GitHub Pages.
 
 - **Tutorial 3 — Declarative Math**  
   *Defining mathematical relationships, signal pipelines, and events using `MathExpressionStep`*  
-  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_3.html
+  https://vivarium-collective.github.io/process-bigraph/notebooks/tutorial_3.html  
+  Requires the companion package [`viva-basic-processes`](https://github.com/vivarium-collective/viva-basic-processes) (`pip install "viva-basic-processes[plotting]>=0.3.0"`), which provides `MathExpressionStep`, the `Tick` process, and the plotting helpers.
 
 - **Tutorial 4 — Composing a Biological Model**  
   *The central dogma from four small processes: composition over shared molecular state, biological units in the port types, and adding regulation by adding a wire*  
