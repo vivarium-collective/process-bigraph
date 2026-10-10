@@ -76,6 +76,7 @@ from process_bigraph.scheduling import (  # noqa: F401
     build_trigger_state,
     find_downstream,
     determine_steps,
+    find_step_cycle,
 )
 
 
@@ -2347,6 +2348,29 @@ class Composite(Process):
 
         # Build the step execution dependency graph
         self.step_dependencies, self.node_dependencies = build_step_network(self.step_paths)
+
+        # Reject dependency cycles among zero-time steps. The paper
+        # (Supplement 1, 3.8.4) guarantees the step network is a DAG:
+        # "Cycles are disallowed, ensuring deterministic zero-time DAG
+        # evaluation." A cycle has no valid evaluation order, so the
+        # scheduler would otherwise fall back to a hash-seed-dependent
+        # tie-break and the same document would give different results in
+        # different processes (issue #233).
+        cycle = find_step_cycle(self.step_dependencies, self.node_dependencies)
+        if cycle is not None:
+            def _name(step_key):
+                if isinstance(step_key, (tuple, list)):
+                    return '/'.join(str(part) for part in step_key)
+                return str(step_key)
+            rendered = ' -> '.join(_name(step_key) for step_key in cycle)
+            raise ValueError(
+                f'step dependency cycle detected: {rendered}. '
+                f'Steps evaluate in zero time as a DAG, so a cycle has no '
+                f'deterministic evaluation order (process-bigraph paper, '
+                f'Supplement 1, 3.8.4). Break the cycle by removing one of '
+                f'the mutual input/output wirings between these steps, or '
+                f'model the feedback as a Process with a non-zero time '
+                f'interval.')
 
         # Initialize trigger fulfillment state and steps remaining
         self.reset_step_state(self.step_paths)
