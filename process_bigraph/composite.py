@@ -2664,6 +2664,27 @@ class Composite(Process):
         incrementally based on their configured interval. Updates are applied and
         steps are triggered accordingly.
 
+        Update-timing contract (matters only when intervals are unequal)
+        ----------------------------------------------------------------
+        A process reads its input ports from the shared state **at the start of
+        its interval** (the moment it becomes due), computes its update right
+        then, and the delta is applied when ``global_time`` reaches
+        ``due_time + interval`` — the "stash" model (Supplement 1, §3.8.6).
+        This is **not** the idealized read-at-event-time ``t*`` rule of
+        Supplement 1, §3.8.2: the two agree when every process shares one
+        interval and diverge otherwise, because a slow process applies a delta
+        computed from inputs as they stood one interval earlier. See
+        :meth:`run_process` and ``docs/concepts/composites-and-templates.md``
+        ("Update timing with unequal intervals").
+
+        Chunking caveat: the read-at-start guarantee holds only for a process
+        whose whole next interval fits inside this ``run`` call. A process whose
+        next due time falls past ``global_time + interval`` is deferred to the
+        next ``run`` call and re-reads its inputs there, so ``run(T)`` once can
+        differ from several shorter ``run`` calls over the same span. For
+        chunking-invariant results, pass an ``interval`` at least as large as the
+        largest process interval, or keep intervals equal.
+
         After completion, ``self.process_update_time`` holds the cumulative time
         spent inside process ``invoke()`` calls, and ``self.framework_time`` holds
         the time spent in framework operations (view, project, apply, realize).
@@ -3021,6 +3042,23 @@ class Composite(Process):
 
         This updates the `self.front` to store when the process is due next,
         and captures its update as a deferred computation.
+
+        Read-at-start contract: when the process is due
+        (``process_time <= global_time``), its input state is sliced **now**
+        via ``_cached_view(path)`` and ``process_update`` is called immediately,
+        but the resulting ``Defer`` is stashed in ``self.front[path]['update']``
+        and only applied once ``global_time`` reaches ``future`` (= due time +
+        interval). So inputs are read at the **start** of the interval and the
+        delta lands at the **end**. With unequal intervals this differs from the
+        read-at-event-time ``t*`` rule of Supplement 1 §3.8.2; it is the §3.8.6
+        stash model. See :meth:`run` and the concepts doc for the full contract.
+
+        Note: the ``'future'`` branch below pops a per-process state stash that
+        §3.8.6 uses to keep a long interval chunking-invariant across successive
+        ``run`` calls. Nothing currently writes that key, so a process whose next
+        interval overruns the current ``run`` window is simply deferred and
+        re-reads its inputs on the next ``run`` call (see the chunking caveat on
+        :meth:`run`).
 
         Args:
             path: The path to the process in the state/schema tree.

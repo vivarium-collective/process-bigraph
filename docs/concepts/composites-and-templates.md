@@ -50,6 +50,53 @@ Two more structural facts: a composite can **nest** — a node can itself be a
 sub-composite, so big models are built from small ones (containment) — and time is
 **per-process** (`interval`), so fast and slow processes advance on one shared state.
 
+### Update timing with unequal intervals (the stash model)
+
+When processes have **different** intervals, *when* a process reads its inputs
+matters, and the implemented contract differs from the idealized description in
+the paper. This is the behavior `Composite.run()` actually gives:
+
+- **Read at the start of the step, apply at the end.** When a process becomes
+  due at time `t0`, the scheduler reads its input ports from the shared state
+  **at `t0`**, computes its update immediately, and holds (*stashes*) the result
+  until `global_time` reaches `t0 + interval`, at which point the delta is
+  applied. So a process with interval `Δ` sees a fixed snapshot of its inputs
+  for the whole step `[t0, t0 + Δ)` and writes the result at the end. This is
+  deliberate: every process due at the same instant sees the same pre-update
+  state, so the tick has no hidden intra-tick ordering dependence.
+
+- **Why this can differ from "read at the event time".** The paper's formal
+  "Process Update" (Supplement 1, §3.8.2) reads a process's inputs at the event
+  time `t*` at which its update is *due* — i.e. at the **end** of the interval.
+  The two rules **coincide when every process has the same interval** (all
+  processes read and write on the same ticks), and **diverge when intervals are
+  unequal**: a slow process applies at `t*` a delta computed from its inputs as
+  they stood one interval earlier, so it effectively lags a faster neighbor by
+  up to one of its own intervals. The implementation follows the *stash model*
+  (Supplement 1, §3.8.6), i.e. read-at-start, not the §3.8.2 read-at-`t*`
+  idealization; the two Supplement sections describe the same system at
+  different levels of detail, and §3.8.6 is the one the code realizes.
+
+  Worked example (deltas returned by each process):
+  `x' = x + 0.5·(y − x)` on `p1` with interval 1, `y' = y + 0.25·(x − y)` on
+  `p2` with interval 2, starting `x = 1, y = 0`. At `t = 2`, `p2`'s first update
+  uses the inputs it read at `t = 0` (`x = 1, y = 0`), giving `y = 0.25` — not
+  the `y = 0.125` you would get by reading `x` as it stands at `t = 2`.
+
+- **Chunking caveat.** The read-at-start guarantee holds for a process whose
+  **entire next interval fits inside the current `run(interval)` call**. If a
+  process's next due time would fall *after* the end of the current `run()`
+  window, that process is not scheduled within this call; it is re-evaluated at
+  the start of the *next* `run()` call and reads its inputs then. As a result,
+  a span computed as a single `run(T)` can differ from the same span computed as
+  several shorter `run()` calls when some process interval is larger than a
+  chunk. **For chunking-invariant results, call `run()` with an interval at
+  least as large as the largest process interval, or keep all intervals equal.**
+  (The per-process state stash that §3.8.6 describes to make long intervals
+  fully chunking-invariant is only partially realized today — the read half
+  exists, the cross-`run()` carry-over does not — so this caveat is a known
+  limitation rather than a guarantee.)
+
 ### Static vs generator composites
 
 A composite comes in two forms:
