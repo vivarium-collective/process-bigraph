@@ -397,10 +397,24 @@ def build_step_network(steps):
     for node_path, deps in nodes.items():
         if deps['before']:
             continue  # already has producers
+        consumers = deps['after']
         # Check if any output is an ancestor of this input path
         for out_path, producers in all_output_paths.items():
             if (len(node_path) > len(out_path)
                     and node_path[:len(out_path)] == out_path):
+                # Container-restructure peers: when every consumer of this
+                # member path also WRITES the same ancestor container
+                # (``outputs: {..: ['..']}`` — the map _add/_remove / division
+                # shape), the container write is a shared structural edit, not
+                # a producer→consumer ordering. Each peer reads only its own
+                # member and never consumes what the others write, so ordering
+                # them by the container would be a false cycle (process-bigraph
+                # 1.9.0 regression on the v2ecoli division shape). An exact or
+                # deeper data match is handled by the first pass above (which
+                # leaves ``before`` non-empty, so we never reach here for it),
+                # so skipping only affects pure container-ancestor edges.
+                if consumers and consumers <= producers:
+                    continue
                 deps['before'].update(producers)
 
     # Also propagate child outputs to parent inputs.

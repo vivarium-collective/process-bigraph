@@ -4348,6 +4348,43 @@ def test_steps_sharing_an_accumulator_path_are_not_a_cycle(core):
     Composite({'state': document}, core=core)
 
 
+def test_sibling_steps_restructuring_a_shared_map_are_not_a_cycle(core):
+    """Two sibling Steps that each read their OWN member of a shared map and
+    write the whole parent map via ``['..']`` (the canonical division / map
+    _add/_remove shape) must NOT be flagged as a step cycle.
+
+    The cycle guard builds edges by path containment: each step's output
+    (the parent map) is an *ancestor* of the other step's member input, so a
+    naive containment check makes the two peers look mutually dependent. But
+    neither step reads what the other writes — their _add/_remove on distinct
+    member keys commute — so there is no real ordering dependency and no
+    non-determinism. Regression for the process-bigraph 1.9.0 guard rejecting
+    the v2ecoli division shape."""
+    class MemberReader(Step):
+        config_schema = {'name': 'string'}
+        def inputs(self):
+            return {'mass': 'float'}
+        def outputs(self):
+            return {'agents': {'_type': 'map', '_value': 'node'}}
+        def update(self, state):
+            return {}
+
+    core.register_link('MemberReader', MemberReader)
+
+    def member(name):
+        return {'mass': 1.0,
+                'div': {'_type': 'step', 'address': 'local:MemberReader',
+                        'config': {'name': name},
+                        'inputs': {'mass': ['mass']},
+                        'outputs': {'agents': ['..']}}}
+
+    document = {'agents': {'00': member('00'), '01': member('01')}}
+
+    # must not raise: the two div steps restructure the shared parent map but
+    # do not consume each other's output.
+    Composite({'state': document}, core=core)
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================
