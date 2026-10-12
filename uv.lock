@@ -166,7 +166,7 @@ wheels = [
 
 [[package]]
 name = "bigraph-schema"
-version = "1.6.0"
+version = "1.8.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "numpy" },
@@ -175,9 +175,9 @@ dependencies = [
     { name = "pint" },
     { name = "plum-dispatch" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/5c/f2/bd6d2029b27aba06e9aed03ec00bc3461f12e8ad83efe738436fa788552c/bigraph_schema-1.6.0.tar.gz", hash = "sha256:2e3cd98cb6a17d1b7898a931623bdbd2b8996e314582e9c5f561373bf06876cf", size = 167253, upload-time = "2026-08-13T01:50:36.65Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6c/c8/8cb42c3bb2e78d2e08d644596e553e446a87b15566d0195c411e13c634b4/bigraph_schema-1.8.0.tar.gz", hash = "sha256:c8ff86860f22e70e2c30e7eb7d4d09acc006e9f7c519c069e7994698e525d5bd", size = 185708, upload-time = "2026-10-12T15:52:51.191Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/fb/bb/b48c015d2c4b26754b0d3ad793af43c0c9a96c1f1dabab8d4f06dc9ea236/bigraph_schema-1.6.0-py3-none-any.whl", hash = "sha256:c6c855d0bbf851f949b15ddb24b608f7e1b1ef1f93af62d7eaf364c8a8ef6938", size = 172850, upload-time = "2026-08-13T01:50:35.403Z" },
+    { url = "https://files.pythonhosted.org/packages/27/44/a7b0f92bf30ca7b9bc4f7e7367920ddcf5024583a8a9d09efc4101864922/bigraph_schema-1.8.0-py3-none-any.whl", hash = "sha256:019709bf39be1d523af7ea61a34268cbf04016a1ee9744acada31bc7d348ee52", size = 185301, upload-time = "2026-10-12T15:52:49.752Z" },
 ]
 
 [[package]]
@@ -2008,13 +2008,14 @@ wheels = [
 
 [[package]]
 name = "process-bigraph"
-version = "1.8.5"
+version = "1.9.0"
 source = { editable = "." }
 dependencies = [
     { name = "bigraph-schema" },
     { name = "matplotlib" },
     { name = "pandas" },
     { name = "pint" },
+    { name = "requests" },
     { name = "scipy" },
     { name = "sympy" },
 ]
@@ -2055,7 +2056,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bigraph-schema", specifier = ">=1.6.0" },
+    { name = "bigraph-schema", specifier = ">=1.8.0" },
     { name = "boto3", marker = "extra == 'ec2-ssm'", specifier = ">=1.28" },
     { name = "fastapi", marker = "extra == 'server-rest'", specifier = ">=0.116.1" },
     { name = "fastapi-utils", marker = "extra == 'server-rest'", specifier = ">=0.8.0" },
@@ -2064,6 +2065,7 @@ requires-dist = [
     { name = "pandas" },
     { name = "pint", specifier = ">=0.24.4" },
     { name = "ray", marker = "extra == 'ray'", specifier = ">=2.10" },
+    { name = "requests", specifier = ">=2.31" },
     { name = "scipy", specifier = ">=1.8" },
     { name = "sympy" },
     { name = "typing-inspect", marker = "extra == 'server-rest'", specifier = ">=0.9.0" },
