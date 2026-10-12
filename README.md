@@ -92,7 +92,8 @@ core.register_link('Grow', Grow)                      # register it in the local
 composite = Composite({'state': {
     'level': 1.0,                                     # a shared store
     'grow': {'_type': 'process', 'address': 'local:Grow', 'config': {'rate': 0.5},
-             'interval': 1.0, 'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
+             'interval': 1.0,                         # seconds; a unit string like '1 min' also works
+             'inputs': {'level': ['level']}, 'outputs': {'level': ['level']}},
     'emitter': emitter_from_wires({'level': ['level'], 'time': ['global_time']}),
 }}, core=core)
 composite.run(5.0)

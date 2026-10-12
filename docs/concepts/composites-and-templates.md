@@ -38,7 +38,7 @@ Nothing else connects them.
   "inputs":   { "substrates": { "glucose": ["fields", "glucose"] },   // ← wiring path
                 "biomass": ["fields", "ecoli core"] },                //   into a shared store
   "outputs":  { "substrates": { "glucose": ["fields", "glucose"] }, /* … */ },
-  "interval": 1.0
+  "interval": 1.0                           // seconds; or a unit string, e.g. "1 min"
 }
 ```
 
@@ -49,6 +49,17 @@ installed packages"; `DynamicFBA` is the registered class name.
 Two more structural facts: a composite can **nest** — a node can itself be a
 sub-composite, so big models are built from small ones (containment) — and time is
 **per-process** (`interval`), so fast and slow processes advance on one shared state.
+
+#### Timestep units
+
+`interval` is optional (default `1.0`) and expressed in the canonical time base,
+**seconds**. You may also declare it as a pint time string — `"1 min"`,
+`"2 minutes"`, `"30 s"` — which is converted to seconds when the composite is
+realized, so the scheduler always counts in seconds and all the stash-model rules
+above are unaffected. The declared unit is preserved (as `interval_units`) for
+faithful re-serialization and for display in the composite viewer (e.g. "· every
+1 min", with "60 s" on hover). A bare number has no declared unit; a non-time or
+unparseable string raises an error rather than being silently dropped.
 
 ### Update timing with unequal intervals (the stash model)
 

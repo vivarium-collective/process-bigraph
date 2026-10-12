@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "process-bigraph"
-version = "1.8.5"
+version = "1.9.0"
 description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ dependencies = [
     # bigraph-schema (layer inversion); process-bigraph no longer ships it,
     # so save_bundle needs a schema that owns it.
     # >=1.7.0 required: contract_expr module (parse, names_in, evaluate, ExprError)
-    "bigraph-schema>=1.7.0",
+    "bigraph-schema>=1.8.1",
     # process_bigraph/protocols/rest.py imports it at module level, and
     # process_bigraph.protocols imports rest -- so every `register_types`
     # caller needs it, not only REST users. Undeclared, it was found missing
