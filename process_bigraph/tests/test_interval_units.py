@@ -38,6 +38,23 @@ def test_bare_number_interval_unchanged():
     assert grow.get('interval_units') is None
 
 
+def test_interval_is_optional_defaults_to_one_second():
+    """`interval` is optional: a process that declares none keeps the schema
+    default (1.0 seconds) and carries no declared unit."""
+    from process_bigraph.processes.examples import IncreaseProcess
+    core = allocate_core()
+    core.register_link('IncreaseProcess', IncreaseProcess)
+    doc = {'state': {
+        'level': 5.0,
+        'grow': {'_type': 'process', 'address': 'local:IncreaseProcess',
+                 'config': {'rate': 0.1}, 'inputs': {'level': ['level']},
+                 'outputs': {'level': ['level']}}}}  # no 'interval' key
+    c = Composite(doc, core=core)
+    grow = c.state['grow']
+    assert grow['interval'] == 1.0
+    assert grow.get('interval_units') is None
+
+
 def test_string_and_number_intervals_advance_identically():
     by_number = _composite(60)
     by_string = _composite('1 min')

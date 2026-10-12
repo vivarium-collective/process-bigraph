@@ -43,6 +43,16 @@ class StepLink(Link):
 class ProcessLink(Link):
     """
     A link type for temporal processes, extending the base Link schema with a time interval.
+
+    ``interval`` is optional (default ``1.0``) and may be declared either as a
+    bare number — interpreted as the canonical time base, **seconds** — or as a
+    pint time string such as ``"1 min"``, ``"2 minutes"`` or ``"30 s"``. A unit
+    string is converted to seconds at realize time (via
+    ``bigraph_schema.units.parse_time_interval``), so the scheduler always sees a
+    float in seconds; the declared unit is preserved in ``interval_units`` for
+    faithful re-serialization and display. A non-time or unparseable string
+    raises ``ValueError``. ``interval_units`` is ``None`` when a bare number (or
+    no interval) was declared.
     """
     interval: Float = field(default_factory=float_default(1.0))
     interval_units: typing.Optional[str] = None
