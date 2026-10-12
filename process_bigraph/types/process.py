@@ -20,6 +20,7 @@ from bigraph_schema.methods import reify_schema
 from bigraph_schema.methods.handle_parameters import reify_schema_link
 from bigraph_schema.methods import serialize, divide, bundle, apply
 from bigraph_schema.methods.bundle import BundleContext
+from bigraph_schema.units import parse_time_interval, format_time_interval
 
 
 def float_default(value):
@@ -44,6 +45,7 @@ class ProcessLink(Link):
     A link type for temporal processes, extending the base Link schema with a time interval.
     """
     interval: Float = field(default_factory=float_default(1.0))
+    interval_units: typing.Optional[str] = None
 
 
 @dataclass(kw_only=True)
@@ -140,7 +142,11 @@ def reify_schema(core, schema: ProcessLink, parameters):
     schema = reify_schema_link(core, schema, parameters)
 
     declared = parameters.get('interval')
-    if isinstance(declared, (int, float)) and not isinstance(declared, bool):
+    if isinstance(declared, str):
+        seconds, unit = parse_time_interval(declared)
+        schema.interval = Float(_default=seconds)
+        schema.interval_units = unit
+    elif isinstance(declared, (int, float)) and not isinstance(declared, bool):
         schema.interval = Float(_default=declared)
 
     return schema
@@ -173,11 +179,22 @@ def realize(core, schema: ProcessLink, state, path=()):
     link_schema, link_state, merges = realize_link(core, schema, state, path=path)
 
     # Realize the interval field (schema is Float). We pass the incoming value if present.
+    raw_interval = state.get('interval')
+    unit = None
+    if raw_interval is not None:
+        seconds, unit = parse_time_interval(raw_interval)
+    else:
+        seconds = None
+
     _, link_state['interval'], _ = realize(
         core,
         link_schema.interval,
-        state.get('interval'),
+        seconds,
         path + ('interval',))
+
+    if unit is not None:
+        link_state['interval_units'] = unit
+        link_schema.interval_units = unit
 
     return link_schema, link_state, merges
 
@@ -257,7 +274,7 @@ def render(schema: ProcessLink, defaults=False):
     result = {'_type': 'process'}
     blank = _link_type_defaults(type(schema))
     for field_name in schema.__dataclass_fields__:
-        if field_name == '_default':
+        if field_name in ('_default', 'interval_units'):
             continue
         value = getattr(schema, field_name)
         if field_name in blank and value == blank[field_name]:
@@ -272,7 +289,8 @@ def render(schema: ProcessLink, defaults=False):
     # cannot advance time.
     carried = getattr(schema.interval, '_default', None)
     if carried is not None:
-        result['interval'] = carried
+        unit = getattr(schema, 'interval_units', None)
+        result['interval'] = format_time_interval(carried, unit) if unit else carried
 
     return wrap_default(schema, result) if defaults else result
 
