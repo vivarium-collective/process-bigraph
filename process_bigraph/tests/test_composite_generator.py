@@ -258,6 +258,43 @@ def test_decorator_emitters_optional():
     assert entry.emitters == []
 
 
+def test_decorator_threads_methods_and_fidelity():
+    """A decorated generator carries its declared ``methods`` /``fidelity``
+    through to its GeneratorEntry (and the backing CompositeSpec)."""
+    methods = ["PHREEQC speciation (IPhreeqc)", "FiPy FVM advection-diffusion"]
+
+    @composite_generator(
+        name="mf", description="", parameters={},
+        methods=methods, fidelity="real",
+    )
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.mf"]
+    assert entry.methods == methods
+    assert entry.fidelity == "real"
+    # The backing CompositeSpec carries them too.
+    from process_bigraph import composite_spec as cs
+    spec = cs.get(f"{builder.__module__}.mf")
+    assert spec.methods == methods
+    assert spec.fidelity == "real"
+    # Defensive copy — mutating the caller's list shouldn't reach the entry.
+    methods.append("intruder")
+    assert len(entry.methods) == 2
+
+
+def test_decorator_methods_fidelity_optional_defaults():
+    """Omitting ``methods`` / ``fidelity`` yields the backward-compatible
+    defaults ([] and "") so old composites are unaffected."""
+    @composite_generator(name="mf-opt", description="", parameters={})
+    def builder(core=None):
+        return {}
+
+    entry = _REGISTRY[f"{builder.__module__}.mf-opt"]
+    assert entry.methods == []
+    assert entry.fidelity == ""
+
+
 def test_emitter_defaults_accessor_reads_function_and_entry():
     emitters = [{"address": "local:ParquetEmitter", "config": {"out_dir": "d"}}]
 
@@ -441,6 +478,10 @@ def test_discover_all_merges_specs_and_generators(tmp_path, installed_fake_pkg):
     assert merged[gen_id].get("visualizations") == []
     # emitters likewise — the default observation sink(s) travel with the entry.
     assert merged[gen_id].get("emitters") == []
+    # methods/fidelity travel through the serialized dict so a worker-boundary
+    # consumer still sees the modeling provenance (defaults when undeclared).
+    assert merged[gen_id].get("methods") == []
+    assert merged[gen_id].get("fidelity") == ""
 
 
 # ---------------------------------------------------------------------------

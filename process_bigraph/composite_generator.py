@@ -71,6 +71,14 @@ class GeneratorEntry:
     # package's ``register_*`` functions here lets the runner apply them to
     # the right core. See ``apply_core_extensions``.
     core_extensions: list[Callable[[Any], Any]] = field(default_factory=list)
+    # Short modeling-method tags this composite declares (e.g.
+    # ``["PHREEQC speciation", "FiPy FVM transport"]``). Optional + backward-
+    # compatible; mirrors ``CompositeSpec.methods``.
+    methods: list[str] = field(default_factory=list)
+    # Honest fidelity label: ``"real"`` (wraps a genuine simulator) or
+    # ``"reproduction"`` (coarse-grained hand-rolled model). ``""`` when
+    # undeclared. Mirrors ``CompositeSpec.fidelity``.
+    fidelity: str = ""
 
 
 def _entry_for(spec) -> GeneratorEntry:
@@ -88,6 +96,8 @@ def _entry_for(spec) -> GeneratorEntry:
         analyses=spec.analyses,
         emitters=spec.emitters,
         core_extensions=spec.core_extensions,
+        methods=list(getattr(spec, "methods", []) or []),
+        fidelity=getattr(spec, "fidelity", "") or "",
     )
 
 
@@ -164,6 +174,8 @@ class _RegistryView:
                 analyses=list(getattr(entry, "analyses", []) or []),
                 emitters=list(getattr(entry, "emitters", []) or []),
                 core_extensions=list(getattr(entry, "core_extensions", []) or []),
+                methods=list(getattr(entry, "methods", []) or []),
+                fidelity=getattr(entry, "fidelity", "") or "",
             )
         _cs.register(spec)
 
@@ -192,6 +204,8 @@ def composite_generator(
     default_n_steps: int | None = None,
     core_extensions: list[Callable[[Any], Any]] | None = None,
     default_state_ref: str | None = None,
+    methods: list[str] | None = None,
+    fidelity: str = "",
 ) -> Callable[[Callable[..., dict]], Callable[..., dict]]:
     """Decorator: register a doc-building function.
 
@@ -254,6 +268,16 @@ def composite_generator(
     artifact relative to the workspace root.  When present, ``CompositeSpec``
     can serve the state without re-running the builder.
 
+    `methods` (optional) is a list of short modeling-method tags describing
+    how this composite is built (e.g. ``["PHREEQC speciation",
+    "FiPy FVM transport"]``). Defaults to ``[]``.
+
+    `fidelity` (optional) is an honest label for what the composite actually
+    is: ``"real"`` when it wraps a genuine external simulator, or
+    ``"reproduction"`` for a coarse-grained hand-rolled model that is not a
+    wrapped engine. Defaults to ``""`` (undeclared). Both travel through to the
+    generator's ``GeneratorEntry`` so downstream UIs can report them honestly.
+
     `core_extensions` (optional) is a list of callables ``(core) -> core | None``
     that register the custom types/processes this generator's document
     references but that a bare ``build_core()`` doesn't provide. Declare a
@@ -285,6 +309,8 @@ def composite_generator(
             default_n_steps=default_n_steps,
             core_extensions=core_extensions,
             default_state_ref=default_state_ref,
+            methods=methods,
+            fidelity=fidelity,
         )(fn)
         # Build + cache the GeneratorEntry NOW so that identity comparisons
         # (``fn._composite_generator_entry is _REGISTRY[spec_id]``) hold.

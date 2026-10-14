@@ -298,6 +298,13 @@ class CompositeSpec:
     default_state_ref: "str | None" = None
     module: str = ""
     core_extensions: list = field(default_factory=list)
+    # Short modeling-method tags, e.g. ["PHREEQC speciation", "FiPy FVM transport"].
+    # Optional + backward-compatible; old composites that declare none get [].
+    methods: list = field(default_factory=list)
+    # Honest label for whether this composite wraps a genuine simulator
+    # ("real") or is a coarse-grained hand-rolled reproduction ("reproduction").
+    # Empty string when undeclared. Optional + backward-compatible.
+    fidelity: str = ""
     global_time_precision: "float | int | None" = None
 
     def __post_init__(self) -> None:
@@ -367,6 +374,8 @@ class CompositeSpec:
             builder=builder,
             default_state_ref=raw.get("default_state_ref"),
             module=raw.get("module", ""),
+            methods=list(raw.get("methods") or []),
+            fidelity=raw.get("fidelity", ""),
             global_time_precision=raw.get("global_time_precision"),
         )
 
@@ -529,11 +538,16 @@ def clear_registry() -> None:
 
 def composite_spec(*, name, description="", parameters=None, visualizations=None,
                    emitters=None, analyses=None, tags=None, default_n_steps=None,
-                   core_extensions=None, default_state_ref=None):
+                   core_extensions=None, default_state_ref=None,
+                   methods=None, fidelity=""):
     """Decorator: register a generator function as a CompositeSpec.
 
     The wrapped fn becomes the spec's ``builder``; its id is
     ``"<fn.__module__>.<name>"``. Returns the original fn unchanged.
+
+    ``methods`` / ``fidelity`` are optional modeling-provenance metadata (see
+    the :class:`CompositeSpec` field docs): a list of short method tags and a
+    ``"real"``/``"reproduction"`` honesty label. Both default to empty.
     """
     def decorate(fn):
         spec = CompositeSpec(
@@ -550,6 +564,8 @@ def composite_spec(*, name, description="", parameters=None, visualizations=None
             module=fn.__module__,
             default_state_ref=default_state_ref,
             core_extensions=list(core_extensions or []),
+            methods=list(methods or []),
+            fidelity=fidelity or "",
         )
         register(spec)
         return fn
