@@ -83,8 +83,10 @@ def discover_all(
 
     Spec entries get ``kind: spec`` and pass through the existing spec
     payload. Generator entries get ``kind: generator`` and a compact dict
-    {name, description, parameters, module} so dashboards can render them
-    without holding a reference to the live function object.
+    {name, description, parameters, visualizations, emitters, module,
+    default_n_steps, methods, fidelity} so dashboards can render them (and
+    report their modeling provenance) without holding a reference to the live
+    function object.
 
     Discovery imports the host packages of every generator (see
     :func:`process_bigraph.composite_generator.discover_generators`). If
@@ -118,6 +120,12 @@ def discover_all(
             "emitters": list(entry.emitters),
             "module": entry.module,
             "default_n_steps": entry.default_n_steps,
+            # Modeling-provenance metadata — so a consumer that only sees this
+            # serialized dict (e.g. a dashboard across a worker boundary) can
+            # still report how the composite is built and whether it wraps a
+            # genuine simulator. Always present (empty list / "" when undeclared).
+            "methods": list(getattr(entry, "methods", []) or []),
+            "fidelity": getattr(entry, "fidelity", "") or "",
         }
     return out
 
