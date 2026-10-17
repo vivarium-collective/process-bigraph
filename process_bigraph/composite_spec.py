@@ -288,6 +288,11 @@ class CompositeSpec:
     tags: list = field(default_factory=list)
     parameters: dict = field(default_factory=dict)
     default_n_steps: "int | None" = None
+    # Preferred run duration as a unit-bearing quantity string, e.g. "2 hours",
+    # "500 years" — the composite's own run timescale (typically coarser than
+    # its internal processes' intervals). A UI hint for the Run window; it does
+    # not change the engine (runs still advance in steps). None = unset.
+    preferred_time: "str | None" = None
     visualizations: list = field(default_factory=list)
     analyses: list = field(default_factory=list)
     emitters: list = field(default_factory=list)
@@ -365,6 +370,7 @@ class CompositeSpec:
             tags=list(raw.get("tags") or []),
             parameters=dict(raw.get("parameters") or {}),
             default_n_steps=raw.get("default_n_steps"),
+            preferred_time=raw.get("preferred_time"),
             visualizations=list(raw.get("visualizations") or []),
             analyses=list(raw.get("analyses") or []),
             emitters=list(raw.get("emitters") or []),
@@ -538,7 +544,7 @@ def clear_registry() -> None:
 
 def composite_spec(*, name, description="", parameters=None, visualizations=None,
                    emitters=None, analyses=None, tags=None, default_n_steps=None,
-                   core_extensions=None, default_state_ref=None,
+                   preferred_time=None, core_extensions=None, default_state_ref=None,
                    methods=None, fidelity=""):
     """Decorator: register a generator function as a CompositeSpec.
 
@@ -557,6 +563,7 @@ def composite_spec(*, name, description="", parameters=None, visualizations=None
             tags=list(tags or []),
             parameters=dict(parameters or {}),
             default_n_steps=default_n_steps,
+            preferred_time=preferred_time,
             visualizations=list(visualizations or []),
             analyses=list(analyses or []),
             emitters=list(emitters or []),

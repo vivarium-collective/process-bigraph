@@ -37,6 +37,7 @@ class GeneratorEntry:
     func: Callable[..., dict]
     module: str
     default_n_steps: int | None = None  # framework-owned runtime knob; UI pre-fill
+    preferred_time: str | None = None   # unit-bearing run timescale, e.g. "500 years"
     # Canonical visualizations that ship with this composite. Each entry is
     # a Study-spec visualization dict ({name, address, config, ...}). When
     # a Study is built on top of this composite the dashboard merges these
@@ -92,6 +93,7 @@ def _entry_for(spec) -> GeneratorEntry:
               else (_cs._resolve_builder(spec.builder, spec.module) if spec.builder else None)),
         module=spec.module,
         default_n_steps=spec.default_n_steps,
+        preferred_time=getattr(spec, "preferred_time", None),
         visualizations=spec.visualizations,
         analyses=spec.analyses,
         emitters=spec.emitters,
@@ -170,6 +172,7 @@ class _RegistryView:
                 builder=getattr(entry, "func", None),
                 module=getattr(entry, "module", ""),
                 default_n_steps=getattr(entry, "default_n_steps", None),
+                preferred_time=getattr(entry, "preferred_time", None),
                 visualizations=list(getattr(entry, "visualizations", []) or []),
                 analyses=list(getattr(entry, "analyses", []) or []),
                 emitters=list(getattr(entry, "emitters", []) or []),
@@ -202,6 +205,7 @@ def composite_generator(
     analyses: list[dict] | None = None,
     emitters: list[dict] | None = None,
     default_n_steps: int | None = None,
+    preferred_time: str | None = None,
     core_extensions: list[Callable[[Any], Any]] | None = None,
     default_state_ref: str | None = None,
     methods: list[str] | None = None,
@@ -264,6 +268,12 @@ def composite_generator(
     ``steps`` pre-fill. It is NOT a composite-builder kwarg — runtime knobs
     are framework-owned and live next to the generator entry.
 
+    `preferred_time` (optional) is the composite's own run timescale as a
+    unit-bearing quantity string, e.g. ``"2 hours"`` / ``"500 years"`` — usually
+    coarser than its internal processes' per-step intervals. Like
+    ``default_n_steps`` it is a UI hint (shown in the Run window) and does not
+    change the engine, which still advances in steps.
+
     `default_state_ref` (optional) path to a pre-computed default-state
     artifact relative to the workspace root.  When present, ``CompositeSpec``
     can serve the state without re-running the builder.
@@ -307,6 +317,7 @@ def composite_generator(
             analyses=analyses,
             emitters=validated_emitters,
             default_n_steps=default_n_steps,
+            preferred_time=preferred_time,
             core_extensions=core_extensions,
             default_state_ref=default_state_ref,
             methods=methods,
