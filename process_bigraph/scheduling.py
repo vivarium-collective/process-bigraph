@@ -304,6 +304,28 @@ def find_leaves(tree_structure, path=None):
     return leaves
 
 
+def _is_structural_output(port_type) -> bool:
+    """True when an output port's type is a structural (``_add``/``_remove``)
+    restructure of a subtree rather than a data write to leaves.
+
+    A ``node`` port, or a ``map``/``array``/``tree`` of ``node``, carries
+    structural updates (``{'_add': ..., '_remove': ...}``) — e.g. the
+    division shape ``{'agents': {'_add': [...], '_remove': [...]}}``. The step
+    replaces whole members; it never writes the internal leaves of whatever
+    already lives under that port. The dependency graph must not treat it as a
+    producer of those leaves (process-bigraph #248).
+    """
+    if port_type == 'node':
+        return True
+    if isinstance(port_type, dict):
+        if port_type.get('_type') == 'node':
+            return True
+        if (port_type.get('_type') in ('map', 'array', 'tree')
+                and port_type.get('_value') == 'node'):
+            return True
+    return False
+
+
 def build_step_network(steps):
     """
     Build the data dependency graph among steps.
@@ -320,6 +342,10 @@ def build_step_network(steps):
         for step_key in steps
     }
     nodes = {}
+    # path (tuple) -> set of step_keys that write it via a STRUCTURAL (node /
+    # map-of-node) output port. Such a write restructures the container at that
+    # path; it does not produce the data leaves beneath it (#248).
+    structural_outputs = {}
 
     for step_key, step in steps.items():
         schema = step['instance'].interface()
@@ -350,10 +376,20 @@ def build_step_network(steps):
                 ancestors[step_key]['input_paths'] = find_leaves(step['inputs'], path=step_key[:-1])
 
         # Compute output paths once per step
+        out_wiring = step.get('_dep_outputs', step.get('outputs', {}))
         if ancestors[step_key]['output_paths'] is None:
             ancestors[step_key]['output_paths'] = find_leaves(
-                step.get('_dep_outputs', step.get('outputs', {})),
-                path=step_key[:-1])
+                out_wiring, path=step_key[:-1])
+
+        # Record which of this step's output paths are STRUCTURAL (a node /
+        # map-of-node port). These restructure the container, so later passes
+        # must not propagate them as producers of the data leaves beneath them.
+        out_schema = schema.get('outputs', {}) if isinstance(schema, dict) else {}
+        if isinstance(out_wiring, dict):
+            for port, port_type in out_schema.items():
+                if port in out_wiring and _is_structural_output(port_type):
+                    for p in find_leaves({port: out_wiring[port]}, path=step_key[:-1]):
+                        structural_outputs.setdefault(tuple(p), set()).add(step_key)
 
         # Assign the priority
         if ancestors[step_key]['priority'] is None:
@@ -402,6 +438,20 @@ def build_step_network(steps):
         for out_path, producers in all_output_paths.items():
             if (len(node_path) > len(out_path)
                     and node_path[:len(out_path)] == out_path):
+                # Structural producers (a node / map-of-node _add/_remove at
+                # out_path) restructure the container; they do NOT write the
+                # data leaves beneath it, so they must not become producers of
+                # this descendant leaf. Dropping them is the exact-leaf case
+                # that the container-restructure-peer skip below (#243) did not
+                # cover: there the consumer also writes the container, here the
+                # consumer reads/writes a deeper leaf the structural step never
+                # touches (process-bigraph #248 — the Division vs Allocator
+                # false cycle). The structural step still orders against steps
+                # that read/write the container membership itself (an exact or
+                # shallower match, handled in the first pass).
+                data_producers = producers - structural_outputs.get(out_path, set())
+                if not data_producers:
+                    continue
                 # Container-restructure peers: when every consumer of this
                 # member path also WRITES the same ancestor container
                 # (``outputs: {..: ['..']}`` — the map _add/_remove / division
@@ -413,9 +463,9 @@ def build_step_network(steps):
                 # deeper data match is handled by the first pass above (which
                 # leaves ``before`` non-empty, so we never reach here for it),
                 # so skipping only affects pure container-ancestor edges.
-                if consumers and consumers <= producers:
+                if consumers and consumers <= data_producers:
                     continue
-                deps['before'].update(producers)
+                deps['before'].update(data_producers)
 
     # Also propagate child outputs to parent inputs.
     # If step A produces path P/X and step B consumes P, then B depends on A.

@@ -4462,6 +4462,57 @@ def test_sibling_steps_restructuring_a_shared_map_are_not_a_cycle(core):
     Composite({'state': document}, core=core)
 
 
+def test_structural_node_output_is_not_a_producer_of_member_leaves(core):
+    """A step whose output is a structural ``_add``/``_remove`` of a node /
+    map-of-node port (e.g. division replacing the ``agents`` map) must NOT be
+    treated as a producer of the data leaves that currently live under that
+    port. Otherwise a peer step that genuinely reads/writes one of those
+    leaves (e.g. an allocator on ``listeners/atp``) is flagged as mutually
+    dependent and the build raises a FALSE ``step dependency cycle``.
+
+    Regression for process-bigraph #248: the exact-leaf case #243's
+    container-restructure-peer skip did not cover — the consumer reads/writes a
+    deeper leaf the structural step never touches (and reads a *container* the
+    allocator writes a leaf under, so the self-loop skip misses it too)."""
+    class Divider(Step):
+        """Structurally replaces the agents map; reads the agent's listeners
+        container (never its internal leaves)."""
+        config_schema = {}
+        def inputs(self):
+            return {'listeners': 'tree'}
+        def outputs(self):
+            return {'agents': {'_type': 'map', '_value': 'node'}}
+        def update(self, state):
+            return {}
+
+    class Allocator(Step):
+        """Genuinely reads AND writes a deep leaf, ``listeners/atp``."""
+        config_schema = {}
+        def inputs(self):
+            return {'atp': 'integer'}
+        def outputs(self):
+            return {'atp': 'integer'}
+        def update(self, state):
+            return {'atp': state['atp']}
+
+    core.register_link('Divider', Divider)
+    core.register_link('Allocator', Allocator)
+
+    document = {'agents': {'0': {
+        'listeners': {'atp': 5},
+        'division': {'_type': 'step', 'address': 'local:Divider',
+                     'inputs': {'listeners': ['listeners']},
+                     'outputs': {'agents': ['..']}},
+        'allocator_2': {'_type': 'step', 'address': 'local:Allocator',
+                        'inputs': {'atp': ['listeners', 'atp']},
+                        'outputs': {'atp': ['listeners', 'atp']}},
+    }}}
+
+    # must not raise: the structural agents restructure is not a producer of
+    # agents/0/listeners/atp, so there is no cycle with the allocator.
+    Composite({'state': document}, core=core)
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================
