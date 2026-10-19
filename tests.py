@@ -2622,6 +2622,56 @@ def test_ray_protocol_address_batches_per_tick(core):
 
 
 @pytest.mark.slow
+def test_ray_shard_actors_spread_across_worker_nodes():
+    """Shard actors request no Ray resources, so without a placement hint Ray's
+    default policy has no load signal and piles about twice the fair share onto
+    one node. On a real multi-node cluster (CPU-less head + 3 workers) the
+    busiest worker must hold at most ceil(N/3) + 2 of N shards.
+
+    Falsified by dropping ``scheduling_strategy="SPREAD"`` from the shard actor
+    class, but only probabilistically: placement of the unpatched class is
+    random, and a simulation of the observed placement model has it pass this
+    bound about 4% of the time at N=48 (so the test fails on unpatched code
+    about 96% of runs; the final structural assertion also fails unpatched but is no
+    evidence that the effect works). The ``len(counts)`` assertion is a sanity check only:
+    it holds unpatched too (a CPU-less head gets no shards either way)."""
+    pytest.importorskip("ray")
+    import math
+    import ray as _ray
+    from ray.cluster_utils import Cluster
+    from process_bigraph.protocols.ray import (
+        RayProtocolRuntime, _batch_actor_class, register_process_class,
+        shutdown_all_runtimes,
+    )
+
+    n_shards, n_workers = 48, 3
+    small_store = 100 * 1024 * 1024
+    cluster = Cluster(initialize_head=True,
+                      head_node_args={"num_cpus": 0, "object_store_memory": small_store})
+    try:
+        for _ in range(n_workers):
+            cluster.add_node(num_cpus=4, object_store_memory=small_store)
+        cluster.wait_for_nodes(n_workers + 1)
+        register_process_class("IncreaseProcess", IncreaseProcess)
+        runtime = RayProtocolRuntime(n_shards_default=n_shards, ray_address=cluster.address)
+        pool = runtime._pool_for("IncreaseProcess", {})
+        nodes = _ray.get([
+            a.__ray_call__.remote(lambda self: _ray.get_runtime_context().get_node_id())
+            for a in pool.actors])
+        counts = {n: nodes.count(n) for n in set(nodes)}
+        assert len(nodes) == n_shards
+        assert len(counts) == n_workers, f"shards must run on the worker nodes only: {counts}"  # sanity only
+        assert max(counts.values()) <= math.ceil(n_shards / n_workers) + 2, counts
+        # Structural companion to the placement check above (not evidence that it works).
+        assert _batch_actor_class()._default_options["scheduling_strategy"] == "SPREAD"
+    finally:
+        shutdown_all_runtimes()
+        if _ray.is_initialized():
+            _ray.shutdown()
+        cluster.shutdown()
+
+
+@pytest.mark.slow
 def test_rest_server_initialize_inputs_outputs_update(core):
     """Smoke-test the in-process REST server (no socket): initialize a process,
     query its ports, run an update, end it. Mirrors the round-trip that

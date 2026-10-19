@@ -414,7 +414,9 @@ def _batch_actor_class():
         return _BatchActorClass
     _require_ray()
 
-    @ray.remote
+    # SPREAD: the shard actors request no resources, so Ray's default policy has no load
+    # signal and stacks about twice the fair share on one node.
+    @ray.remote(scheduling_strategy="SPREAD")
     class _RayBatchActor:
         """Long-lived actor hosting MANY underlying Process instances,
         keyed by proc_id. Cells with the same shared config (schema/
