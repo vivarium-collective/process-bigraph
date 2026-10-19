@@ -2621,6 +2621,32 @@ def test_ray_protocol_address_batches_per_tick(core):
             _ray.shutdown()
 
 
+def test_ray_batch_actor_spread_is_default_and_opt_outable(monkeypatch):
+    """SPREAD is applied to the shard actor class by default (the #246 fix), and
+    ``PROCESS_BIGRAPH_RAY_SPREAD=0`` restores bare placement for callers who want
+    packing. Structural only -- no cluster; the placement effect itself is the
+    slow test below. Builds the actor class directly (``@ray.remote`` wrapping
+    needs ray importable, not a running cluster)."""
+    pytest.importorskip("ray")
+    from process_bigraph.protocols import ray as _raymod
+
+    def _strategy_under(env_value):
+        if env_value is None:
+            monkeypatch.delenv("PROCESS_BIGRAPH_RAY_SPREAD", raising=False)
+        else:
+            monkeypatch.setenv("PROCESS_BIGRAPH_RAY_SPREAD", env_value)
+        _raymod._BatchActorClass = None            # force a rebuild under this env
+        try:
+            cls = _raymod._batch_actor_class()
+            return (cls._default_options or {}).get("scheduling_strategy")
+        finally:
+            _raymod._BatchActorClass = None        # don't leak a pinned class to other tests
+
+    assert _strategy_under(None) == "SPREAD"        # default: on
+    assert _strategy_under("1") == "SPREAD"
+    assert _strategy_under("0") is None             # opt-out: bare placement
+
+
 @pytest.mark.slow
 def test_ray_shard_actors_spread_across_worker_nodes():
     """Shard actors request no Ray resources, so without a placement hint Ray's
@@ -2663,7 +2689,8 @@ def test_ray_shard_actors_spread_across_worker_nodes():
         assert len(counts) == n_workers, f"shards must run on the worker nodes only: {counts}"  # sanity only
         assert max(counts.values()) <= math.ceil(n_shards / n_workers) + 2, counts
         # Structural companion to the placement check above (not evidence that it works).
-        assert _batch_actor_class()._default_options["scheduling_strategy"] == "SPREAD"
+        # ``.get`` tolerates Ray reshaping the internal options dict across versions.
+        assert (_batch_actor_class()._default_options or {}).get("scheduling_strategy") == "SPREAD"
     finally:
         shutdown_all_runtimes()
         if _ray.is_initialized():
