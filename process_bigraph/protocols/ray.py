@@ -414,9 +414,26 @@ def _batch_actor_class():
         return _BatchActorClass
     _require_ray()
 
-    # SPREAD: the shard actors request no resources, so Ray's default policy has no load
-    # signal and stacks about twice the fair share on one node.
-    @ray.remote(scheduling_strategy="SPREAD")
+    # Shard actors request no Ray resources, so Ray's default scheduler has no
+    # load signal to balance on and stacks about twice the fair share onto one
+    # node (#246); that node's memory then fills and Ray's OOM monitor kills the
+    # whole run while the others sit far below theirs. SPREAD distributes the
+    # actors across nodes and is the default here. Set
+    # ``PROCESS_BIGRAPH_RAY_SPREAD=0`` to restore bare placement (e.g. to pack
+    # for locality on a single node or a small homogeneous cluster).
+    #
+    # SPREAD distributes across the nodes that have capacity: a CPU-less head --
+    # the usual colony/gang layout -- is excluded naturally, so the shards land
+    # on the workers. On a cluster whose head DOES carry CPUs, shards may also
+    # land on the head; that is still a memory-balancing win over piling on one
+    # worker, which is what this fixes.
+    # Select the decorator rather than calling ``ray.remote(**opts)``: an empty
+    # options dict would become ``ray.remote()`` (empty parens), which Ray
+    # rejects -- the bare ``ray.remote`` form is required when no options apply.
+    _spread = os.environ.get("PROCESS_BIGRAPH_RAY_SPREAD", "1") != "0"
+    _remote = ray.remote(scheduling_strategy="SPREAD") if _spread else ray.remote
+
+    @_remote
     class _RayBatchActor:
         """Long-lived actor hosting MANY underlying Process instances,
         keyed by proc_id. Cells with the same shared config (schema/
