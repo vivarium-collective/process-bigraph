@@ -41,7 +41,16 @@ from process_bigraph.composite_spec import (  # noqa: F401
     normalize_type, CANONICAL_TYPES,
 )
 from process_bigraph.bundle import load_bundle  # noqa: F401
-from process_bigraph.draft_process import DraftProcess, draft_process  # noqa: F401
+from process_bigraph.draft_process import (  # noqa: F401
+    DraftProcess, draft_process, draft_to_contract, DraftProcessDeprecationWarning,
+)
+# Holes-in-place: the public lifecycle for a process-slot left as a hole whose
+# sort is a ProcessContract — design, inspect, see what fits, fill, build.
+from process_bigraph.holes import UnfilledHoleError  # noqa: F401
+from process_bigraph.templates import (  # noqa: F401
+    open_sites, required_open_sites, is_ground_document, fill_template, template_document,
+)
+from bigraph_schema.matching import find_candidates  # noqa: F401
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state  # noqa: F401
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink  # noqa: F401
 from process_bigraph import core_introspection  # noqa: F401

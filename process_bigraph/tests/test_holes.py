@@ -157,3 +157,62 @@ def test_template_document_unfilled_raises_report():
     with pytest.raises(UnfilledHoleError) as excinfo:
         template_document(core, template, {})
     assert "study/model" in str(excinfo.value)
+
+
+# ── Task 4: public API surface + end-to-end lifecycle ─────────────────
+
+def test_public_api_importable():
+    import process_bigraph as pbg
+
+    for name in (
+        "UnfilledHoleError",
+        "open_sites",
+        "required_open_sites",
+        "is_ground_document",
+        "fill_template",
+        "template_document",
+        "find_candidates",
+        "draft_to_contract",
+        "DraftProcessDeprecationWarning",
+    ):
+        assert hasattr(pbg, name), f"process_bigraph.{name} is not exported"
+
+
+def test_hole_lifecycle_design_inspect_fill_build():
+    import process_bigraph as pbg
+
+    core = _core()  # registers contract 'PTH' + process 'PTHReal'
+
+    # 1. design: a composite whose model slot is a hole sorted by the contract.
+    template = core.access(
+        {"study": {"ca": 3.0, "pth": 0.0, "model": {"_type": "site", "_sort": "PTH"}}}
+    )
+
+    # 2. inspect: the hole is open and blocks a build.
+    assert pbg.open_sites(template) == [("study", "model")]
+    assert pbg.required_open_sites(template) == [("study", "model")]
+    assert pbg.is_ground_document(template) is False
+
+    # 3. see what fits: an admissible registered process.
+    (_path, site), = interfaces(template)[0]._places
+    candidates = pbg.find_candidates(core, site)
+    assert any(c.address == "PTHReal" and c.match == "full" for c in candidates)
+
+    # 4. fill with the admissible process → ground.
+    filler = core.access(
+        {
+            "_type": "process",
+            "address": "local:PTHReal",
+            "config": {},
+            "interval": 1.0,
+            "inputs": {"ca_sense": ["ca"]},
+            "outputs": {"pth_out": ["pth"]},
+        }
+    )
+    document = pbg.template_document(core, template, {"study/model": filler})
+    assert pbg.is_ground_document(core.access(document))
+
+    # 5. build + run.
+    sim = pbg.Composite({"state": document}, core=core)
+    sim.run(1.0)
+    assert sim is not None
