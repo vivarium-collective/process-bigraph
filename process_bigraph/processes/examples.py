@@ -98,34 +98,6 @@ class SimpleCompartment(Process):
             inner)
 
         if choice < 0.2:
-            # update = {
-            #     'outer': {
-            #         '_divide': {
-            #             'mother': self.config['id'],
-            #             'daughters': [
-            #                 {'id': self.config['id'] + '0'},
-            #                 {'id': self.config['id'] + '1'}]}}}
-
-            # daughter_ids = [self.config['id'] + str(i)
-            #     for i in range(2)]
-
-            # update = {
-            #     'outer': {
-            #         '_react': {
-            #             'redex': {
-            #                 'inner': {
-            #                     self.config['id']: {}}},
-            #             'reactum': {
-            #                 'inner': {
-            #                     daughter_config['id']: {
-            #                         '_type': 'process',
-            #                         'address': 'local:SimpleCompartment',
-            #                         'config': daughter_config,
-            #                         'inner': daughter_inner,
-            #                         'wires': {
-            #                             'outer': ['..']}}
-            #                     for daughter_config, daughter_inner in zip(daughter_configs, divisions)}}}}}
-
             daughter_ids = [self.config['id'] + str(i)
                 for i in range(len(divisions))]
 
