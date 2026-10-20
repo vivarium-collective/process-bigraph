@@ -101,28 +101,41 @@ print(gather_emitter_results(composite))
 # {('emitter',): [{'level': 1.0, 'time': 0.0}, {'level': 1.5, ...}, ... {'level': 7.59, 'time': 5.0}]}
 ```
 
-**2. A draft process — a present-but-inert placeholder node.** It declares a contract
-(ports + description) but has no `update`, so a composite containing it still runs; the
-draft just no-ops. Complementary to a *site* (step 3): a draft is a node that is *there
-but inert*, a site is an empty *hole*.
+**2. A draft — an open hole whose sort is a contract.** A not-yet-implemented
+process-slot is a *hole*: an open **site** (step 3) whose `_sort` names a
+`ProcessContract` (its typed face + conditions). You design and review the topology
+with the hole in place, then fill it with any process the contract *admits*.
+`Composite` refuses to build while a required hole is open, and reports **which** hole,
+**what** contract it requires, and **which** registered processes would fill it.
 
 ```python
-from process_bigraph import DraftProcess, draft_process
+from bigraph_schema.contract import ProcessContract
+from process_bigraph import find_candidates, UnfilledHoleError
 
-@draft_process(name="PTH secretion",
-    inputs={'ca_sense': 'float'}, outputs={'pth_out': 'float'},
-    contract={'summary': 'senses serum Ca, secretes PTH', 'senses': 'calcium', 'makes': 'PTH'})
-class PTHSecretion(DraftProcess):
-    pass
+# register the intended interface as a named contract …
+core.register_contract('PTHSecretion', ProcessContract(
+    summary='senses serum Ca, secretes PTH',
+    face={'inputs': {'ca_sense': 'float'}, 'outputs': {'pth_out': 'float'}}))
 
-core.register_link('PTHSecretion', PTHSecretion)
-print(PTHSecretion({}, core=core).describe())
-# DRAFT — senses serum Ca, secretes PTH  ·  makes: PTH  ·  senses: calcium  ·  status: draft - no update dynamics yet
+# … and leave the slot as a hole sorted by it
+template = core.access({'parathyroid': {'ca': 2.5, 'pth': 0.0,
+    'secretion': {'_type': 'site', '_sort': 'PTHSecretion'}}})
+
+# Composite(..., unfilled) → UnfilledHoleError, not an opaque KeyError:
+#   not ground — required site(s) left unfilled: 'parathyroid/secretion'
+#     • parathyroid/secretion
+#         requires: inputs: ca_sense: float   outputs: pth_out: float
+#         candidates: ✓ <any registered process whose contract admits the hole>
 ```
 
-A module-scope draft auto-registers, so it appears in the vivarium-workbench dashboard
-(Modules → Processes) marked **DRAFT** with its ports and contract — no code change
-needed. Replace it with a real `Process` once the mechanism is committed.
+Fill it (step 3) with a process `find_candidates(core, site)` reports as admissible,
+and build. The full design → inspect → fill → build lifecycle — and the rejection
+report in full — is in
+[docs/concepts/designing-with-holes.md](docs/concepts/designing-with-holes.md).
+
+> **Deprecated:** `@draft_process` / `DraftProcess` (an inert placeholder *node*) still
+> work but now emit `DraftProcessDeprecationWarning` — model a draft as a hole instead.
+> `draft_to_contract(cls)` bridges an existing draft's interface to a `ProcessContract`.
 
 **3. A template — a composite with an open site (hole).** A template is a document that
 isn't *ground*: it has open **sites** (`{"_type": "site"}`). `Composite` refuses to run
@@ -157,7 +170,7 @@ def model(rate):                                      # any conforming composite
 sim = Composite({'state': template_document(core, template, {'study/model': model(0.5)})}, core=core)
 sim.run(4.0)
 print(sim.state['study']['verdict'])                  # pass  (a slower model → fail)
-# template_document(core, template, {}) → ValueError: not ground — required site 'study/model'
+# template_document(core, template, {}) → UnfilledHoleError: not ground — required site 'study/model'
 ```
 
 **4. An investigation — one site per member study; gating is *filling*.** Fill a
