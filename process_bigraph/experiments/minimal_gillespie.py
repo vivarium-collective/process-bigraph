@@ -10,7 +10,7 @@ general stochastic transcription.
 
 import numpy as np
 
-from process_bigraph.composite import Step, Process, ProcessEnsemble
+from process_bigraph.composite import Step, Process
 
 
 class GillespieInterval(Step):
@@ -151,56 +151,3 @@ class GillespieEvent(Process):
         # print(f'received interval: {interval}')
 
         return update
-
-
-class GillespieSimulation(ProcessEnsemble):
-    def __init__(self, config=None, core=None):
-        super.__init__(config, core)
-
-
-    def inputs_interval(self):
-        return {
-            'DNA': 'map[default 1]',
-            'mRNA': {
-                'A mRNA': 'default 1',
-                'B mRNA': 'default 1'}}
-
-                    # {
-                    # '_type': 'map',
-                    # '_value': 'float(default:1.0)'},
-
-                    # 'G': {
-                    #     '_type': 'float',
-                    #     '_default': '1.0'}},
-
-
-    def outputs_interval(self):
-        return {
-            'interval': 'interval'}
-
-
-    # def interface_interval(self):
-
-
-    def calculate_interval(self, inputs):
-        # retrieve the state values
-        g = input['DNA']['A gene']
-        c = input['mRNA']['A mRNA']
-
-        array_state = np.array([g, c])
-
-        # Calculate propensities
-        propensities = [
-            self.config['ktsc'] * array_state[0],
-            self.config['kdeg'] * array_state[1]]
-        prop_sum = sum(propensities)
-
-        # The wait time is distributed exponentially
-        interval = np.random.exponential(scale=prop_sum)
-
-        output = {
-            'interval': interval}
-
-        print(f'produced interval: {output}')
-
-        return output
