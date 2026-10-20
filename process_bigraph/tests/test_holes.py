@@ -8,7 +8,8 @@ registered processes that would fill it — replacing the opaque ``KeyError:
 import pytest
 
 from process_bigraph import allocate_core
-from process_bigraph.composite import Process
+from process_bigraph.composite import Composite, Process
+from process_bigraph.templates import template_document
 from process_bigraph.holes import (
     HoleReport,
     UnfilledHoleError,
@@ -104,3 +105,55 @@ def test_find_candidates_failure_never_masks_primary_error(monkeypatch):
     assert err.holes[0].candidates == []
     assert "model" in str(err)
     assert "not ground" in str(err)
+
+
+# ── Task 3: the Composite groundness guards raise the report ──────────
+
+def _unfilled_composite_doc():
+    return {"state": {"study": {"model": {"_type": "site", "_sort": "PTH"}}}}
+
+
+def test_building_composite_with_unfilled_hole_raises_report():
+    core = _core()
+    with pytest.raises(UnfilledHoleError) as excinfo:
+        Composite(_unfilled_composite_doc(), core=core)
+    text = str(excinfo.value)
+    assert "study/model" in text
+    assert "ca_sense" in text
+    assert "PTHReal" in text
+
+
+def test_except_valueerror_still_catches():
+    core = _core()
+    try:
+        Composite(_unfilled_composite_doc(), core=core)
+        assert False, "expected an unfilled-hole raise"
+    except ValueError as error:
+        assert isinstance(error, UnfilledHoleError)
+
+
+def test_ground_composite_with_unwired_ports_still_builds():
+    core = _core()
+    doc = {
+        "state": {
+            "ca": 3.0,
+            "pth": 0.0,
+            "pth_proc": {
+                "_type": "process",
+                "address": "local:PTHReal",
+                "config": {},
+                "inputs": {"ca_sense": ["ca"]},
+                "outputs": {"pth_out": ["pth"]},
+            },
+        }
+    }
+    sim = Composite(doc, core=core)  # must not raise — unwired ports are not holes
+    assert sim is not None
+
+
+def test_template_document_unfilled_raises_report():
+    core = _core()
+    template = core.access({"study": {"model": {"_type": "site", "_sort": "PTH"}}})
+    with pytest.raises(UnfilledHoleError) as excinfo:
+        template_document(core, template, {})
+    assert "study/model" in str(excinfo.value)

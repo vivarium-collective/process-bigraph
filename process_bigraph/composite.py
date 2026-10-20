@@ -2899,15 +2899,20 @@ class Composite(Process):
             per_process=dict(self._per_process_time),
         )
 
-    @staticmethod
-    def _raise_not_ground(unfilled) -> None:
-        """Raise the shared "not ground" error naming the open site paths."""
-        named = ', '.join(repr('/'.join(path)) for path in unfilled)
-        raise ValueError(
-            f'composite document is not ground — required site(s) left '
-            f'unfilled: {named}. An open site is a hole where a process '
-            f'or value should be; fill it before constructing the '
-            f'composite (bigraph_schema `fill_sites` / `build`).')
+    def _raise_unfilled(self, unfilled_pairs) -> None:
+        """Raise a contract-aware :class:`~process_bigraph.holes.UnfilledHoleError`
+        for the open ``(path, site)`` pairs.
+
+        Names each hole's required contract (typed face + conditions) and the
+        registered processes that would fill it, in place of the opaque
+        ``KeyError: 'data'`` an unfilled address site would otherwise raise deep
+        in realization. The error subclasses ``ValueError``, so existing
+        ``except ValueError`` callers keep catching it, and its message keeps the
+        "not ground — required site(s) left unfilled" lineage.
+        """
+        from process_bigraph.holes import build_unfilled_hole_error
+        ordered = sorted(unfilled_pairs, key=lambda pair: pair[0])
+        raise build_unfilled_hole_error(self.core, ordered)
 
     def _require_ground_input(
             self,
@@ -2944,10 +2949,12 @@ class Composite(Process):
             # A site is a state-level hole: inspect the document as written,
             # so a declared `schema` type cannot hide a `state` site.
             accessed = self.core.access(initial_state)
-            unfilled = sorted({
-                tuple(path)
-                for path, site in interfaces(accessed)[0]._places
-                if getattr(site, '_default', None) is None})
+            # Keep one (path, site) per unique path; collect_sites/interfaces may
+            # address a site more than once.
+            unfilled = {}
+            for path, site in interfaces(accessed)[0]._places:
+                if getattr(site, '_default', None) is None:
+                    unfilled.setdefault(tuple(path), site)
         except Exception:
             # If the raw document cannot be inspected for any reason, do not
             # mask that behind this check — fall through to realization and
@@ -2955,7 +2962,7 @@ class Composite(Process):
             return
 
         if unfilled:
-            self._raise_not_ground(unfilled)
+            self._raise_unfilled(list(unfilled.items()))
 
     def _require_ground_document(self) -> None:
         """Reject a document that still has unfilled template holes.
@@ -2979,14 +2986,14 @@ class Composite(Process):
         from bigraph_schema.assembly import collect_sites
 
         # ``collect_sites`` addresses each site twice (bare key and path);
-        # collapse to unique paths.
-        unfilled = sorted({
-            tuple(path)
-            for path, site in collect_sites(self.schema).values()
-            if getattr(site, '_default', None) is None})
+        # collapse to one (path, site) per unique path.
+        unfilled = {}
+        for path, site in collect_sites(self.schema).values():
+            if getattr(site, '_default', None) is None:
+                unfilled.setdefault(tuple(path), site)
 
         if unfilled:
-            self._raise_not_ground(unfilled)
+            self._raise_unfilled(list(unfilled.items()))
 
     def _require_advancing_interval(
             self,
