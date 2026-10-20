@@ -36,15 +36,31 @@ stepped — it never fabricates dynamics it does not have.
 """
 from __future__ import annotations
 
+import warnings
 from typing import Any, Dict
+
+from bigraph_schema.contract import ProcessContract
 
 from process_bigraph.composite import Process
 
 #: Contract fields, in the order ``describe()`` / ``_render_contract`` render them.
 _CONTRACT_FIELDS = ("summary", "makes", "moves", "senses", "holds", "regulation", "status")
 
+#: Free-form prose fields folded into a bridged contract's ``description``.
+_PROSE_FIELDS = ("makes", "moves", "senses", "holds", "regulation")
+
 #: Default status stamped onto every draft's contract.
 _DRAFT_STATUS = "draft - no update dynamics yet"
+
+
+class DraftProcessDeprecationWarning(DeprecationWarning):
+    """``DraftProcess`` / ``@draft_process`` is deprecated in favour of
+    holes-in-place: model a not-yet-implemented process as an open *hole* whose
+    sort is a :class:`~bigraph_schema.contract.ProcessContract`. A dedicated
+    category so a consumer can silence exactly this warning
+    (``warnings.filterwarnings("ignore",
+    category=process_bigraph.DraftProcessDeprecationWarning)``) without muting
+    unrelated deprecations."""
 
 
 class DraftProcess(Process):
@@ -104,6 +120,34 @@ def _render_contract(label: str, contract: Dict[str, Any]) -> str:
     return "  ·  ".join(parts)
 
 
+def draft_to_contract(cls) -> ProcessContract:
+    """Bridge a ``DraftProcess`` subclass to a real :class:`ProcessContract`.
+
+    The typed ``face`` comes from ``DRAFT_INPUTS`` / ``DRAFT_OUTPUTS``; the
+    free-form ``summary`` becomes the contract ``summary`` and the remaining
+    prose fields (``makes`` / ``moves`` / ``senses`` / ``holds`` /
+    ``regulation``) are folded into ``description`` so nothing is dropped. The
+    draft ``status`` marker is not carried. Pure: no registration, no side
+    effects — this is the P2 migration seam (draft → hole) and a way for tooling
+    to read a draft's interface as a contract.
+    """
+    inputs = dict(getattr(cls, "DRAFT_INPUTS", {}) or {})
+    outputs = dict(getattr(cls, "DRAFT_OUTPUTS", {}) or {})
+    declared = getattr(cls, "contract", {})
+    declared = declared if isinstance(declared, dict) else {}
+
+    summary = declared.get("summary") or getattr(cls, "DRAFT_NAME", "") or cls.__name__
+    prose = [
+        f"{key}: {declared[key]}"
+        for key in _PROSE_FIELDS
+        if declared.get(key)]
+
+    return ProcessContract(
+        summary=summary,
+        description="\n".join(prose),
+        face={"inputs": inputs, "outputs": outputs})
+
+
 def draft_process(
     *,
     name: str,
@@ -125,6 +169,14 @@ def draft_process(
     def decorate(cls):
         if not (isinstance(cls, type) and issubclass(cls, DraftProcess)):
             raise TypeError("@draft_process can only decorate DraftProcess subclasses")
+        warnings.warn(
+            "DraftProcess / @draft_process is deprecated; model a "
+            "not-yet-implemented process as an open hole whose sort is a "
+            "ProcessContract (see docs/concepts/designing-with-holes.md). "
+            "draft_to_contract(cls) bridges an existing draft's interface.",
+            DraftProcessDeprecationWarning,
+            stacklevel=2,
+        )
         cls.DRAFT_NAME = name
         cls.DRAFT_INPUTS = dict(inputs)
         cls.DRAFT_OUTPUTS = dict(outputs)

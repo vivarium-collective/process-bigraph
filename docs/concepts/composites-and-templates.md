@@ -120,53 +120,46 @@ A composite comes in two forms:
 
 Both resolve to the same thing the engine runs: a `Composite` (`composite.py`).
 
-### Processes and draft processes
+### Processes and holes (drafts)
 
 A **Process** is a class with typed `inputs()`/`outputs()` and an `update()`. But you
-don't always have the mechanism yet — that's what a **draft process** is for.
+don't always have the mechanism yet — and when you don't, you leave the slot as a
+**hole** rather than inventing a node for it.
 
-A `DraftProcess` (`draft_process.py`, ≥ 1.8.3 —
-`from process_bigraph import DraftProcess, draft_process`) declares a **contract**:
-input/output ports plus a human-readable description of the transformation it is *meant*
-to perform — but carries **no `update` dynamics**. It inherits the base no-op update, so
-if stepped it stays inert and never fabricates behavior. That lets you drop a node into a
-model's topology, wire it to stores, and review the whole thing *before* committing the
-mechanism.
+A hole is an open **site** (§2) whose `_sort` names a `ProcessContract` — its typed face
+(ports with types, units, bounds) plus any conditions. It *is* the draft: the interface
+is declared and reviewable, the mechanism is simply absent until the hole is filled. A
+real process fills the hole when its own contract *admits* the hole's — the same
+filling discipline (`admits` / `fill_sites`) that fills any site.
 
 ```python
-from process_bigraph import DraftProcess, draft_process
+from bigraph_schema.contract import ProcessContract
 
-@draft_process(name="PTH secretion",
-    inputs={"ca_sense": "float"}, outputs={"pth_out": "float"},
-    contract={"summary": "...", "senses": "...", "makes": "..."})
-class PTHSecretion(DraftProcess):
-    pass
+# register the intended interface as a named contract …
+core.register_contract("PTHSecretion", ProcessContract(
+    summary="senses serum Ca, secretes PTH",
+    face={"inputs": {"ca_sense": "float"}, "outputs": {"pth_out": "float"}}))
+
+# … and leave the slot as a hole sorted by it
+document = {"parathyroid": {"secretion": {"_type": "site", "_sort": "PTHSecretion"}}}
 ```
 
-**How it fits in.** A `DraftProcess` is a real Process subclass, so it is a first-class
-node in a composite — wired to stores through `inputs`/`outputs` like any process. Two
-consequences:
+**How it fits in.** A composite with an open required hole is **not ground** — it will
+not build. `Composite` rejects it with an `UnfilledHoleError` that names the hole, the
+contract it requires, and the registered processes `find_candidates` reports as
+admissible — an actionable report, not an opaque `KeyError`. Fill the hole with an
+admissible process (`fill_sites` / `templates.fill_template`) and the document becomes
+ground and runs. The whole lifecycle is walked in
+[designing-with-holes.md](designing-with-holes.md).
 
-- Because a workspace's `build_core()` walks the package and registers every Process, a
-  module-scope draft **auto-registers** and shows in the dashboard (Modules → Processes)
-  marked DRAFT, with its ports and contract. Its ports/contract are class-level
-  attributes, introspectable **uninitialized** (discovery calls `inputs()`/`outputs()`
-  on the class and `describe()` on `cls.__new__(cls)`), so it appears without ever being
-  stepped.
-- A composite containing only real + draft nodes is still **ground** — it *runs*, and
-  the draft simply no-ops. Contrast a **site** (§2): a document with an open site is *not*
-  ground and won't run at all.
-
-That gives two complementary placeholders at different stages of a build:
-
-| | What it is | Is the doc runnable? | Use it to… |
-|---|---|---|---|
-| **Site** (`_type: site`) | an empty *hole* — no node yet | **No** — ungrounded until filled | leave a slot in a *template* for a whole composite/process/value to be plugged in later |
-| **Draft process** | a *present but inert* node (ports + contract, no `update`) | **Yes** — runs, the node no-ops | stub a specific mechanism *in place* so the topology is complete and reviewable before the biology is written |
-
-Typical workflow: design the model topology, drop a `DraftProcess` where a mechanism
-will go (so the wiring and contract are reviewable and the model already runs), then
-replace the draft with a real Process once the mechanism is committed.
+> **Deprecated — `DraftProcess` / `@draft_process`.** The older model stubbed a mechanism
+> as a *present but inert* node (a real Process subclass with a no-op `update` and a
+> free-form `contract` dict). It still works but now emits `DraftProcessDeprecationWarning`;
+> prefer a hole. `draft_to_contract(cls)` turns an existing draft's ports + free-form
+> contract into a real `ProcessContract` you can register and sort a hole by. The one
+> affordance it had that a hole lacks — a composite that *runs* (inertly) with the stub in
+> place — is deliberately dropped: an unimplemented mechanism should block the build and
+> say so, not run as if it were there.
 
 ---
 

@@ -133,23 +133,29 @@ def fill_template(core, template, bindings=None):
 def template_document(core, template, bindings=None):
     """Fill a template and render the document ``Composite`` consumes.
 
-    Raises when a required site is left unfilled, naming it — the same
-    condition ``Composite`` enforces, reported before construction so the
-    caller sees which hole is empty rather than a constructor error.
+    Raises an :class:`~process_bigraph.holes.UnfilledHoleError` when a required
+    site is left unfilled — the same contract-aware report ``Composite``
+    enforces, reported before construction so the caller sees which hole is
+    empty, what contract it requires, and which processes would fill it, rather
+    than a constructor error. (It subclasses ``ValueError``, so existing
+    ``except ValueError`` callers keep working.)
 
     Rendered with ``defaults=True``: filling a *value* site puts the value on
     its sort's ``_default``, and a plain render drops defaults — a filled
     ``float`` site would come back as the bare string ``'float'`` and the
     value would be silently lost.
     """
+    from process_bigraph.holes import build_unfilled_hole_error
+
     filled = fill_template(core, template, bindings)
 
-    unfilled = required_open_sites(filled)
+    # Keep one (path, site) per unique required (no `_default`) hole.
+    unfilled = {}
+    for path, site in interfaces(filled)[0]._places:
+        if getattr(site, '_default', None) is None:
+            unfilled.setdefault(tuple(path), site)
     if unfilled:
-        named = ', '.join(repr('/'.join(path)) for path in sorted(unfilled))
-        raise ValueError(
-            f'template is not ground — required site(s) left unfilled: '
-            f'{named}')
+        raise build_unfilled_hole_error(core, sorted(unfilled.items(), key=lambda pair: pair[0]))
 
     return core.render(filled, defaults=True)
 
