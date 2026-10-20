@@ -124,8 +124,11 @@ template = core.access({'parathyroid': {'ca': 2.5, 'pth': 0.0,
 # Composite(..., unfilled) → UnfilledHoleError, not an opaque KeyError:
 #   not ground — required site(s) left unfilled: 'parathyroid/secretion'
 #     • parathyroid/secretion
-#         requires: inputs: ca_sense: float   outputs: pth_out: float
-#         candidates: ✓ <any registered process whose contract admits the hole>
+#         requires:
+#           inputs: ca_sense: float
+#           outputs: pth_out: float
+#         candidates:
+#           ✓ <any registered process whose contract admits the hole>
 ```
 
 Fill it (step 3) with a process `find_candidates(core, site)` reports as admissible,

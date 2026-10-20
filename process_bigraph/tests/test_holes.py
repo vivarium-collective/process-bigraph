@@ -14,9 +14,12 @@ from process_bigraph.holes import (
     HoleReport,
     UnfilledHoleError,
     build_unfilled_hole_error,
+    _render_candidates,
+    _render_requires,
 )
 from bigraph_schema.assembly import interfaces
-from bigraph_schema.contract import ProcessContract
+from bigraph_schema.contract import ProcessContract, narrow_condition
+from bigraph_schema.matching import CandidateMatch
 
 
 def _core():
@@ -216,3 +219,47 @@ def test_hole_lifecycle_design_inspect_fill_build():
     sim = pbg.Composite({"state": document}, core=core)
     sim.run(1.0)
     assert sim is not None
+
+
+# ── Fix pass: report-quality (I1 face-literal type; M1 near-miss; M2 conditions) ──
+
+def test_face_literal_hole_renders_clean_type():
+    # A hole sorted by a face literal (a first-class authoring path) must report
+    # its ports as clean types, not resolved-type reprs like "Float(...)".
+    core = allocate_core()
+    model_face = {
+        "_type": "link",
+        "_inputs": {"ca_sense": "float"},
+        "_outputs": {"pth_out": "float"},
+    }
+    doc = {"state": {"study": {"model": {"_type": "site", "_sort": model_face}}}}
+    with pytest.raises(UnfilledHoleError) as excinfo:
+        Composite(doc, core=core)
+    text = str(excinfo.value)
+    assert "ca_sense: float" in text
+    assert "Float(" not in text
+
+
+def test_near_miss_candidate_renders_failing_condition():
+    # A partial candidate must render its failing condition, not a raw dict.
+    candidate = CandidateMatch(
+        address="PartialProc",
+        match="partial",
+        over_provides=[],
+        fails=[{"condition": "bound.ca_sense", "detail": "below _min"}],
+    )
+    joined = "\n".join(_render_candidates([candidate]))
+    assert "PartialProc" in joined
+    assert "bound.ca_sense" in joined
+    assert "{'condition'" not in joined  # no raw dict dump
+
+
+def test_contract_condition_renders_in_report():
+    # A narrowed contract's condition appears in the 'requires' block.
+    contract = ProcessContract(
+        face={"inputs": {"ca_sense": "float"}, "outputs": {"pth_out": "float"}}
+    )
+    contract = narrow_condition(contract, "pre", "inputs.ca_sense >= 0", name="nonneg")
+    joined = "\n".join(_render_requires(contract, None))
+    assert "nonneg" in joined
+    assert "inputs.ca_sense" in joined

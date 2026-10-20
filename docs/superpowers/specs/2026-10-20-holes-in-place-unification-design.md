@@ -248,9 +248,11 @@ Left to builder: final export list; don't export internal helpers.
 - `@draft_process` and `DraftProcess` keep their current inert-node behavior
   (composites build, run returns `{}`), **plus** a one-time deprecation warning at
   decoration naming the holes model and pointing at the new guide. Use a
-  **dedicated `DeprecationWarning` subclass** (e.g. `DraftProcessDeprecationWarning`)
-  fired **once** (module-level guard), so a consumer can target an ignore at
-  exactly this warning. **Pre-merge task (non-breaking guard):** grep the 9
+  **dedicated `DeprecationWarning` subclass** (e.g. `DraftProcessDeprecationWarning`),
+  so a consumer can target an ignore at exactly this warning. (As built: the warning
+  is issued per decoration and relies on Python's default per-call-site dedup for
+  "seen once" — a module-level guard proved order-dependent and untestable; see the
+  ledger ruling.) **Pre-merge task (non-breaking guard):** grep the 9
   consumer repos' pytest/CI configs for `filterwarnings = error` / `-W error`;
   if any treat warnings as errors, ship a documented `filterwarnings` ignore for
   the new category rather than turning their CI red. This protects the hard

@@ -40,8 +40,9 @@ class UnfilledHoleError(ValueError):
     for machine rendering (e.g. the workbench) and a scannable ``str``.
     """
 
-    def __init__(self, holes: Sequence[HoleReport]):
+    def __init__(self, holes: Sequence[HoleReport], core: Any = None):
         self.holes: List[HoleReport] = list(holes)
+        self._core = core  # used only to render resolved face-literal types by name
         super().__init__(self._render())
 
     def _render(self) -> str:
@@ -56,7 +57,7 @@ class UnfilledHoleError(ValueError):
         for hole in self.holes:
             lines.append("")
             lines.append(f"  • {'/'.join(hole.path)}")
-            lines.extend(_render_requires(hole.contract))
+            lines.extend(_render_requires(hole.contract, self._core))
             lines.extend(_render_candidates(hole.candidates))
         return "\n".join(lines)
 
@@ -76,7 +77,7 @@ def build_unfilled_hole_error(
         contract = _safe_contract_of(core, site)
         candidates = _safe_candidates(core, site) if contract is not None else []
         reports.append(HoleReport(tuple(path), contract, candidates))
-    return UnfilledHoleError(reports)
+    return UnfilledHoleError(reports, core=core)
 
 
 def _safe_contract_of(core, site):
@@ -93,7 +94,7 @@ def _safe_candidates(core, site):
         return []
 
 
-def _render_requires(contract) -> List[str]:
+def _render_requires(contract, core=None) -> List[str]:
     if contract is None:
         return ["      requires: no contract declared (unsorted hole)"]
     lines = ["      requires:"]
@@ -102,7 +103,7 @@ def _render_requires(contract) -> List[str]:
         ports = face.get(direction) or {}
         if ports:
             rendered = ", ".join(
-                f"{port}: {_fmt_port(schema)}" for port, schema in ports.items())
+                f"{port}: {_fmt_port(schema, core)}" for port, schema in ports.items())
             lines.append(f"        {direction}: {rendered}")
     conditions = contract.conditions() if hasattr(contract, "conditions") else []
     for condition in conditions:
@@ -112,18 +113,33 @@ def _render_requires(contract) -> List[str]:
     return lines
 
 
-def _fmt_port(schema) -> str:
-    """A port schema as ``type (units, [min, max])``; a bare type as itself."""
-    if not isinstance(schema, dict):
-        return str(schema)
-    base = schema.get("_type", "any")
-    extras = []
-    if schema.get("_units"):
-        extras.append(f"units={schema['_units']}")
-    lo, hi = schema.get("_min"), schema.get("_max")
-    if lo is not None or hi is not None:
-        extras.append(f"[{lo}, {hi}]")
-    return f"{base} ({', '.join(extras)})" if extras else base
+def _fmt_port(schema, core=None) -> str:
+    """A port schema as ``type (units, [min, max])``; a bare type as itself.
+
+    A ``dict`` schema (the registered-contract path) renders its ``_type`` with
+    any units/bounds. A plain string renders as-is. Anything else is a *resolved*
+    type object (the face-literal path, where ``contract_of`` resolves the face
+    to live type objects such as ``Float(...)``): render it to its type name via
+    ``core.render`` when a core is available, else fall back to its class name so
+    the report never shows a raw ``Float(_default=None, ...)`` repr.
+    """
+    if isinstance(schema, dict):
+        base = schema.get("_type", "any")
+        extras = []
+        if schema.get("_units"):
+            extras.append(f"units={schema['_units']}")
+        lo, hi = schema.get("_min"), schema.get("_max")
+        if lo is not None or hi is not None:
+            extras.append(f"[{lo}, {hi}]")
+        return f"{base} ({', '.join(extras)})" if extras else base
+    if isinstance(schema, str):
+        return schema
+    if core is not None:
+        try:
+            return str(core.render(schema))
+        except Exception:  # noqa: BLE001 - fall back to the class name, never a repr
+            pass
+    return type(schema).__name__.lower()
 
 
 def _render_candidates(candidates) -> List[str]:
@@ -134,7 +150,19 @@ def _render_candidates(candidates) -> List[str]:
         if getattr(candidate, "match", None) == "full":
             lines.append(f"        ✓ {candidate.address} (full match)")
         else:
-            fails = getattr(candidate, "fails", []) or []
-            why = "; ".join(str(f) for f in fails) if fails else "near-miss"
+            why = _fmt_fails(getattr(candidate, "fails", []) or [])
             lines.append(f"        ~ {candidate.address} (partial: {why})")
     return lines
+
+
+def _fmt_fails(fails) -> str:
+    """The failing conditions of a near-miss, by name — never a raw dict dump."""
+    if not fails:
+        return "near-miss"
+    parts = []
+    for fail in fails:
+        if isinstance(fail, dict):
+            parts.append(str(fail.get("condition", fail.get("detail", fail))))
+        else:
+            parts.append(str(fail))
+    return "; ".join(parts)
