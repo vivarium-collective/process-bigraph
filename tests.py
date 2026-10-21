@@ -4724,6 +4724,88 @@ def test_a1_keeps_framework_flow_output_port(core):
     assert ('p',) in nodes.get(('a',), {}).get('before', set())
 
 
+def test_inout_container_writer_does_not_propagate_to_child_leaves(core):
+    """A3: container-propagation pass must honour A2's read-modify-write rule.
+
+    A step that reads AND writes a whole container (inout) — e.g. `division`
+    wiring `unique: ['unique']` on both sides — is an accumulator, not a fresh
+    producer. A2 already drops its DIRECT producer edge on the container, but
+    the step's `output_paths` still lists the container, so the second pass
+    re-derives it as a producer of every CHILD leaf a peer reads and re-leaks
+    the exact false edge A2 removed. The fix extends A2 into the pass: an inout
+    producer does not propagate down to children.
+    """
+    from process_bigraph.scheduling import build_step_network
+
+    class Divider(Step):
+        def inputs(self):
+            return {'u': {'_type': 'map', '_value': 'float'}}
+        def outputs(self):
+            return {'u': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    class Reader(Step):
+        def inputs(self):
+            return {'x': 'float'}
+        def outputs(self):
+            return {'y': 'float'}
+        def update(self, state):
+            return {'y': state['x']}
+
+    core.register_link('Divider', Divider)
+    core.register_link('Reader', Reader)
+    steps = {
+        ('d',): {'instance': Divider({}, core), 'priority': 1.0,
+                 'inputs': {'u': ['U']},            # reads whole container U
+                 'outputs': {'u': ['U']}},           # writes whole U (inout)
+        ('c',): {'instance': Reader({}, core), 'priority': 2.0,
+                 'inputs': {'x': ['U', 'x']},        # reads child leaf U/x
+                 'outputs': {'y': ['y']}},
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # the inout writer must NOT be a producer of the child leaf
+    assert ('d',) not in nodes.get(('U', 'x'), {}).get('before', set())
+
+
+def test_genuine_container_writer_still_propagates_to_child_leaves(core):
+    """A3 is selective: a genuine NON-inout whole-container writer (writes U but
+    does not read it) still propagates to a child leaf a peer reads — the pass's
+    real purpose (opaque container write → child read ordering) is preserved.
+    """
+    from process_bigraph.scheduling import build_step_network
+
+    class Writer(Step):
+        def inputs(self):
+            return {'seed': 'float'}
+        def outputs(self):
+            return {'u': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    class Reader(Step):
+        def inputs(self):
+            return {'x': 'float'}
+        def outputs(self):
+            return {'y': 'float'}
+        def update(self, state):
+            return {'y': state['x']}
+
+    core.register_link('Writer', Writer)
+    core.register_link('Reader', Reader)
+    steps = {
+        ('w',): {'instance': Writer({}, core), 'priority': 1.0,
+                 'inputs': {'seed': ['seed']},       # does NOT read U
+                 'outputs': {'u': ['U']}},            # writes whole U
+        ('c',): {'instance': Reader({}, core), 'priority': 2.0,
+                 'inputs': {'x': ['U', 'x']},
+                 'outputs': {'y': ['y']}},
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # genuine producer of the whole container still orders the child reader
+    assert ('w',) in nodes.get(('U', 'x'), {}).get('before', set())
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================

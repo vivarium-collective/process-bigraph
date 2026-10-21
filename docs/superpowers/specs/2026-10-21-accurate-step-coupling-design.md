@@ -129,6 +129,55 @@ container propagation on `agents`/`unique`/`listeners`. **Follow-up:** a
 container-aware narrowing of the propagation passes (or Approach B's declared
 per-port directions), sequenced after A as the spec already anticipates.
 
+## A3 — container-propagation narrowing (follow-on, landed 2026-10-21)
+
+The A1/A2 follow-up above — "a container-aware narrowing of the propagation
+passes" — was investigated via spikes and landed on this branch (user-authorized
+scope extension beyond the original A1/A2 plan).
+
+**Root cause of the residual.** The second pass of `build_step_network`
+propagates a producer of a container `P` onto every child leaf `P/x` a peer
+reads. A2 already suppresses a step's **direct** producer edge on an inout
+container, but the step's `output_paths` still lists `P`, so the pass
+**re-derives** the suppressed edge and spreads it to the children. In
+`ecoli_baseline` the culprit is `division`, wired `unique: ['unique']` on *both*
+`inputs` and `outputs` (inout): it re-leaks as a false producer of
+`unique/active_RNAP`, `unique/RNA`, … that every `unique_update_*` step reads —
+the agents(36)/unique(12)/listeners(3) residue.
+
+**Fix.** Extend A2's read-modify-write rule into the pass: a producer whose full
+`inputs()` include the container `out_path` it would propagate down is an
+accumulator, not a fresh producer, and is dropped from that propagation. A
+genuine, non-inout whole-container writer is unaffected and still orders its
+child readers (verified by `test_genuine_container_writer_still_propagates_to_child_leaves`).
+Only the second pass is narrowed; the symmetric child→parent third pass is left
+untouched — spikes showed it is not a source of the ecoli re-leak and narrowing
+it risks dropping a genuine "reads whole container, writes a slice → reads whole
+container" edge.
+
+**Validation (same gate as A1/A2, same minimal v4 cache).**
+
+| | cycles | 3 ticks | 8 ticks |
+|---|---|---|---|
+| A1/A2 (prior) | 107 | `72c70a6b` | `11c13dfe` |
+| **A1/A2/A3, `PYTHONHASHSEED=0`** | **44** | `72c70a6b…` (identical) | `11c13dfe…` (identical) |
+| A1/A2/A3, `PYTHONHASHSEED=1` | 44 | `72c70a6b…` (identical) | — |
+
+**Cycle count 150 → 107 → 44** (A1/A2 removed 43 false edges; A3 removes 63
+more), all **bit-identical** to the A1/A2 state across both hash seeds and both
+horizons ⇒ A3 drops **only** false scheduling edges. Spike cross-check: wholesale
+removal of *both* propagation passes also reaches 44 and is bit-identical, but it
+additionally deletes the genuine opaque-container-write → child-read capability
+(unexercised by `ecoli_baseline` and the repo suite, hence invisible to the
+gate); A3 reaches the same 44 while **preserving** that capability, so A3 is the
+principled form. The remaining 44 are container-ancestor edges from the **first**
+pass (a leaf-write registering its container ancestors); dropping those breaks
+the build (an `equilibrium` step reads a container it then runs ahead of —
+negative counts), so they include genuine ordering and are left to Approach B +
+the priority-guard net. Existing scheduler + orchestration tests stay green
+(full `tests.py` 222 passed / 8 skipped; `test_orchestration.py` 7/7); two new
+unit tests pin the fix and its selectivity.
+
 > Environment note surfaced during validation: #258 (`1781949`) removed
 > `composite_generator._emitter_node_from_decl` as a "dead internal helper", but
 > the installed/HEAD `viva_superpowers.composite_generator` still imports it.

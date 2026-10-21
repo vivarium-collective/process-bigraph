@@ -347,6 +347,11 @@ def build_step_network(steps):
     # map-of-node) output port. Such a write restructures the container at that
     # path; it does not produce the data leaves beneath it (#248).
     structural_outputs = {}
+    # step_key -> frozenset of the step's FULL inputs() leaves. Used by the
+    # container-propagation pass to apply A2's read-modify-write rule: a step
+    # that READS a container it would otherwise propagate down to child leaves
+    # is an accumulator, not a fresh producer (A3).
+    full_inputs_by_step = {}
 
     for step_key, step in steps.items():
         schema = step['instance'].interface()
@@ -435,6 +440,7 @@ def build_step_network(steps):
         # the skip hold for triggered steps.
         full_input_leaves = {
             tuple(p) for p in find_leaves(step.get('inputs', {}), path=step_key[:-1])}
+        full_inputs_by_step[step_key] = full_input_leaves
 
         # Track which steps consume/produce each path
         for input_path in input_paths:
@@ -489,6 +495,20 @@ def build_step_network(steps):
                 # that read/write the container membership itself (an exact or
                 # shallower match, handled in the first pass).
                 data_producers = producers - structural_outputs.get(out_path, set())
+                # A3 (A2 extended to this pass): an inout producer — one whose
+                # full inputs() include the container ``out_path`` it would
+                # propagate down — reads and writes that container in place, so
+                # it is a read-modify-write accumulator, not a fresh producer of
+                # the child leaves beneath it. A2 already suppressed its DIRECT
+                # producer edge on the container, but ``output_paths`` still
+                # lists the container, so without this it re-leaks here as a
+                # false producer of every child leaf a peer reads (the v2ecoli
+                # `division` ↔ `unique_update_*` false cycle). A genuine,
+                # non-inout whole-container writer is unaffected and still orders
+                # its child readers.
+                data_producers = {
+                    producer for producer in data_producers
+                    if out_path not in full_inputs_by_step.get(producer, ())}
                 if not data_producers:
                     continue
                 # Container-restructure peers: when every consumer of this
