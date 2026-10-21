@@ -2,7 +2,7 @@
 
 An *orchestration strategy* owns how a Composite advances — its top-level
 execution pattern. The engine ships ``temporal`` (the default: the
-event-scheduling tick lifecycle implemented by ``Composite._run_inner``).
+event-scheduling tick lifecycle, driven over ``Composite.advance_tick``).
 Downstream packages register additional patterns — e.g. a ``workflow`` DAG pass
 or an ``investigation`` member-study dispatcher — via :func:`register_orchestration`,
 exactly as processes and types are registered.
@@ -12,11 +12,13 @@ primitives (the per-process ``front``, ``apply_updates``, ``determine_steps``)
 rather than reimplementing the typed delta/apply model.
 
 Design: ``docs/superpowers/specs/2026-10-20-pluggable-orchestration-registry.md``.
-This module is step 1 of that RFC — a behaviour-preserving seam: the default
-``temporal`` strategy delegates verbatim to the existing ``_run_inner`` loop, so
-a Composite with no declared orchestration runs exactly as before.
+The default ``temporal`` strategy drives ``Composite.advance_tick`` in a loop
+(equivalent to the former ``_run_inner``), so a Composite with no declared
+orchestration runs exactly as before.
 """
 from __future__ import annotations
+
+import time as _time
 
 
 class OrchestrationStrategy:
@@ -34,22 +36,40 @@ class OrchestrationStrategy:
     def advance(self, interval, force_complete, run_start):
         """Advance ``self.composite`` by ``interval`` (mutating its state through
         the engine's apply path). ``force_complete`` and ``run_start`` match the
-        existing ``Composite._run_inner`` contract."""
+        ``Composite.advance_tick`` contract."""
         raise NotImplementedError
 
 
 class TemporalOrchestration(OrchestrationStrategy):
     """The default event-scheduling tick lifecycle.
 
-    Delegates verbatim to ``Composite._run_inner`` — the loop is unchanged; this
-    only routes the call through the registry seam so alternative strategies can
-    be plugged in without touching the engine loop.
+    Owns the driving loop: it advances the Composite one tick at a time via
+    ``Composite.advance_tick`` until ``global_time`` reaches the horizon, while
+    the Composite owns the tick mechanics (the per-process ``front``, invoke,
+    apply). Steps ready at the start run first via ``run_step_network``.
     """
 
     name = "temporal"
 
     def advance(self, interval, force_complete, run_start):
-        return self.composite._run_inner(interval, force_complete, run_start)
+        composite = self.composite
+        end_time = composite.state['global_time'] + interval
+
+        # Run any steps ready from init or previous triggers.
+        composite.run_step_network()
+
+        while composite.state['global_time'] < end_time or force_complete:
+            halted, force_complete = composite.advance_tick(end_time, force_complete)
+            if halted:
+                # Structural halt: stop now, skipping the post-loop bookkeeping
+                # (matches the pre-extraction behaviour of the halt return).
+                return
+
+        total = _time.monotonic() - run_start
+        # Framework time = total minus process update time (accumulated in
+        # process_update / _run_tick_lifecycle).
+        composite.framework_time = total - composite.process_update_time
+        composite._last_run_total_time = total
 
 
 class WorkflowOrchestration(OrchestrationStrategy):
@@ -71,9 +91,7 @@ class WorkflowOrchestration(OrchestrationStrategy):
 
     def advance(self, interval, force_complete, run_start):
         composite = self.composite
-        if composite.to_run:
-            composite.run_steps(composite.to_run)
-            composite.to_run = []
+        composite.run_step_network()
         composite.state['global_time'] = composite.state.get('global_time', 0.0) + interval
 
 

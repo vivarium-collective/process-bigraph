@@ -2779,7 +2779,7 @@ class Composite(Process):
     def _orchestration_strategy(self):
         """Resolve (and cache) this Composite's orchestration strategy from the
         registry. Defaults to ``temporal`` — the event-scheduling loop in
-        :meth:`_run_inner` — so a Composite that declares no ``orchestration``
+        :meth:`advance_tick` — so a Composite that declares no ``orchestration``
         runs exactly as before."""
         strat = getattr(self, "_orchestration", None)
         if strat is None:
@@ -2788,101 +2788,89 @@ class Composite(Process):
             strat = self._orchestration = get_orchestration(name)(self)
         return strat
 
-    def _run_inner(self, interval: float, force_complete: bool,
-                   run_start: float) -> None:
-        end_time = self.state['global_time'] + interval
-
-        # Run any steps that are ready (from init or previous triggers)
+    def run_step_network(self) -> None:
+        """Drain the ready-step DAG to completion: ``run_steps`` self-cascades
+        through ``cycle_step_state``/``trigger_steps``, so this runs every
+        currently-ready step in dependency order. The step-DAG primitive shared
+        by the temporal and workflow orchestration strategies."""
         if self.to_run:
             self.run_steps(self.to_run)
             self.to_run = []
 
-        em = self._em
-        while self.state['global_time'] < end_time or force_complete:
-            full_step = math.inf
-            self._run_ticks = getattr(self, '_run_ticks', 0) + 1
-            em.heartbeat(global_time=self.state['global_time'])
+    def advance_tick(self, end_time: float, force_complete: bool):
+        """Execute ONE temporal tick toward ``end_time`` — the body of the
+        event-scheduling loop. Returns ``(halted, force_complete)``: ``halted``
+        is True when an opt-in structural halt fired and the run must stop now;
+        ``force_complete`` is returned because the tick may clear it. The
+        ``temporal`` strategy drives this in a loop while ``Composite`` owns the
+        tick mechanics (front, invoke, apply), keeping strategies thin."""
+        full_step = math.inf
+        self._run_ticks = getattr(self, '_run_ticks', 0) + 1
+        self._em.heartbeat(global_time=self.state['global_time'])
 
-            # Partition processes: ones whose runtime opts into batched
-            # tick_lifecycle vs the regular per-process path. The
-            # runtime-managed group(s) get one method call per runtime,
-            # which (a) skips N _cached_view + N invoke calls in this
-            # tick's invoke pass, and (b) returns one combined Defer that
-            # apply_updates walks once instead of N times.
-            managed_paths, runtime_groups = self._partition_processes_by_runtime()
+        # Partition processes: runtime-batched (tick_lifecycle) vs per-process.
+        managed_paths, runtime_groups = self._partition_processes_by_runtime()
 
-            # Run each plain (non-runtime-managed) process and compute the
-            # minimum time step that advances simulation.
-            if self._parallel_processes and len(self.process_paths) > 1:
-                full_step = self._run_processes_layer_parallel(
-                    end_time, full_step, force_complete,
-                    skip_paths=managed_paths)
-            else:
-                for path in self.process_paths:
-                    if path in managed_paths:
-                        continue
-                    process = get_path(self.state, path)
-                    full_step = self.run_process(
-                        path, process, end_time, full_step, force_complete)
+        if self._parallel_processes and len(self.process_paths) > 1:
+            full_step = self._run_processes_layer_parallel(
+                end_time, full_step, force_complete,
+                skip_paths=managed_paths)
+        else:
+            for path in self.process_paths:
+                if path in managed_paths:
+                    continue
+                process = get_path(self.state, path)
+                full_step = self.run_process(
+                    path, process, end_time, full_step, force_complete)
 
-            # Now dispatch each runtime group via its tick_lifecycle hook.
-            # Each call returns one combined Defer (placed at a common-path
-            # slot in self.front) so the downstream apply_updates walks
-            # the schema once for the entire batch.
-            for rt, group in runtime_groups:
-                full_step = self._run_tick_lifecycle(
-                    rt, group, end_time, full_step, force_complete)
+        for rt, group in runtime_groups:
+            full_step = self._run_tick_lifecycle(
+                rt, group, end_time, full_step, force_complete)
 
-            if full_step == math.inf:
-                # No process ran — jump to the next scheduled process time
-                next_event = end_time
-                for path in self.front.keys():
-                    if self.front[path]['time'] < next_event:
-                        next_event = self.front[path]['time']
-                self.state['global_time'] = next_event
+        if full_step == math.inf:
+            # No process ran — jump to the next scheduled process time
+            next_event = end_time
+            for path in self.front.keys():
+                if self.front[path]['time'] < next_event:
+                    next_event = self.front[path]['time']
+            self.state['global_time'] = next_event
 
-            elif self.state['global_time'] + full_step <= end_time:
-                # At least one process ran — advance time and apply its update
-                self.state['global_time'] += full_step
-                updates = []
-                paths = []
+        elif self.state['global_time'] + full_step <= end_time:
+            # At least one process ran — advance time and apply its update
+            self.state['global_time'] += full_step
+            updates = []
+            paths = []
 
-                for path, advance in self.front.items():
-                    if advance['time'] <= self.state['global_time'] and advance['update']:
-                        updates.append(advance['update'])
-                        advance['update'] = {}
-                        paths.append(path)
+            for path, advance in self.front.items():
+                if advance['time'] <= self.state['global_time'] and advance['update']:
+                    updates.append(advance['update'])
+                    advance['update'] = {}
+                    paths.append(path)
 
-                fw_start = _time.monotonic()
-                self._flush_protocol_runtimes()
-                update_paths = self.apply_updates(updates)
-                update_paths.append(('global_time',)) # updated global time can trigger steps
-                self.expire_process_paths(update_paths)
-                self.steps_run = set()  # Reset for new timestep
-                # Opt-in halt after structural change. EcoliSim sets
-                # ``_halt_after_structural=True`` to mirror v1's halt
-                # via DivisionDetected. Dynamic-structure tests leave
-                # the flag unset for natural cascading.
-                if (getattr(self, '_halt_after_structural', False)
-                        and getattr(self, '_last_apply_structural', False)):
-                    self.framework_time += _time.monotonic() - fw_start
-                    return
-                self.trigger_steps(update_paths)
+            fw_start = _time.monotonic()
+            self._flush_protocol_runtimes()
+            update_paths = self.apply_updates(updates)
+            update_paths.append(('global_time',))  # updated global time can trigger steps
+            self.expire_process_paths(update_paths)
+            self.steps_run = set()  # Reset for new timestep
+            # Opt-in halt after structural change (EcoliSim parity). On halt the
+            # run stops immediately, skipping the post-loop bookkeeping — the
+            # driving loop returns without finalizing framework_time.
+            if (getattr(self, '_halt_after_structural', False)
+                    and getattr(self, '_last_apply_structural', False)):
                 self.framework_time += _time.monotonic() - fw_start
+                return True, force_complete
+            self.trigger_steps(update_paths)
+            self.framework_time += _time.monotonic() - fw_start
 
-            else:
-                # All remaining process events are beyond end_time
-                self.state['global_time'] = end_time
+        else:
+            # All remaining process events are beyond end_time
+            self.state['global_time'] = end_time
 
-            if force_complete and self.state['global_time'] == end_time:
-                force_complete = False
+        if force_complete and self.state['global_time'] == end_time:
+            force_complete = False
 
-        total = _time.monotonic() - run_start
-        # Framework time = total minus process update time
-        # (the process_update_time was accumulated in process_update and,
-        # for batched-runtime processes, in _run_tick_lifecycle)
-        self.framework_time = total - self.process_update_time
-        self._last_run_total_time = total
+        return False, force_complete
 
     def timing_summary(self) -> TimingSummary:
         """Return a ``TimingSummary`` describing the most recent ``run()`` call.
