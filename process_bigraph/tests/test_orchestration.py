@@ -95,3 +95,13 @@ def test_workflow_runs_step_dag_result_equivalent_to_temporal():
     # producer ran, then doubler consumed its output (DAG order) — identical result
     assert sim_w.state['a'] == sim_t.state['a'] == 2.0
     assert sim_w.state['b'] == sim_t.state['b'] == 20.0
+
+
+def test_composite_exposes_primitive_interface():
+    """The streamlined surface strategies compose: run_step_network + advance_tick."""
+    sim = Composite({'state': {}}, core=allocate_core())
+    assert callable(sim.run_step_network) and callable(sim.advance_tick)
+    sim.run_step_network()
+    halted, fc = sim.advance_tick(1.0, False)      # one tick toward end_time=1.0
+    assert halted is False and fc is False
+    assert sim.state['global_time'] == 1.0         # no processes -> jump to end_time
