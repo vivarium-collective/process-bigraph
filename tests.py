@@ -6268,7 +6268,7 @@ def test_version_matches_pyproject():
 
     declared = re.search(
         r'^version\s*=\s*["\']([^"\']+)["\']',
-        pyproject.read_text(), re.MULTILINE)
+        pyproject.read_text(encoding='utf-8'), re.MULTILINE)
     assert declared, 'no version in pyproject.toml'
     assert process_bigraph.__version__ == declared.group(1), (
         f'process_bigraph.__version__ is {process_bigraph.__version__!r} but '
