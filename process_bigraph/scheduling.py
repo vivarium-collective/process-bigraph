@@ -376,8 +376,30 @@ def build_step_network(steps):
             else:
                 ancestors[step_key]['input_paths'] = find_leaves(step['inputs'], path=step_key[:-1])
 
-        # Compute output paths once per step
-        out_wiring = step.get('_dep_outputs', step.get('outputs', {}))
+        # Compute output paths once per step. A `_dep_outputs` override is
+        # trusted verbatim; otherwise narrow the wired outputs to the step's
+        # declared outputs() ports (the output-side analogue of the triggers()
+        # input narrowing above) — a port wired as an output but not declared
+        # in outputs() is inout-inflation, not a real write. `_layer_*`
+        # framework ports are always kept.
+        dep_outputs = step.get('_dep_outputs')
+        if dep_outputs is not None:
+            out_wiring = dep_outputs
+        else:
+            wiring = step.get('outputs', {})
+            # Distinguish an ABSENT outputs schema (key missing -> `None`) from
+            # an explicitly EMPTY one (`{}`). Absent = can't narrow safely, fall
+            # back to the raw wiring; empty = the step declares no outputs, so
+            # narrow to nothing (only `_layer_*` survive).
+            out_schema_raw = (schema.get('outputs')
+                              if isinstance(schema, dict) else None)
+            out_ports = (set(out_schema_raw.keys())
+                         if out_schema_raw is not None else None)
+            if isinstance(wiring, dict) and out_ports is not None:
+                out_wiring = {k: v for k, v in wiring.items()
+                              if k in out_ports or str(k).startswith('_layer')}
+            else:
+                out_wiring = wiring
         if ancestors[step_key]['output_paths'] is None:
             ancestors[step_key]['output_paths'] = find_leaves(
                 out_wiring, path=step_key[:-1])

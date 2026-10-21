@@ -4513,6 +4513,111 @@ def test_structural_node_output_is_not_a_producer_of_member_leaves(core):
     Composite({'state': document}, core=core)
 
 
+def test_output_wired_but_not_declared_is_not_a_producer(core):
+    """A1: a store wired as a step's output but absent from its outputs()
+    interface is inflation, not a real write — the step must not be registered
+    as its producer.
+
+    The undeclared store 'x' here is NOT also an input, so the pre-existing
+    self-loop skip (which only cancels stores a step also reads) cannot catch
+    it — only A1's interface narrowing removes it. The genuinely-declared,
+    write-only 'w' must still produce."""
+    class ReaderWriter(Step):
+        def inputs(self):
+            return {'r': 'float'}
+        def outputs(self):
+            return {'w': 'float'}
+        def update(self, state):
+            return {'w': state['r']}
+
+    core.register_link('ReaderWriter', ReaderWriter)
+    document = {
+        'rw': {'_type': 'step', 'address': 'local:ReaderWriter', 'priority': 1.0,
+               'inputs': {'r': ['r']},
+               'outputs': {'w': ['w'], 'x': ['x']}},   # 'x' wired out, undeclared = inflation
+        'r': 1.0, 'w': 0.0, 'x': 0.0}
+    sim = Composite({'state': document}, core=core)
+    # 'x' is wired-out but undeclared and not read -> A1 drops it as a producer
+    assert ('rw',) not in sim.node_dependencies.get(('x',), {}).get('before', set())
+    # 'w' is genuinely declared + write-only -> still a producer
+    assert ('rw',) in sim.node_dependencies.get(('w',), {}).get('before', set())
+
+
+def test_genuine_output_still_produces(core):
+    """A1 must only REMOVE false edges: a store a step genuinely writes and
+    does not read must still register the step as its producer."""
+    class Writer(Step):
+        def inputs(self):
+            return {'src': 'float'}
+        def outputs(self):
+            return {'dst': 'float'}
+        def update(self, state):
+            return {'dst': state['src']}
+
+    core.register_link('Writer', Writer)
+    document = {
+        'wr': {'_type': 'step', 'address': 'local:Writer', 'priority': 1.0,
+               'inputs': {'src': ['src']}, 'outputs': {'dst': ['dst']}},
+        'src': 2.0, 'dst': 0.0}
+    sim = Composite({'state': document}, core=core)
+    assert ('wr',) in sim.node_dependencies.get(('dst',), {}).get('before', set())
+
+
+def test_dep_outputs_override_bypasses_narrowing(core):
+    """`_dep_outputs`, when present, is the explicit dependency-output override
+    and must be used verbatim — A1 must not re-narrow it.
+
+    `_dep_outputs` is stripped by StepLink schema realization, so it never
+    survives a ``Composite(document)`` build; it reaches ``build_step_network``
+    only when the scheduler itself populates it. Exercise the override path
+    directly on a hand-built steps dict (the unit the override lives in)."""
+    from process_bigraph.scheduling import build_step_network
+
+    class OnlyW(Step):
+        def inputs(self):
+            return {'w': 'float'}
+        def outputs(self):
+            return {'w': 'float'}
+        def update(self, state):
+            return {'w': state['w'] + 1.0}
+
+    inst = OnlyW({}, core)
+    steps = {
+        ('ow',): {'instance': inst, 'priority': 1.0,
+                  'inputs': {'w': ['w']}, 'outputs': {'w': ['w']},
+                  '_dep_outputs': {'extra': ['extra']}},  # override -> a different store
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # override honored verbatim: 'extra' is produced, declared 'w' is not
+    assert ('ow',) in nodes.get(('extra',), {}).get('before', set())
+    assert ('ow',) not in nodes.get(('w',), {}).get('before', set())
+
+
+def test_empty_output_schema_narrows_to_nothing(core):
+    """A step whose outputs() is an explicit empty ``{}`` declares no writes:
+    any wired output is inflation and must not produce.
+
+    This exercises A1's absent-vs-empty distinction — an EMPTY outputs schema
+    narrows the wired outputs to nothing (it does NOT fall back to the raw
+    wiring). (A truly ABSENT 'outputs' key is impossible: ``assert_interface``
+    requires exactly {inputs, outputs} and link realization rejects it earlier,
+    so there is no reachable "missing outputs key" case to fall back from.)"""
+    class NoWrites(Step):
+        def inputs(self):
+            return {'a': 'float'}
+        def outputs(self):
+            return {}
+        def update(self, state):
+            return {}
+    core.register_link('NoWrites', NoWrites)
+    document = {
+        'nw': {'_type': 'step', 'address': 'local:NoWrites', 'priority': 1.0,
+               'inputs': {'a': ['a']}, 'outputs': {'b': ['b']}},  # 'b' wired, undeclared
+        'a': 0.0, 'b': 0.0}
+    sim = Composite({'state': document}, core=core)
+    assert ('nw',) not in sim.node_dependencies.get(('b',), {}).get('before', set())
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================
