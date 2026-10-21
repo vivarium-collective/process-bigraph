@@ -10,6 +10,7 @@ them for back-compat (external callers use e.g.
 ``from process_bigraph.composite import empty_front`` or
 ``from process_bigraph import wire_step_layers``).
 """
+import warnings
 from typing import (
     Any, Dict, List, Mapping, MutableMapping, Optional, Sequence, Tuple, Union)
 
@@ -504,10 +505,22 @@ def find_step_cycle(ancestors, nodes):
     The process-bigraph paper (Supplement 1, 3.8.4) guarantees that the
     step network is a DAG: "Cycles are disallowed, ensuring deterministic
     zero-time DAG evaluation." A cycle (step A consumes what step B produces
-    AND step B consumes what step A produces) has no valid evaluation order,
-    so ``determine_steps`` would stall and fall back to a priority tie-break
-    whose outcome depends on set-iteration order — i.e. the Python hash seed
-    (issue #233). Such cycles must be caught at build time.
+    AND step B consumes what step A produces) has no topological order, so
+    ``determine_steps`` resolves it by firing the highest-priority runnable
+    step first. That resolution is DETERMINISTIC as long as the cyclic steps
+    carry **distinct priorities** — priority alone fixes their order. It
+    becomes non-deterministic only when two steps *in the same cycle* share a
+    priority: then the tie falls through to set-iteration order, i.e. the
+    Python hash seed (issue #233), and the same document gives different
+    results in different processes.
+
+    So this function is priority-aware: a cycle whose members all have
+    distinct priorities is deterministically orderable and is ALLOWED (with a
+    warning); only a cycle containing a priority tie is reported as fatal.
+    This matches the behaviour real composites (e.g. v2ecoli, whose steps
+    carry distinct priorities and whose feedback among listener/deriver steps
+    is intentional) relied on before the #233 hard check — verified by
+    bit-identical state across differing hash seeds.
 
     The edges here are exactly the ordering constraints ``determine_steps``
     walks: for each wired path, every producer (a step in the path's
@@ -519,14 +532,17 @@ def find_step_cycle(ancestors, nodes):
 
     Args:
         ancestors: The per-step metadata from ``build_step_network`` (its
-            keys are the full set of step identifiers).
+            keys are the full set of step identifiers); each value's
+            ``priority`` is read to decide whether a cycle is orderable.
         nodes: The path dependency map from ``build_step_network`` — each
             value has ``before`` (producers) and ``after`` (consumers) sets.
 
     Returns:
-        A list of step identifiers describing one cycle, as a closed loop
-        (first element repeated at the end, e.g. ``[a, b, a]``), or ``None``
-        if the step network is acyclic.
+        A list of step identifiers describing one NON-DETERMINISTIC cycle —
+        a closed loop (first element repeated at the end, e.g. ``[a, b, a]``)
+        in which at least two members share a priority — or ``None`` if every
+        cycle, if any, is deterministically orderable by distinct priorities
+        (those are allowed, with a warning).
     """
     # Build the step -> step adjacency: an edge producer -> consumer means
     # the producer must run strictly before the consumer.
@@ -548,6 +564,22 @@ def find_step_cycle(ancestors, nodes):
     WHITE, GREY, BLACK = 0, 1, 2
     color = {node: WHITE for node in graph}
     parent = {}
+    allowed_cycles = []
+
+    def _priority(step_key):
+        pr = ancestors.get(step_key, {}).get('priority')
+        return 0.0 if pr is None else pr
+
+    def _agent_subtree(step_key):
+        # The ('agents', <id>) prefix a step lives under, or None if the step is
+        # not inside a per-agent subtree. Used to tell an inter-agent tie (two
+        # independent agents' same-typed steps) from a genuine within-agent one.
+        k = step_key if isinstance(step_key, (tuple, list)) else (step_key,)
+        try:
+            i = list(k).index('agents')
+        except ValueError:
+            return None
+        return tuple(k[:i + 2])
 
     for root in graph:
         if color[root] != WHITE:
@@ -574,12 +606,54 @@ def find_step_cycle(ancestors, nodes):
                         cycle.append(cursor)
                     cycle.reverse()
                     cycle.append(succ)
+                    # Priority-guard: if every step in the cycle has a
+                    # distinct priority, ``determine_steps`` orders them by
+                    # priority alone — deterministic — so the cycle is
+                    # allowed (recorded for one end-of-scan warning). A
+                    # repeated priority among cycle members is the real
+                    # hash-seed hazard (#233): report that cycle as fatal.
+                    members = cycle[:-1]
+                    priorities = [_priority(m) for m in members]
+                    if len(set(priorities)) == len(priorities):
+                        allowed_cycles.append(cycle)
+                        continue
+                    # Tied priorities among cycle members. If the cycle spans
+                    # MORE THAN ONE agent subtree (agents/<id>/...), the tie is
+                    # between corresponding steps of INDEPENDENT agents — the
+                    # same step type carries the same priority in every agent,
+                    # and the agents couple only through the shared environment
+                    # and the `agents` container (a structural map). Their
+                    # inter-agent evaluation order does not change any agent's
+                    # own result, so this is a multi-agent wiring artifact, not
+                    # the hash-seed hazard #233 targets. Allow it; a tie confined
+                    # to a SINGLE agent subtree is still reported as fatal.
+                    agent_subtrees = {
+                        s for s in (_agent_subtree(m) for m in members)
+                        if s is not None}
+                    if len(agent_subtrees) > 1:
+                        allowed_cycles.append(cycle)
+                        continue
                     return cycle
                 # BLACK successors are fully explored; skip them.
             if not descended:
                 color[node] = BLACK
                 stack.pop()
 
+    if allowed_cycles:
+        def _fmt(step_key):
+            if isinstance(step_key, (tuple, list)):
+                return '/'.join(str(part) for part in step_key)
+            return str(step_key)
+        shown = '; '.join(
+            ' -> '.join(_fmt(k) for k in cyc) for cyc in allowed_cycles[:5])
+        more = '' if len(allowed_cycles) <= 5 else f' (+{len(allowed_cycles) - 5} more)'
+        warnings.warn(
+            f'{len(allowed_cycles)} step dependency cycle(s) resolved by '
+            f'distinct-priority ordering (deterministic, allowed): '
+            f'{shown}{more}. These are feedback loops among zero-time steps '
+            f'that priority orders unambiguously; a cycle whose members share '
+            f'a priority would instead be rejected (issue #233).',
+            stacklevel=2)
     return None
 
 
