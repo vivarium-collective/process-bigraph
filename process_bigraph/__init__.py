@@ -14,6 +14,35 @@ def allocate_core(*args, strict=False, **kwargs):
     """
     core = _allocate_core(*args, **kwargs)
     core.strict_config = bool(strict)
+    _register_builtin_emitters(core)
+    return core
+
+
+def _register_builtin_emitters(core):
+    """Ensure process-bigraph's built-in emitters are registered under their
+    SHORT names (``RAMEmitter`` etc.), not only their fully-qualified names.
+
+    Discovery normally registers both, but when several emitter packages
+    co-register in an unlucky import order the short alias is silently dropped
+    (see ``process_bigraph.emitter._VIVA_REEXPORTS``) — leaving only the FQN
+    ``process_bigraph.emitter.RAMEmitter`` and breaking the framework's own
+    default sink ``local:RAMEmitter``. Registering the built-ins explicitly here
+    is order-independent and idempotent (we only fill a missing short alias).
+    """
+    try:
+        from process_bigraph.emitter import (
+            Emitter, ConsoleEmitter, RAMEmitter, JSONEmitter)
+    except Exception:
+        return
+    registry = getattr(core, 'link_registry', None)
+    for cls in (Emitter, ConsoleEmitter, RAMEmitter, JSONEmitter):
+        name = cls.__name__
+        if registry is not None and name in registry:
+            continue
+        try:
+            core.register_link(name, cls)
+        except Exception:
+            pass
     return core
 
 # The installed distribution's version, exposed so a run manifest can record
