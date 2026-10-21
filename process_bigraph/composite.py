@@ -1264,6 +1264,7 @@ class Composite(Process):
         'parallel_steps': 'boolean{false}',
         # Runtime contract checking: off (default, zero-cost) | record | raise.
         'contract_strict': 'string{off}',
+        'orchestration': 'string{temporal}',
         # Time-scheduled processes: when True, the per-tick `run` loop
         # fans out invocations across a thread pool. Right tool when
         # processes' update() releases the GIL (network I/O, numpy /
@@ -2728,7 +2729,7 @@ class Composite(Process):
         # control flows on the same thread.
         _cc_token = current_composite_var.set(self)
         try:
-            return self._run_inner(interval, force_complete, run_start)
+            return self._orchestration_strategy().advance(interval, force_complete, run_start)
         except BaseException as exc:
             status, error = 'error', f'{type(exc).__name__}: {exc}'
             raise
@@ -2774,6 +2775,18 @@ class Composite(Process):
                     self._folded_ticks = 0
                 if span is not None:
                     span.end(status, error)
+
+    def _orchestration_strategy(self):
+        """Resolve (and cache) this Composite's orchestration strategy from the
+        registry. Defaults to ``temporal`` — the event-scheduling loop in
+        :meth:`_run_inner` — so a Composite that declares no ``orchestration``
+        runs exactly as before."""
+        strat = getattr(self, "_orchestration", None)
+        if strat is None:
+            from process_bigraph.orchestration import get_orchestration
+            name = self.config.get("orchestration") or "temporal"
+            strat = self._orchestration = get_orchestration(name)(self)
+        return strat
 
     def _run_inner(self, interval: float, force_complete: bool,
                    run_start: float) -> None:
