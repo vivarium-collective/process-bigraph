@@ -421,6 +421,14 @@ def build_step_network(steps):
         input_paths = ancestors[step_key]['input_paths'] or []
         output_paths = ancestors[step_key]['output_paths'] or []
 
+        # Full input leaves (the complete inputs() wiring, independent of any
+        # triggers() narrowing of input_paths) — the read side of the
+        # read-modify-write test below. input_paths may be a trigger-narrowed
+        # SUBSET of these, so testing inout against the full set is what makes
+        # the skip hold for triggered steps.
+        full_input_leaves = {
+            tuple(p) for p in find_leaves(step.get('inputs', {}), path=step_key[:-1])}
+
         # Track which steps consume/produce each path
         for input_path in input_paths:
             path = tuple(input_path)
@@ -430,14 +438,15 @@ def build_step_network(steps):
         for output_path in output_paths:
             exploded_path = explode_path(output_path)[1:]
             for explode in exploded_path:
-                # Skip self-loops: don't register this step as a
-                # producer of paths it also consumes. Self-loops
-                # can't trigger (a step runs at most once per cycle)
-                # and they clutter the dependency graph.
-                if explode not in input_paths:
-                    path = tuple(explode)
-                    nodes.setdefault(path, {'before': set(), 'after': set()})
-                    nodes[path]['before'].add(step_key)
+                # Read-modify-write: a store this step both reads and writes is
+                # never a cross-step producer (it mutates its own accessed store
+                # in place, like a shared accumulator). Test against the FULL
+                # inputs() leaves, not the trigger-narrowed input_paths.
+                if tuple(explode) in full_input_leaves or explode in input_paths:
+                    continue
+                path = tuple(explode)
+                nodes.setdefault(path, {'before': set(), 'after': set()})
+                nodes[path]['before'].add(step_key)
 
 
     # Second pass: propagate parent outputs to child input paths.

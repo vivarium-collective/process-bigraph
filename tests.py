@@ -4618,6 +4618,84 @@ def test_empty_output_schema_narrows_to_nothing(core):
     assert ('nw',) not in sim.node_dependencies.get(('b',), {}).get('before', set())
 
 
+def test_triggered_step_inout_store_is_not_a_producer(core):
+    """A2: a store a step both reads and writes must not be a cross-step
+    producer even when triggers() narrowed its edge-creating inputs so that
+    the store is absent from input_paths."""
+    class Triggered(Step):
+        def inputs(self):
+            return {'trig': 'float', 'acc': 'list'}   # reads trig AND acc
+        def triggers(self):
+            return {'trig': 'float'}                   # only trig makes edges
+        def outputs(self):
+            return {'acc': 'list'}                     # read-modify-writes acc
+        def update(self, state):
+            return {'acc': state['acc'] + [state['trig']]}
+
+    core.register_link('Triggered', Triggered)
+    document = {
+        't': {'_type': 'step', 'address': 'local:Triggered', 'priority': 1.0,
+              'inputs': {'trig': ['trig'], 'acc': ['acc']},
+              'outputs': {'acc': ['acc']}},
+        'trig': 0.0, 'acc': []}
+    sim = Composite({'state': document}, core=core)
+    # acc is inout: NOT produced (even though acc is not in the trigger-narrowed
+    # input_paths), so a peer reading acc won't falsely depend on this step.
+    assert ('t',) not in sim.node_dependencies.get(('acc',), {}).get('before', set())
+
+
+def test_two_steps_sharing_an_inout_store_do_not_form_a_false_cycle(core):
+    """End-to-end: step A reads shared 's' + writes 'p'; step B reads 'p' +
+    writes shared 's' (inout). Under the old wiring both looked like producers
+    of 's', forming A<->B. With A1+A2 neither produces 's', so no cycle."""
+    class A(Step):
+        def inputs(self):
+            return {'s': 'float', 'p': 'float'}
+        def outputs(self):
+            return {'p': 'float', 's': 'float'}   # s is inout (reads s)
+        def update(self, state):
+            return {'p': state['s'], 's': state['s']}
+    class B(Step):
+        def inputs(self):
+            return {'p': 'float', 's': 'float'}
+        def outputs(self):
+            return {'s': 'float', 'p': 'float'}   # p is inout (reads p)
+        def update(self, state):
+            return {'s': state['p'], 'p': state['p']}
+    core.register_link('A', A)
+    core.register_link('B', B)
+    document = {
+        'a': {'_type': 'step', 'address': 'local:A', 'priority': 1.0,
+              'inputs': {'s': ['s'], 'p': ['p']}, 'outputs': {'p': ['p'], 's': ['s']}},
+        'b': {'_type': 'step', 'address': 'local:B', 'priority': 2.0,
+              'inputs': {'p': ['p'], 's': ['s']}, 'outputs': {'s': ['s'], 'p': ['p']}},
+        's': 0.0, 'p': 0.0}
+    # must build without the cycle check rejecting it
+    Composite({'state': document}, core=core)
+
+
+def test_division_shaped_step_has_no_data_producers(core):
+    """A2 + structural: a division-shaped step (outputs() == inputs() + a
+    node/map-of-node port) registers no data-port producers; only the node
+    port is structural."""
+    class Divider(Step):
+        def inputs(self):
+            return {'bulk': 'float', 'agents': {'_type': 'map', '_value': 'node'}}
+        def outputs(self):
+            return {'bulk': 'float', 'agents': {'_type': 'map', '_value': 'node'}}
+        def update(self, state):
+            return {}
+    core.register_link('Divider', Divider)
+    document = {
+        'd': {'_type': 'step', 'address': 'local:Divider', 'priority': 1.0,
+              'inputs': {'bulk': ['bulk'], 'agents': ['agents']},
+              'outputs': {'bulk': ['bulk'], 'agents': ['agents']}},
+        'bulk': 0.0, 'agents': {}}
+    sim = Composite({'state': document}, core=core)
+    # bulk is inout -> not produced
+    assert ('d',) not in sim.node_dependencies.get(('bulk',), {}).get('before', set())
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================
