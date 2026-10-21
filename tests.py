@@ -4806,6 +4806,51 @@ def test_genuine_container_writer_still_propagates_to_child_leaves(core):
     assert ('w',) in nodes.get(('U', 'x'), {}).get('before', set())
 
 
+def test_a3_filter_never_adds_a_peer_skipped_edge(core):
+    """A3 must preserve the edge-removal-only invariant. The inout filter runs
+    AFTER the #243 container-restructure peer-skip, never before it — otherwise
+    shrinking the producer set could flip `consumers <= data_producers` from
+    True to False and ADD a producer edge the peer-skip had suppressed.
+
+    Here consumer `a` is an inout accumulator on container P that also reads a
+    child `P/x`, so the peer-skip fires on the pre-A3 producer set {a, c}; `c`
+    is a genuine writer of P. Dropping the inout `a` must NOT promote `c` into a
+    new producer of `P/x` that did not exist before A3.
+    """
+    from process_bigraph.scheduling import build_step_network
+
+    class Acc(Step):            # inout on P, and also reads a child leaf P/x
+        def inputs(self):
+            return {'p': {'_type': 'map', '_value': 'float'}, 'x': 'float'}
+        def outputs(self):
+            return {'p': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    class Writer(Step):         # genuine non-inout writer of whole P
+        def inputs(self):
+            return {'seed': 'float'}
+        def outputs(self):
+            return {'p': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    core.register_link('Acc', Acc)
+    core.register_link('Writer', Writer)
+    steps = {
+        ('a',): {'instance': Acc({}, core), 'priority': 1.0,
+                 'inputs': {'p': ['P'], 'x': ['P', 'x']},   # inout P + reads P/x
+                 'outputs': {'p': ['P']}},
+        ('c',): {'instance': Writer({}, core), 'priority': 2.0,
+                 'inputs': {'seed': ['seed']},
+                 'outputs': {'p': ['P']}},                   # genuine writer of P
+    }
+    _ancestors, nodes = build_step_network(steps)
+    before = nodes.get(('P', 'x'), {}).get('before', set())
+    # the peer-skip suppressed this node pre-A3; A3 must not resurrect the edge
+    assert ('c',) not in before
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================

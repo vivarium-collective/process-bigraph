@@ -153,7 +153,11 @@ child readers (verified by `test_genuine_container_writer_still_propagates_to_ch
 Only the second pass is narrowed; the symmetric child→parent third pass is left
 untouched — spikes showed it is not a source of the ecoli re-leak and narrowing
 it risks dropping a genuine "reads whole container, writes a slice → reads whole
-container" edge.
+container" edge. The narrowing is applied **after** the #243 container-restructure
+peer-skip, not before it: running it before could shrink the producer set enough
+to flip that skip's `consumers ⊆ producers` test and *add* a producer edge the
+skip had suppressed, so A3 would violate the edge-removal-only invariant A1/A2
+rest on. Applied after, A3 can only shrink the recorded set.
 
 **Validation (same gate as A1/A2, same minimal v4 cache).**
 

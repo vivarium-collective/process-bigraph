@@ -495,20 +495,6 @@ def build_step_network(steps):
                 # that read/write the container membership itself (an exact or
                 # shallower match, handled in the first pass).
                 data_producers = producers - structural_outputs.get(out_path, set())
-                # A3 (A2 extended to this pass): an inout producer — one whose
-                # full inputs() include the container ``out_path`` it would
-                # propagate down — reads and writes that container in place, so
-                # it is a read-modify-write accumulator, not a fresh producer of
-                # the child leaves beneath it. A2 already suppressed its DIRECT
-                # producer edge on the container, but ``output_paths`` still
-                # lists the container, so without this it re-leaks here as a
-                # false producer of every child leaf a peer reads (the v2ecoli
-                # `division` ↔ `unique_update_*` false cycle). A genuine,
-                # non-inout whole-container writer is unaffected and still orders
-                # its child readers.
-                data_producers = {
-                    producer for producer in data_producers
-                    if out_path not in full_inputs_by_step.get(producer, ())}
                 if not data_producers:
                     continue
                 # Container-restructure peers: when every consumer of this
@@ -523,6 +509,25 @@ def build_step_network(steps):
                 # leaves ``before`` non-empty, so we never reach here for it),
                 # so skipping only affects pure container-ancestor edges.
                 if consumers and consumers <= data_producers:
+                    continue
+                # A3 (A2 extended to this pass): an inout producer — one whose
+                # full inputs() include the container ``out_path`` it would
+                # propagate down — reads and writes that container in place, so
+                # it is a read-modify-write accumulator, not a fresh producer of
+                # the child leaves beneath it. A2 already suppressed its DIRECT
+                # producer edge on the container, but ``output_paths`` still
+                # lists the container, so without this it re-leaks here as a
+                # false producer of every child leaf a peer reads (the v2ecoli
+                # `division` ↔ `unique_update_*` false cycle). A genuine,
+                # non-inout whole-container writer is unaffected and still orders
+                # its child readers. This narrowing runs AFTER the peer-skip
+                # above so it can only SHRINK the recorded producer set, never
+                # flip the `consumers <= data_producers` test and add an edge —
+                # preserving the edge-removal-only invariant.
+                data_producers = {
+                    producer for producer in data_producers
+                    if out_path not in full_inputs_by_step.get(producer, ())}
+                if not data_producers:
                     continue
                 deps['before'].update(data_producers)
 
