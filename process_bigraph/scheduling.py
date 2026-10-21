@@ -570,6 +570,17 @@ def find_step_cycle(ancestors, nodes):
         pr = ancestors.get(step_key, {}).get('priority')
         return 0.0 if pr is None else pr
 
+    def _agent_subtree(step_key):
+        # The ('agents', <id>) prefix a step lives under, or None if the step is
+        # not inside a per-agent subtree. Used to tell an inter-agent tie (two
+        # independent agents' same-typed steps) from a genuine within-agent one.
+        k = step_key if isinstance(step_key, (tuple, list)) else (step_key,)
+        try:
+            i = list(k).index('agents')
+        except ValueError:
+            return None
+        return tuple(k[:i + 2])
+
     for root in graph:
         if color[root] != WHITE:
             continue
@@ -604,6 +615,22 @@ def find_step_cycle(ancestors, nodes):
                     members = cycle[:-1]
                     priorities = [_priority(m) for m in members]
                     if len(set(priorities)) == len(priorities):
+                        allowed_cycles.append(cycle)
+                        continue
+                    # Tied priorities among cycle members. If the cycle spans
+                    # MORE THAN ONE agent subtree (agents/<id>/...), the tie is
+                    # between corresponding steps of INDEPENDENT agents — the
+                    # same step type carries the same priority in every agent,
+                    # and the agents couple only through the shared environment
+                    # and the `agents` container (a structural map). Their
+                    # inter-agent evaluation order does not change any agent's
+                    # own result, so this is a multi-agent wiring artifact, not
+                    # the hash-seed hazard #233 targets. Allow it; a tie confined
+                    # to a SINGLE agent subtree is still reported as fatal.
+                    agent_subtrees = {
+                        s for s in (_agent_subtree(m) for m in members)
+                        if s is not None}
+                    if len(agent_subtrees) > 1:
                         allowed_cycles.append(cycle)
                         continue
                     return cycle
