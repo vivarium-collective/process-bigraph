@@ -86,3 +86,53 @@ Promote the implicit `inputs()`/`outputs()`-∩-wiring inference into a **declar
 | A process's `outputs()` is dishonest (omits a real write) → dropped real edge | Validation #2 (results unchanged vs baseline) catches it; `_dep_outputs` override; such an interface is a bug to fix regardless. |
 | A hidden composite relied on a *false* ordering edge for correctness | That ordering was hash-seed-fragile already; validation #2 surfaces any output change; priority-guard still gates determinism. |
 | Container-propagation edge not covered by A1/A2 | New test (c) + the cycle-count measurement expose any residual false cycle; iterate on the propagation pass if the residue isn't genuine. |
+
+## Validation results (2026-10-21)
+
+Measured on `ecoli_baseline` built from the `cache_folate_met_minimal` ParCa
+cache (schema v4; 45 steps, 89 node-dependency paths). **BEFORE** = pbg at
+`88e478a` (#257, pre-#258; carries the `composite_generator` helper the v2ecoli
+stack still imports). **AFTER** = the identical tree with this branch's
+`scheduling.py` (A1+A2) — `scheduling.py` is byte-identical at `88e478a` and
+this branch's base `1781949`, so the only delta is A1+A2. (The full
+`cache_full` cache is stale at schema v2 and was not rebuilt; the minimal cache
+is the v4 composite available.)
+
+**Determinism + results-unchanged (the safety gate) — PASS, bit-identical.**
+Full-state finite-leaf MD5 fingerprint (sorted leaves + inf/nan counts) of the
+built+run composite:
+
+| run | 3 ticks | 8 ticks |
+|---|---|---|
+| BEFORE, `PYTHONHASHSEED=0` | `72c70a6b…` (146191 leaves, inf 9, nan 88) | `11c13dfe…` (146252 leaves) |
+| AFTER, `PYTHONHASHSEED=0`  | `72c70a6b…` (identical) | `11c13dfe…` (identical) |
+| AFTER, `PYTHONHASHSEED=1`  | `72c70a6b…` (identical) | `11c13dfe…` (identical) |
+
+BEFORE==AFTER ⇒ A1/A2 dropped **no** genuine producer edge (results unchanged).
+AFTER(seed 0)==AFTER(seed 1) ⇒ determinism preserved across hash seeds. A1/A2
+is behavior-neutral — it removes only false scheduling edges.
+
+**Cycle-count — partial reduction, NOT single digits.** `find_step_cycle`
+allowed (distinct-priority-resolved) cycles: **BEFORE 150 → AFTER 107** (−43,
+≈29%). This is well short of the "collapse to the genuine handful" goal. The
+residual is **not** genuine feedback: the stores that still carry both producers
+and consumers are container stores — `agents` (36), `unique` (12:
+active_RNAP/RNA/active_ribosome/full_chromosome), `listeners` (3) — i.e. the
+parent↔child **container-propagation** passes (the 2nd/3rd pass of
+`build_step_network`), which A1/A2 structurally do not touch. This is exactly
+the "Container-propagation edge not covered by A1/A2" risk row above.
+
+**Conclusion.** Approach A is correct and safe to land (bit-identical results +
+determinism; removes 43 false edges; zero composite changes), but on its own it
+addresses only ~29% of the spurious cycles. The dominant remaining source is
+container propagation on `agents`/`unique`/`listeners`. **Follow-up:** a
+container-aware narrowing of the propagation passes (or Approach B's declared
+per-port directions), sequenced after A as the spec already anticipates.
+
+> Environment note surfaced during validation: #258 (`1781949`) removed
+> `composite_generator._emitter_node_from_decl` as a "dead internal helper", but
+> the installed/HEAD `viva_superpowers.composite_generator` still imports it.
+> So any pbg ≥ #258 is import-incompatible with the current `viva_superpowers`;
+> the ecosystem only runs today because the canonical pbg checkout sits at
+> `88e478a` (pre-#258). This is unrelated to A1/A2 but blocks building v2ecoli
+> on a #258-based pbg until `viva_superpowers` drops that import.
