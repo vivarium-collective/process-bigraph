@@ -491,24 +491,6 @@ def _unified_order(step_paths: Dict[Path, Dict],
     return ordered
 
 
-def _insert_position(workflow_lines: List[str],
-                     input_paths: List[Path],
-                     path_to_channel: Dict[Path, str]) -> int:
-    """Index at which to splice a call so it follows its own producers.
-
-    The composite-node loop runs after the Step loop, so a naive append puts a
-    producer AFTER its consumer. Insert instead just past the last line that
-    assigns one of this node's input channels.
-    """
-    wanted = {path_to_channel[p] for p in input_paths if p in path_to_channel}
-    pos = 1
-    for i, line in enumerate(workflow_lines):
-        lhs = line.strip().split('=')[0].strip()
-        if lhs in wanted:
-            pos = i + 1
-    return pos
-
-
 def _terminal_channels(step_paths: Dict[Path, Dict],
                        step_dependencies: Dict[Path, Dict],
                        path_to_channel: Dict[Path, str]) -> List[str]:
@@ -530,25 +512,6 @@ def _terminal_channels(step_paths: Dict[Path, Dict],
                 if ch not in out:
                     out.append(ch)
     return out
-
-
-def _homogeneous_group(step_paths: Dict[Path, Dict],
-                       order: List[Path]) -> Dict[str, List[Path]]:
-    """Group step paths by (class, rendered script) -- the "re-roll" key.
-
-    An unrolled document expresses N identical units as N distinct nodes.
-    Nextflow's natural form is ONE process invoked over a channel of N items,
-    which is also the only form whose outputs arrive as a single channel (and
-    therefore the only one that can be gathered without an N-way merge).
-    Nodes that share a class AND render an identical script body are exactly
-    the nodes that can be re-rolled that way.
-    """
-    groups: Dict[str, List[Path]] = {}
-    for sp in order:
-        inst = step_paths[sp]['instance']
-        key = type(inst).__module__ + '.' + type(inst).__qualname__
-        groups.setdefault(key, []).append(sp)
-    return groups
 
 
 def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -> str:
