@@ -4696,6 +4696,34 @@ def test_division_shaped_step_has_no_data_producers(core):
     assert ('d',) not in sim.node_dependencies.get(('bulk',), {}).get('before', set())
 
 
+def test_a1_keeps_framework_flow_output_port(core):
+    """A1 narrows wired outputs to the outputs() interface, but framework-
+    injected ports (e.g. wire_step_layers' `_flow_out` layer token) are NOT in
+    interface() and MUST survive narrowing — otherwise the inter-layer ordering
+    edge the token exists to create is silently dropped."""
+    from process_bigraph.scheduling import build_step_network
+    class Prod(Step):
+        def inputs(self):
+            return {}
+        def outputs(self):
+            return {'out': 'float'}
+        def update(self, state):
+            return {'out': 1.0}
+    inst = Prod({}, core)
+    steps = {
+        ('p',): {'instance': inst, 'priority': 1.0,
+                 'inputs': {},
+                 # framework-injected flow-token output (wire_step_layers:194),
+                 # whose port key '_flow_out' is absent from outputs()
+                 'outputs': {'out': ['a'], '_flow_out': ['_flow', 'layer_0']}},
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # the framework flow-token leaf must still have 'p' registered as producer
+    assert ('p',) in nodes.get(('_flow', 'layer_0'), {}).get('before', set())
+    # and the genuine data output 'a' too
+    assert ('p',) in nodes.get(('a',), {}).get('before', set())
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================

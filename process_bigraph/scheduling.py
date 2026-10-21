@@ -390,14 +390,21 @@ def build_step_network(steps):
             # Distinguish an ABSENT outputs schema (key missing -> `None`) from
             # an explicitly EMPTY one (`{}`). Absent = can't narrow safely, fall
             # back to the raw wiring; empty = the step declares no outputs, so
-            # narrow to nothing (only `_layer_*` survive).
+            # narrow to nothing (only framework ports survive).
             out_schema_raw = (schema.get('outputs')
                               if isinstance(schema, dict) else None)
             out_ports = (set(out_schema_raw.keys())
                          if out_schema_raw is not None else None)
             if isinstance(wiring, dict) and out_ports is not None:
+                # Framework-injected output ports (wire_step_layers' `_flow_out`
+                # layer token, and any `_layer*` token) are not part of the
+                # step's outputs() interface but carry real ordering edges, so
+                # they must survive narrowing. They follow the underscore-
+                # prefixed framework-port convention; genuine data ports never do.
                 out_wiring = {k: v for k, v in wiring.items()
-                              if k in out_ports or str(k).startswith('_layer')}
+                              if k in out_ports
+                              or str(k).startswith('_flow')
+                              or str(k).startswith('_layer')}
             else:
                 out_wiring = wiring
         if ancestors[step_key]['output_paths'] is None:
