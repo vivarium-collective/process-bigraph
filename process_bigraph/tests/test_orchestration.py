@@ -45,3 +45,53 @@ def test_custom_strategy_is_invoked_through_run():
     sim.run(1.0)
     assert calls == [1.0]
     assert isinstance(sim._orchestration_strategy(), _Recording)
+
+
+# ── workflow strategy: pure step DAG, result-equivalent to temporal ──────────
+from process_bigraph import Step
+from process_bigraph.orchestration import WorkflowOrchestration
+
+
+class _Producer(Step):
+    def inputs(self): return {}
+    def outputs(self): return {'out': 'float'}
+    def update(self, state): return {'out': 2.0}
+
+
+class _Doubler(Step):
+    def inputs(self): return {'x': 'float'}
+    def outputs(self): return {'y': 'float'}
+    def update(self, state): return {'y': state['x'] * 10.0}
+
+
+def _step_dag_core():
+    core = allocate_core()
+    core.register_link('_Producer', _Producer)
+    core.register_link('_Doubler', _Doubler)
+    return core
+
+
+def _step_dag_doc(orchestration):
+    return {
+        'state': {
+            'a': 0.0, 'b': 0.0,
+            'producer': {'_type': 'step', 'address': 'local:_Producer', 'config': {},
+                         'inputs': {}, 'outputs': {'out': ['a']}},
+            'doubler': {'_type': 'step', 'address': 'local:_Doubler', 'config': {},
+                        'inputs': {'x': ['a']}, 'outputs': {'y': ['b']}},
+        },
+        'orchestration': orchestration,
+    }
+
+
+def test_workflow_registered():
+    assert get_orchestration("workflow") is WorkflowOrchestration
+
+
+def test_workflow_runs_step_dag_result_equivalent_to_temporal():
+    sim_t = Composite(_step_dag_doc('temporal'), core=_step_dag_core()); sim_t.run(1.0)
+    sim_w = Composite(_step_dag_doc('workflow'), core=_step_dag_core()); sim_w.run(1.0)
+    assert isinstance(sim_w._orchestration_strategy(), WorkflowOrchestration)
+    # producer ran, then doubler consumed its output (DAG order) — identical result
+    assert sim_w.state['a'] == sim_t.state['a'] == 2.0
+    assert sim_w.state['b'] == sim_t.state['b'] == 20.0

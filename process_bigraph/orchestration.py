@@ -52,6 +52,31 @@ class TemporalOrchestration(OrchestrationStrategy):
         return self.composite._run_inner(interval, force_complete, run_start)
 
 
+class WorkflowOrchestration(OrchestrationStrategy):
+    """Pure zero-interval step DAG — no temporal event loop.
+
+    Runs the ready-step network to completion: ``run_steps`` self-cascades
+    through ``cycle_step_state``/``trigger_steps``, so one call drains the whole
+    DAG in dependency order. For composites that are entirely ``step`` nodes
+    (analysis / workflow pipelines, e.g. the investigation member-study DAG).
+    ``global_time`` is advanced to the requested horizon in one move, since a
+    workflow has no sub-interval temporal dynamics.
+
+    This strategy composes only two Composite primitives — the ready-step queue
+    (``to_run``) and ``run_steps`` — a much smaller surface than the temporal
+    loop, which is what makes the clean engine-primitive interface visible.
+    """
+
+    name = "workflow"
+
+    def advance(self, interval, force_complete, run_start):
+        composite = self.composite
+        if composite.to_run:
+            composite.run_steps(composite.to_run)
+            composite.to_run = []
+        composite.state['global_time'] = composite.state.get('global_time', 0.0) + interval
+
+
 ORCHESTRATION_REGISTRY: dict = {}
 
 
@@ -81,3 +106,4 @@ def get_orchestration(name: str) -> type:
 # The built-in default. Downstream packages register their own (e.g.
 # vivarium-workbench registers 'investigation') at build_core time.
 register_orchestration("temporal", TemporalOrchestration)
+register_orchestration("workflow", WorkflowOrchestration)
