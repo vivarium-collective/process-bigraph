@@ -347,6 +347,11 @@ def build_step_network(steps):
     # map-of-node) output port. Such a write restructures the container at that
     # path; it does not produce the data leaves beneath it (#248).
     structural_outputs = {}
+    # step_key -> frozenset of the step's FULL inputs() leaves. Used by the
+    # container-propagation pass to apply A2's read-modify-write rule: a step
+    # that READS a container it would otherwise propagate down to child leaves
+    # is an accumulator, not a fresh producer (A3).
+    full_inputs_by_step = {}
 
     for step_key, step in steps.items():
         schema = step['instance'].interface()
@@ -376,8 +381,37 @@ def build_step_network(steps):
             else:
                 ancestors[step_key]['input_paths'] = find_leaves(step['inputs'], path=step_key[:-1])
 
-        # Compute output paths once per step
-        out_wiring = step.get('_dep_outputs', step.get('outputs', {}))
+        # Compute output paths once per step. A `_dep_outputs` override is
+        # trusted verbatim; otherwise narrow the wired outputs to the step's
+        # declared outputs() ports (the output-side analogue of the triggers()
+        # input narrowing above) — a port wired as an output but not declared
+        # in outputs() is inout-inflation, not a real write. `_layer_*`
+        # framework ports are always kept.
+        dep_outputs = step.get('_dep_outputs')
+        if dep_outputs is not None:
+            out_wiring = dep_outputs
+        else:
+            wiring = step.get('outputs', {})
+            # Distinguish an ABSENT outputs schema (key missing -> `None`) from
+            # an explicitly EMPTY one (`{}`). Absent = can't narrow safely, fall
+            # back to the raw wiring; empty = the step declares no outputs, so
+            # narrow to nothing (only framework ports survive).
+            out_schema_raw = (schema.get('outputs')
+                              if isinstance(schema, dict) else None)
+            out_ports = (set(out_schema_raw.keys())
+                         if out_schema_raw is not None else None)
+            if isinstance(wiring, dict) and out_ports is not None:
+                # Framework-injected output ports (wire_step_layers' `_flow_out`
+                # layer token, and any `_layer*` token) are not part of the
+                # step's outputs() interface but carry real ordering edges, so
+                # they must survive narrowing. They follow the underscore-
+                # prefixed framework-port convention; genuine data ports never do.
+                out_wiring = {k: v for k, v in wiring.items()
+                              if k in out_ports
+                              or str(k).startswith('_flow')
+                              or str(k).startswith('_layer')}
+            else:
+                out_wiring = wiring
         if ancestors[step_key]['output_paths'] is None:
             ancestors[step_key]['output_paths'] = find_leaves(
                 out_wiring, path=step_key[:-1])
@@ -399,6 +433,15 @@ def build_step_network(steps):
         input_paths = ancestors[step_key]['input_paths'] or []
         output_paths = ancestors[step_key]['output_paths'] or []
 
+        # Full input leaves (the complete inputs() wiring, independent of any
+        # triggers() narrowing of input_paths) — the read side of the
+        # read-modify-write test below. input_paths may be a trigger-narrowed
+        # SUBSET of these, so testing inout against the full set is what makes
+        # the skip hold for triggered steps.
+        full_input_leaves = {
+            tuple(p) for p in find_leaves(step.get('inputs', {}), path=step_key[:-1])}
+        full_inputs_by_step[step_key] = full_input_leaves
+
         # Track which steps consume/produce each path
         for input_path in input_paths:
             path = tuple(input_path)
@@ -408,14 +451,15 @@ def build_step_network(steps):
         for output_path in output_paths:
             exploded_path = explode_path(output_path)[1:]
             for explode in exploded_path:
-                # Skip self-loops: don't register this step as a
-                # producer of paths it also consumes. Self-loops
-                # can't trigger (a step runs at most once per cycle)
-                # and they clutter the dependency graph.
-                if explode not in input_paths:
-                    path = tuple(explode)
-                    nodes.setdefault(path, {'before': set(), 'after': set()})
-                    nodes[path]['before'].add(step_key)
+                # Read-modify-write: a store this step both reads and writes is
+                # never a cross-step producer (it mutates its own accessed store
+                # in place, like a shared accumulator). Test against the FULL
+                # inputs() leaves, not the trigger-narrowed input_paths.
+                if tuple(explode) in full_input_leaves or explode in input_paths:
+                    continue
+                path = tuple(explode)
+                nodes.setdefault(path, {'before': set(), 'after': set()})
+                nodes[path]['before'].add(step_key)
 
 
     # Second pass: propagate parent outputs to child input paths.
@@ -465,6 +509,25 @@ def build_step_network(steps):
                 # leaves ``before`` non-empty, so we never reach here for it),
                 # so skipping only affects pure container-ancestor edges.
                 if consumers and consumers <= data_producers:
+                    continue
+                # A3 (A2 extended to this pass): an inout producer — one whose
+                # full inputs() include the container ``out_path`` it would
+                # propagate down — reads and writes that container in place, so
+                # it is a read-modify-write accumulator, not a fresh producer of
+                # the child leaves beneath it. A2 already suppressed its DIRECT
+                # producer edge on the container, but ``output_paths`` still
+                # lists the container, so without this it re-leaks here as a
+                # false producer of every child leaf a peer reads (the v2ecoli
+                # `division` ↔ `unique_update_*` false cycle). A genuine,
+                # non-inout whole-container writer is unaffected and still orders
+                # its child readers. This narrowing runs AFTER the peer-skip
+                # above so it can only SHRINK the recorded producer set, never
+                # flip the `consumers <= data_producers` test and add an edge —
+                # preserving the edge-removal-only invariant.
+                data_producers = {
+                    producer for producer in data_producers
+                    if out_path not in full_inputs_by_step.get(producer, ())}
+                if not data_producers:
                     continue
                 deps['before'].update(data_producers)
 

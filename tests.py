@@ -4513,6 +4513,344 @@ def test_structural_node_output_is_not_a_producer_of_member_leaves(core):
     Composite({'state': document}, core=core)
 
 
+def test_output_wired_but_not_declared_is_not_a_producer(core):
+    """A1: a store wired as a step's output but absent from its outputs()
+    interface is inflation, not a real write — the step must not be registered
+    as its producer.
+
+    The undeclared store 'x' here is NOT also an input, so the pre-existing
+    self-loop skip (which only cancels stores a step also reads) cannot catch
+    it — only A1's interface narrowing removes it. The genuinely-declared,
+    write-only 'w' must still produce."""
+    class ReaderWriter(Step):
+        def inputs(self):
+            return {'r': 'float'}
+        def outputs(self):
+            return {'w': 'float'}
+        def update(self, state):
+            return {'w': state['r']}
+
+    core.register_link('ReaderWriter', ReaderWriter)
+    document = {
+        'rw': {'_type': 'step', 'address': 'local:ReaderWriter', 'priority': 1.0,
+               'inputs': {'r': ['r']},
+               'outputs': {'w': ['w'], 'x': ['x']}},   # 'x' wired out, undeclared = inflation
+        'r': 1.0, 'w': 0.0, 'x': 0.0}
+    sim = Composite({'state': document}, core=core)
+    # 'x' is wired-out but undeclared and not read -> A1 drops it as a producer
+    assert ('rw',) not in sim.node_dependencies.get(('x',), {}).get('before', set())
+    # 'w' is genuinely declared + write-only -> still a producer
+    assert ('rw',) in sim.node_dependencies.get(('w',), {}).get('before', set())
+
+
+def test_genuine_output_still_produces(core):
+    """A1 must only REMOVE false edges: a store a step genuinely writes and
+    does not read must still register the step as its producer."""
+    class Writer(Step):
+        def inputs(self):
+            return {'src': 'float'}
+        def outputs(self):
+            return {'dst': 'float'}
+        def update(self, state):
+            return {'dst': state['src']}
+
+    core.register_link('Writer', Writer)
+    document = {
+        'wr': {'_type': 'step', 'address': 'local:Writer', 'priority': 1.0,
+               'inputs': {'src': ['src']}, 'outputs': {'dst': ['dst']}},
+        'src': 2.0, 'dst': 0.0}
+    sim = Composite({'state': document}, core=core)
+    assert ('wr',) in sim.node_dependencies.get(('dst',), {}).get('before', set())
+
+
+def test_dep_outputs_override_bypasses_narrowing(core):
+    """`_dep_outputs`, when present, is the explicit dependency-output override
+    and must be used verbatim — A1 must not re-narrow it.
+
+    `_dep_outputs` is stripped by StepLink schema realization, so it never
+    survives a ``Composite(document)`` build; it reaches ``build_step_network``
+    only when the scheduler itself populates it. Exercise the override path
+    directly on a hand-built steps dict (the unit the override lives in)."""
+    from process_bigraph.scheduling import build_step_network
+
+    class OnlyW(Step):
+        def inputs(self):
+            return {'w': 'float'}
+        def outputs(self):
+            return {'w': 'float'}
+        def update(self, state):
+            return {'w': state['w'] + 1.0}
+
+    inst = OnlyW({}, core)
+    steps = {
+        ('ow',): {'instance': inst, 'priority': 1.0,
+                  'inputs': {'w': ['w']}, 'outputs': {'w': ['w']},
+                  '_dep_outputs': {'extra': ['extra']}},  # override -> a different store
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # override honored verbatim: 'extra' is produced, declared 'w' is not
+    assert ('ow',) in nodes.get(('extra',), {}).get('before', set())
+    assert ('ow',) not in nodes.get(('w',), {}).get('before', set())
+
+
+def test_empty_output_schema_narrows_to_nothing(core):
+    """A step whose outputs() is an explicit empty ``{}`` declares no writes:
+    any wired output is inflation and must not produce.
+
+    This exercises A1's absent-vs-empty distinction — an EMPTY outputs schema
+    narrows the wired outputs to nothing (it does NOT fall back to the raw
+    wiring). (A truly ABSENT 'outputs' key is impossible: ``assert_interface``
+    requires exactly {inputs, outputs} and link realization rejects it earlier,
+    so there is no reachable "missing outputs key" case to fall back from.)"""
+    class NoWrites(Step):
+        def inputs(self):
+            return {'a': 'float'}
+        def outputs(self):
+            return {}
+        def update(self, state):
+            return {}
+    core.register_link('NoWrites', NoWrites)
+    document = {
+        'nw': {'_type': 'step', 'address': 'local:NoWrites', 'priority': 1.0,
+               'inputs': {'a': ['a']}, 'outputs': {'b': ['b']}},  # 'b' wired, undeclared
+        'a': 0.0, 'b': 0.0}
+    sim = Composite({'state': document}, core=core)
+    assert ('nw',) not in sim.node_dependencies.get(('b',), {}).get('before', set())
+
+
+def test_triggered_step_inout_store_is_not_a_producer(core):
+    """A2: a store a step both reads and writes must not be a cross-step
+    producer even when triggers() narrowed its edge-creating inputs so that
+    the store is absent from input_paths."""
+    class Triggered(Step):
+        def inputs(self):
+            return {'trig': 'float', 'acc': 'list'}   # reads trig AND acc
+        def triggers(self):
+            return {'trig': 'float'}                   # only trig makes edges
+        def outputs(self):
+            return {'acc': 'list'}                     # read-modify-writes acc
+        def update(self, state):
+            return {'acc': state['acc'] + [state['trig']]}
+
+    core.register_link('Triggered', Triggered)
+    document = {
+        't': {'_type': 'step', 'address': 'local:Triggered', 'priority': 1.0,
+              'inputs': {'trig': ['trig'], 'acc': ['acc']},
+              'outputs': {'acc': ['acc']}},
+        'trig': 0.0, 'acc': []}
+    sim = Composite({'state': document}, core=core)
+    # acc is inout: NOT produced (even though acc is not in the trigger-narrowed
+    # input_paths), so a peer reading acc won't falsely depend on this step.
+    assert ('t',) not in sim.node_dependencies.get(('acc',), {}).get('before', set())
+
+
+def test_two_steps_sharing_an_inout_store_do_not_form_a_false_cycle(core):
+    """End-to-end: step A reads shared 's' + writes 'p'; step B reads 'p' +
+    writes shared 's' (inout). Under the old wiring both looked like producers
+    of 's', forming A<->B. With A1+A2 neither produces 's', so no cycle."""
+    class A(Step):
+        def inputs(self):
+            return {'s': 'float', 'p': 'float'}
+        def outputs(self):
+            return {'p': 'float', 's': 'float'}   # s is inout (reads s)
+        def update(self, state):
+            return {'p': state['s'], 's': state['s']}
+    class B(Step):
+        def inputs(self):
+            return {'p': 'float', 's': 'float'}
+        def outputs(self):
+            return {'s': 'float', 'p': 'float'}   # p is inout (reads p)
+        def update(self, state):
+            return {'s': state['p'], 'p': state['p']}
+    core.register_link('A', A)
+    core.register_link('B', B)
+    document = {
+        'a': {'_type': 'step', 'address': 'local:A', 'priority': 1.0,
+              'inputs': {'s': ['s'], 'p': ['p']}, 'outputs': {'p': ['p'], 's': ['s']}},
+        'b': {'_type': 'step', 'address': 'local:B', 'priority': 2.0,
+              'inputs': {'p': ['p'], 's': ['s']}, 'outputs': {'s': ['s'], 'p': ['p']}},
+        's': 0.0, 'p': 0.0}
+    # must build without the cycle check rejecting it
+    Composite({'state': document}, core=core)
+
+
+def test_division_shaped_step_has_no_data_producers(core):
+    """A2 + structural: a division-shaped step (outputs() == inputs() + a
+    node/map-of-node port) registers no data-port producers; only the node
+    port is structural."""
+    class Divider(Step):
+        def inputs(self):
+            return {'bulk': 'float', 'agents': {'_type': 'map', '_value': 'node'}}
+        def outputs(self):
+            return {'bulk': 'float', 'agents': {'_type': 'map', '_value': 'node'}}
+        def update(self, state):
+            return {}
+    core.register_link('Divider', Divider)
+    document = {
+        'd': {'_type': 'step', 'address': 'local:Divider', 'priority': 1.0,
+              'inputs': {'bulk': ['bulk'], 'agents': ['agents']},
+              'outputs': {'bulk': ['bulk'], 'agents': ['agents']}},
+        'bulk': 0.0, 'agents': {}}
+    sim = Composite({'state': document}, core=core)
+    # bulk is inout -> not produced
+    assert ('d',) not in sim.node_dependencies.get(('bulk',), {}).get('before', set())
+
+
+def test_a1_keeps_framework_flow_output_port(core):
+    """A1 narrows wired outputs to the outputs() interface, but framework-
+    injected ports (e.g. wire_step_layers' `_flow_out` layer token) are NOT in
+    interface() and MUST survive narrowing — otherwise the inter-layer ordering
+    edge the token exists to create is silently dropped."""
+    from process_bigraph.scheduling import build_step_network
+    class Prod(Step):
+        def inputs(self):
+            return {}
+        def outputs(self):
+            return {'out': 'float'}
+        def update(self, state):
+            return {'out': 1.0}
+    inst = Prod({}, core)
+    steps = {
+        ('p',): {'instance': inst, 'priority': 1.0,
+                 'inputs': {},
+                 # framework-injected flow-token output (wire_step_layers:194),
+                 # whose port key '_flow_out' is absent from outputs()
+                 'outputs': {'out': ['a'], '_flow_out': ['_flow', 'layer_0']}},
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # the framework flow-token leaf must still have 'p' registered as producer
+    assert ('p',) in nodes.get(('_flow', 'layer_0'), {}).get('before', set())
+    # and the genuine data output 'a' too
+    assert ('p',) in nodes.get(('a',), {}).get('before', set())
+
+
+def test_inout_container_writer_does_not_propagate_to_child_leaves(core):
+    """A3: container-propagation pass must honour A2's read-modify-write rule.
+
+    A step that reads AND writes a whole container (inout) — e.g. `division`
+    wiring `unique: ['unique']` on both sides — is an accumulator, not a fresh
+    producer. A2 already drops its DIRECT producer edge on the container, but
+    the step's `output_paths` still lists the container, so the second pass
+    re-derives it as a producer of every CHILD leaf a peer reads and re-leaks
+    the exact false edge A2 removed. The fix extends A2 into the pass: an inout
+    producer does not propagate down to children.
+    """
+    from process_bigraph.scheduling import build_step_network
+
+    class Divider(Step):
+        def inputs(self):
+            return {'u': {'_type': 'map', '_value': 'float'}}
+        def outputs(self):
+            return {'u': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    class Reader(Step):
+        def inputs(self):
+            return {'x': 'float'}
+        def outputs(self):
+            return {'y': 'float'}
+        def update(self, state):
+            return {'y': state['x']}
+
+    core.register_link('Divider', Divider)
+    core.register_link('Reader', Reader)
+    steps = {
+        ('d',): {'instance': Divider({}, core), 'priority': 1.0,
+                 'inputs': {'u': ['U']},            # reads whole container U
+                 'outputs': {'u': ['U']}},           # writes whole U (inout)
+        ('c',): {'instance': Reader({}, core), 'priority': 2.0,
+                 'inputs': {'x': ['U', 'x']},        # reads child leaf U/x
+                 'outputs': {'y': ['y']}},
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # the inout writer must NOT be a producer of the child leaf
+    assert ('d',) not in nodes.get(('U', 'x'), {}).get('before', set())
+
+
+def test_genuine_container_writer_still_propagates_to_child_leaves(core):
+    """A3 is selective: a genuine NON-inout whole-container writer (writes U but
+    does not read it) still propagates to a child leaf a peer reads — the pass's
+    real purpose (opaque container write → child read ordering) is preserved.
+    """
+    from process_bigraph.scheduling import build_step_network
+
+    class Writer(Step):
+        def inputs(self):
+            return {'seed': 'float'}
+        def outputs(self):
+            return {'u': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    class Reader(Step):
+        def inputs(self):
+            return {'x': 'float'}
+        def outputs(self):
+            return {'y': 'float'}
+        def update(self, state):
+            return {'y': state['x']}
+
+    core.register_link('Writer', Writer)
+    core.register_link('Reader', Reader)
+    steps = {
+        ('w',): {'instance': Writer({}, core), 'priority': 1.0,
+                 'inputs': {'seed': ['seed']},       # does NOT read U
+                 'outputs': {'u': ['U']}},            # writes whole U
+        ('c',): {'instance': Reader({}, core), 'priority': 2.0,
+                 'inputs': {'x': ['U', 'x']},
+                 'outputs': {'y': ['y']}},
+    }
+    _ancestors, nodes = build_step_network(steps)
+    # genuine producer of the whole container still orders the child reader
+    assert ('w',) in nodes.get(('U', 'x'), {}).get('before', set())
+
+
+def test_a3_filter_never_adds_a_peer_skipped_edge(core):
+    """A3 must preserve the edge-removal-only invariant. The inout filter runs
+    AFTER the #243 container-restructure peer-skip, never before it — otherwise
+    shrinking the producer set could flip `consumers <= data_producers` from
+    True to False and ADD a producer edge the peer-skip had suppressed.
+
+    Here consumer `a` is an inout accumulator on container P that also reads a
+    child `P/x`, so the peer-skip fires on the pre-A3 producer set {a, c}; `c`
+    is a genuine writer of P. Dropping the inout `a` must NOT promote `c` into a
+    new producer of `P/x` that did not exist before A3.
+    """
+    from process_bigraph.scheduling import build_step_network
+
+    class Acc(Step):            # inout on P, and also reads a child leaf P/x
+        def inputs(self):
+            return {'p': {'_type': 'map', '_value': 'float'}, 'x': 'float'}
+        def outputs(self):
+            return {'p': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    class Writer(Step):         # genuine non-inout writer of whole P
+        def inputs(self):
+            return {'seed': 'float'}
+        def outputs(self):
+            return {'p': {'_type': 'map', '_value': 'float'}}
+        def update(self, state):
+            return {}
+
+    core.register_link('Acc', Acc)
+    core.register_link('Writer', Writer)
+    steps = {
+        ('a',): {'instance': Acc({}, core), 'priority': 1.0,
+                 'inputs': {'p': ['P'], 'x': ['P', 'x']},   # inout P + reads P/x
+                 'outputs': {'p': ['P']}},
+        ('c',): {'instance': Writer({}, core), 'priority': 2.0,
+                 'inputs': {'seed': ['seed']},
+                 'outputs': {'p': ['P']}},                   # genuine writer of P
+    }
+    _ancestors, nodes = build_step_network(steps)
+    before = nodes.get(('P', 'x'), {}).get('before', set())
+    # the peer-skip suppressed this node pre-A3; A3 must not resurrect the edge
+    assert ('c',) not in before
+
+
 # ==========================================
 # Part B' — typed parameter validation
 # ==========================================
