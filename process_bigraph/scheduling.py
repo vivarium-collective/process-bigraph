@@ -352,6 +352,11 @@ def build_step_network(steps):
     # that READS a container it would otherwise propagate down to child leaves
     # is an accumulator, not a fresh producer (A3).
     full_inputs_by_step = {}
+    # leaf path (tuple) -> set of step_keys that READ-MODIFY-WRITE it in place
+    # (A2 suppressed them as producers of their own accessed store). The
+    # pure-reader ordering pass below uses this to order a reader after the
+    # accumulators without ordering the accumulators among themselves.
+    inout_writers = {}
 
     for step_key, step in steps.items():
         schema = step['instance'].interface()
@@ -456,6 +461,7 @@ def build_step_network(steps):
                 # in place, like a shared accumulator). Test against the FULL
                 # inputs() leaves, not the trigger-narrowed input_paths.
                 if tuple(explode) in full_input_leaves or explode in input_paths:
+                    inout_writers.setdefault(tuple(explode), set()).add(step_key)
                     continue
                 path = tuple(explode)
                 nodes.setdefault(path, {'before': set(), 'after': set()})
@@ -544,6 +550,86 @@ def build_step_network(steps):
                         if producer not in node['after']:
                             node['before'].add(producer)
 
+    # Pure-reader ordering (the A2/A3 counterpart). A2/A3 drop an inout
+    # accumulator (a step that read-modify-writes a store) from the ``before``
+    # producer set of that store's child leaves, which correctly breaks the
+    # accumulator-PEER cycle (two accumulators of one store do not produce what
+    # each other consumes — v2ecoli ``division`` ↔ ``unique_update_*``). But a
+    # PURE READER of that store — a step that reads the settled value and never
+    # writes it (a contract/listener bridge reading ``dry_mass``, a tank reading
+    # an exchange) — genuinely needs the accumulators to have run, and the
+    # dropped ``before`` edge left it unordered (process-bigraph #259 regression:
+    # ``contract_out`` read ``dry_mass`` mid-accumulation). We cannot restore the
+    # edge through ``before`` — that is a per-PATH set shared by every consumer,
+    # so it would also re-order the accumulators against each other and rebuild
+    # the very cycle A2/A3 removed. Instead record a per-STEP predecessor edge
+    # accumulator → pure-reader: it orders the reader after the accumulators
+    # WITHOUT ordering the accumulators among themselves.
+    #
+    # A pure reader of leaf ``L``: reads ``L`` (exactly, or via an ancestor
+    # container of ``L``) and is not itself any writer of ``L`` (neither a
+    # recorded producer nor an inout writer). ``determine_steps`` and
+    # ``find_step_cycle`` both honour ``_extra_predecessors``.
+    writers_of_leaf = {}
+    for p, node in nodes.items():
+        if node['before']:
+            writers_of_leaf.setdefault(p, set()).update(node['before'])
+    for p, w in inout_writers.items():
+        writers_of_leaf.setdefault(p, set()).update(w)
+    reads_by_step = {
+        s: {tuple(x) for x in (ancestors[s]['input_paths'] or [])}
+        for s in ancestors}
+
+    # Base producer→consumer adjacency (the ordering edges already implied by
+    # ``before``/``after``), used to add a pure-reader edge ONLY where it stays
+    # acyclic: if the reader can already reach the accumulator, the two are in a
+    # genuine zero-time feedback loop (the reader also feeds the accumulator) and
+    # a hard ``accumulator → reader`` edge would close a cycle. Those are left to
+    # the scheduler's existing priority-based cycle resolution; we only hard-order
+    # the acyclic readers that A2/A3 wrongly left dangling.
+    base_adj = {s: set() for s in ancestors}
+    for node in nodes.values():
+        for producer in (node.get('before') or ()):
+            if producer not in base_adj:
+                continue
+            for consumer in (node.get('after') or ()):
+                if consumer != producer:
+                    base_adj[producer].add(consumer)
+
+    def _reaches(src, dst):
+        if src == dst:
+            return True
+        seen = {src}
+        stack = [src]
+        while stack:
+            cur = stack.pop()
+            for nxt in base_adj.get(cur, ()):
+                if nxt == dst:
+                    return True
+                if nxt not in seen:
+                    seen.add(nxt)
+                    stack.append(nxt)
+        return False
+
+    extra_predecessors = {s: set() for s in ancestors}
+    for leaf, accumulators in inout_writers.items():
+        leaf_writers = writers_of_leaf.get(leaf, set())
+        for step_key, reads in reads_by_step.items():
+            if step_key in accumulators or step_key in leaf_writers:
+                continue  # a writer of this leaf, not a pure reader
+            reads_leaf = leaf in reads or any(
+                len(i) <= len(leaf) and tuple(leaf[:len(i)]) == i for i in reads)
+            if not reads_leaf:
+                continue
+            for acc in accumulators:
+                if acc == step_key:
+                    continue
+                # Skip the edge if the reader already reaches the accumulator
+                # (acc → reader would close a feedback cycle); priority resolves
+                # those. Otherwise hard-order reader after acc.
+                if not _reaches(step_key, acc):
+                    extra_predecessors[step_key].add(acc)
+
     # Precompute each step's direct dependents (= the set of steps
     # that consume something this step writes). ``find_downstream``
     # was reconstructing this every tick by walking
@@ -557,7 +643,16 @@ def build_step_network(steps):
                 node = nodes.get(subpath)
                 if node is not None:
                     direct.update(node['after'])
+        ancestor['_extra_predecessors'] = frozenset(extra_predecessors[step_key])
         ancestor['_direct_dependents'] = frozenset(direct)
+    # A pure reader is a dependent of each accumulator that precedes it, so the
+    # hot-path downstream BFS (``find_downstream``) re-triggers it when the
+    # accumulator updates.
+    for reader, preds in extra_predecessors.items():
+        for pred in preds:
+            if pred in ancestors:
+                ancestors[pred]['_direct_dependents'] = frozenset(
+                    ancestors[pred]['_direct_dependents'] | {reader})
 
     return ancestors, nodes
 
@@ -619,6 +714,13 @@ def find_step_cycle(ancestors, nodes):
             for consumer in after:
                 if consumer != producer:
                     graph[producer].add(consumer)
+    # Per-step pure-reader edges (accumulator -> reader) carry the same ordering
+    # constraint as a ``before`` -> ``after`` edge and must be visible to cycle
+    # detection, so a genuine reader↔accumulator feedback is still caught.
+    for step_key, ancestor in ancestors.items():
+        for pred in ancestor.get('_extra_predecessors', ()):
+            if pred in graph and pred != step_key:
+                graph[pred].add(step_key)
 
     # Iterative DFS with three-colour marking (white/grey/black). A grey
     # successor is a back-edge, i.e. a cycle; parent pointers reconstruct it.
@@ -782,8 +884,15 @@ def determine_steps(steps, remaining, fulfilled):
 
     for step_path in list(remaining):
         step_inputs = steps[step_path].get('input_paths', []) or []
-        if all(len(fulfilled[input]) == 0 for input in step_inputs):
-            to_run.append(step_path)
+        if not all(len(fulfilled[input]) == 0 for input in step_inputs):
+            continue
+        # A pure reader waits on its inout accumulators too (see
+        # ``_extra_predecessors`` in build_step_network): it is ready only once
+        # every accumulator it reads from has already run this cycle.
+        extra = steps[step_path].get('_extra_predecessors', ())
+        if any(pred in remaining for pred in extra):
+            continue
+        to_run.append(step_path)
 
     if not to_run:
         # All remaining steps are in cycles — pick the highest priority one.
