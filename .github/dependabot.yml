@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    # Keep Dependabot *security* updates (driven by advisories) active, but
+    # don't open routine version-bump PRs — so this config adds no new noise.
+    open-pull-requests-limit: 0
+    ignore:
+      # setuptools is only a transitive build backend here: it is pulled in by
+      # jupyterlab (docs/tutorial-notebook tooling), not a direct dependency.
+      # A Dependabot security update can only bump a DIRECT dependency, so every
+      # attempt to security-update setuptools fails with an internal "unknown
+      # error" and reds the Actions tab on a schedule. The advisory concerns
+      # using setuptools to *build* untrusted packages — not relevant to a
+      # locked docs-build tool — so ignore it here. (ignore conditions are
+      # honored by security updates too.)
+      - dependency-name: "setuptools"
