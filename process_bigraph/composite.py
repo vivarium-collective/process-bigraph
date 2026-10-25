@@ -296,6 +296,61 @@ def find_instance_paths(
     return hierarchy_depth(instances)
 
 
+def document_leaf_paths(state, prefix=()):
+    """Yield the path to every non-dict leaf in a raw document state tree.
+
+    Used to record which stores a document sets explicitly, so a process's
+    ``initial_state()`` fills only the stores the document left to their type
+    default and never overwrites a document-stated value (#200). Dicts recurse;
+    every non-dict (scalar, list, array, process node leaf) is a leaf. Paths
+    into process nodes are harmless here — they never collide with the store
+    paths a port wires to.
+    """
+    if isinstance(state, dict):
+        for key, value in state.items():
+            yield from document_leaf_paths(value, prefix + (key,))
+    else:
+        yield prefix
+
+
+def without_document_leaves(update, document_leaves, prefix=()):
+    """Return ``update`` with any leaf the document set explicitly removed.
+
+    A leaf whose absolute path is in ``document_leaves`` is dropped (the
+    document value keeps precedence); dicts recurse and now-empty branches are
+    pruned so nothing empty is merged (#200).
+    """
+    if not isinstance(update, dict):
+        return update
+    result = {}
+    for key, value in update.items():
+        child = prefix + (key,)
+        if isinstance(value, dict):
+            pruned = without_document_leaves(value, document_leaves, child)
+            if pruned:
+                result[key] = pruned
+        elif child not in document_leaves:
+            result[key] = value
+    return result
+
+
+def state_has_value_at(state, path):
+    """True iff ``path`` resolves to a present, non-None value in ``state``.
+
+    Used to keep only the document leaves that realize materialized as actual
+    state values. A store declared by type alone (e.g. ``'level': 'float'``)
+    moves to the schema and leaves no state value, so it is NOT treated as a
+    document-stated value and a process's ``initial_state()`` may fill it (#200).
+    """
+    node = state
+    for key in path:
+        if isinstance(node, dict) and key in node:
+            node = node[key]
+        else:
+            return False
+    return node is not None
+
+
 def interval_time_precision(timestep: float) -> int:
     """
     Compute the number of decimal places required to represent the given timestep.
@@ -1339,6 +1394,11 @@ class Composite(Process):
         # both into the same clear "not ground" error that names the site.
         self._require_ground_input(initial_schema, initial_state)
 
+        # Record which stores the document sets explicitly, BEFORE realize
+        # fills type defaults everywhere. These values keep precedence over a
+        # process's initial_state() (#200).
+        document_leaves = set(document_leaf_paths(initial_state))
+
         # Generate internal schema and state structures using the core engine.
         # Top-level realize: realize_root defaults to () so no merges escape.
         self.schema, self.state, _ = self.core.realize(
@@ -1414,11 +1474,25 @@ class Composite(Process):
                         f'{e}'
                     )
 
-            # Apply the merged edge_state into the global state and update instance paths.
+            # Apply the merged edge_state into the global state. ``self.state``
+            # here is the document with realize's type defaults filled in, so
+            # it must NOT be the winning update — a default 0.0 / False would
+            # outrank a process's initial_state() for overwrite[float]/boolean
+            # ports (#200). Apply edge_state as the update so initial_state()
+            # beats realize-filled defaults, but first drop the leaves the
+            # document set explicitly so those keep precedence over both.
             if edge_state:
-                self.schema, self.state = self.core.combine(
-                    edge_schema, edge_state,
-                    self.schema, self.state)
+                # Keep only the document leaves that realize materialized as
+                # real state values — a type-only store declaration leaves no
+                # value, so initial_state() must still fill it (#200).
+                explicit_leaves = {
+                    path for path in document_leaves
+                    if state_has_value_at(self.state, path)}
+                edge_state = without_document_leaves(edge_state, explicit_leaves)
+                if edge_state:
+                    self.schema, self.state = self.core.combine(
+                        self.schema, self.state,
+                        edge_schema, edge_state)
 
         # Build the effective bridge dict: conduits are merged into
         # outputs for the purposes of process_schema / read_bridge /
