@@ -268,16 +268,10 @@ def _derive_global_time_precision(doc):
     document lives on one decimal grid (e.g. all on the 0.1 grid -> 1), else
     ``None`` (no intervals, or a mix of grids we must not round across).
     """
-    from process_bigraph.composite import interval_time_precision
+    from process_bigraph.composite import shared_time_precision
 
     state = doc.get("state", doc) if isinstance(doc, dict) else doc
-    precisions = {
-        interval_time_precision(interval)
-        for interval in _iter_edge_intervals(state)
-    }
-    if len(precisions) == 1:
-        return precisions.pop()
-    return None
+    return shared_time_precision(_iter_edge_intervals(state))
 
 
 @dataclass

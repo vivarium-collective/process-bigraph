@@ -309,6 +309,21 @@ def interval_time_precision(timestep: float) -> int:
     return len(str(timestep).split('.')[1]) if '.' in str(timestep) else 0
 
 
+def shared_time_precision(intervals) -> Optional[int]:
+    """The common decimal precision of a set of edge intervals, or None.
+
+    Returns the shared ``interval_time_precision`` when every interval lives on
+    one decimal grid (all on the 0.1 grid -> 1, all on the 0.01 grid -> 2,
+    etc.). Returns None when there are no intervals, or when they mix grids —
+    so a mixed-grid document is never rounded to a grid that does not fit all
+    of its processes.
+    """
+    precisions = {interval_time_precision(interval) for interval in intervals}
+    if len(precisions) == 1:
+        return precisions.pop()
+    return None
+
+
 # ===============
 # Process Classes
 # ===============
@@ -1476,7 +1491,21 @@ class Composite(Process):
                 self.process_schema[port] = wired
 
         # Set the global time precision used to round step time advances.
-        self.global_time_precision = self.config.get('global_time_precision')
+        # A plain Composite (built directly, not via CompositeSpec) gets the
+        # same interval-derived default CompositeSpec applies, so float drift
+        # does not defer the last scheduled update (#266) — e.g. 100 steps of
+        # 0.02 reach 2.0000000000000013 and would otherwise skip the 100th.
+        # An explicit config value always wins; a mixed-grid document is left
+        # unrounded (shared_time_precision returns None).
+        global_time_precision = self.config.get('global_time_precision')
+        if global_time_precision is None:
+            global_time_precision = shared_time_precision(
+                edge['interval']
+                for edge in self.edge_paths.values()
+                if isinstance(edge, dict)
+                and isinstance(edge.get('interval'), (int, float))
+                and not isinstance(edge.get('interval'), bool))
+        self.global_time_precision = global_time_precision
 
         # Inner-layer parallelism: optional ThreadPoolExecutor that
         # fans out the steps in each layer. See the parallel_steps
