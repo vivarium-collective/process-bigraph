@@ -189,6 +189,13 @@ def wire_step_layers(
                 step['_triggers'] = {'_flow_in': 'integer'}
             else:
                 step['_triggers'] = {root_trigger: 'float'}
+                # A trigger only fires a step if it matches one of the
+                # step's input ports, so wire the root-trigger port itself
+                # when the step does not already carry it.
+                if root_trigger not in step['inputs']:
+                    step['inputs'][root_trigger] = [root_trigger]
+                if root_trigger not in step['_inputs']:
+                    step['_inputs'][root_trigger] = 'float'
 
             # Wire _flow_out as an output port
             step['outputs']['_flow_out'] = [flow_path, out_token]
