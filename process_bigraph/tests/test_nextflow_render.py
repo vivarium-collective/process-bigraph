@@ -79,12 +79,69 @@ def test_plain_step_output_decl_matches_run_step_file():
     block = _process_block('outstep', inst,
                            inputs_wires={'seed': ['seed']},
                            outputs_wires={'value': ['value']})
-    # run_step writes --out value=value.json, so the nextflow output decl
-    # MUST capture that exact file, not an unbound `val value`.
-    assert 'path "value.json"' in block
+    # run_step writes --out value=.value.json (a dotfile), so the nextflow
+    # output decl MUST capture that exact file, not an unbound `val value`.
+    assert 'path ".value.json"' in block
     assert 'val value' not in block
-    # sanity: the script body still writes value.json
-    assert '--out value=value.json' in block
+    # sanity: the script body still writes the dotfile manifest
+    assert '--out value=.value.json' in block
+
+
+class _SweepStep(Step):
+    """A Step that overrides its output decl with a glob beginning with the
+    port name -- the shape that collides on a same-port N->1 gather (#208)."""
+    nextflow_port_decls = {'sweep_dir': 'path "sweep_*"'}
+
+    def inputs(self):
+        return {'seed': 'integer'}
+
+    def outputs(self):
+        return {'sweep_dir': {'_type': 'string', '_is_file': True}}
+
+    def update(self, state):
+        return {'sweep_dir': 'sweep_run'}
+
+
+def test_override_glob_does_not_match_run_step_manifest_dotfile():
+    """#208: run_step writes a value manifest per output port. When a Step
+    overrides the SAME port's decl with a glob that begins with the port name
+    (e.g. `sweep_*`), that glob must NOT also match the manifest -- an N->1
+    gather would then collide on the manifest file. Dotfiling the manifest
+    (`.sweep_dir.json`) makes Nextflow's globs skip it, by Unix-glob convention.
+    """
+    import fnmatch
+    from process_bigraph import allocate_core
+
+    inst = _SweepStep({}, core=allocate_core())
+    block = _process_block('sweepstep', inst,
+                           inputs_wires={'seed': ['seed']},
+                           outputs_wires={'sweep_dir': ['sweep_dir']})
+
+    # The override glob IS what declares the output (not the manifest decl)...
+    assert 'path "sweep_*"' in block
+    # ...and run_step still emits the manifest as a dotfile for this port.
+    assert '--out sweep_dir=.sweep_dir.json' in block
+
+    manifest = '.sweep_dir.json'
+    # The crux: the override glob must NOT capture the manifest dotfile.
+    assert not fnmatch.fnmatch(manifest, 'sweep_*'), (
+        'override glob collides with the run_step manifest -> N->1 gather clash')
+
+
+def test_plain_wire_explicit_decl_still_names_the_manifest_dotfile():
+    """The lockstep other half: with NO override, the explicit (non-glob) decl
+    `path ".<port>.json"` must still capture the dotfile, so 1->1 wires that
+    carry the manifest downstream are unaffected by the dotfile rename."""
+    import fnmatch
+    from process_bigraph import allocate_core
+
+    inst = _OutStep({}, core=allocate_core())
+    block = _process_block('outstep', inst,
+                           inputs_wires={'seed': ['seed']},
+                           outputs_wires={'value': ['value']})
+    # An explicit path decl names the dotfile exactly -- a plain glob would miss it.
+    assert 'path ".value.json"' in block
+    assert fnmatch.fnmatch('.value.json', '.value.json')
 
 
 # --- nested Composite -> Nextflow sub-workflow -------------------------------

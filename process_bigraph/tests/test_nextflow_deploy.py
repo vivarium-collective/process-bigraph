@@ -88,20 +88,22 @@ class _EmitStep(Step):
     The output port is declared ``integer`` at the process-bigraph level
     (the real, semantic type of the value ``update()`` returns) but
     carries a ``nextflow_port_decls`` override so the *rendered* Nextflow
-    process declares a quoted, literal ``path "value.json"`` output —
-    matching the fixed ``<port>.json`` filename that the auto-generated
-    ``run_step --out value=value.json`` script actually writes. Without
-    the override, the renderer's default declaration for an output-only
-    port (``val value`` for a scalar, or bare ``path value`` for a path
-    type) refers to a Groovy variable/glob named exactly ``value`` that
-    is never bound anywhere in the process scope — Nextflow fails at
-    task time with "Missing value declared as output parameter" (val) or
-    "Missing output file(s) `value`" (bare path, which literally globs
-    for a file named ``value`` with no extension). The override is the
-    escape hatch nextflow.py's ``_port_to_nextflow_decl`` documents for
-    exactly this situation.
+    process declares a quoted, literal ``path ".value.json"`` output —
+    matching the fixed ``.<port>.json`` dotfile manifest that the
+    auto-generated ``run_step --out value=.value.json`` script actually
+    writes (#208: the manifest is a dotfile so a same-port override glob
+    skips it). Without the override, the renderer's default declaration
+    for an output-only port (``val value`` for a scalar, or bare ``path
+    value`` for a path type) refers to a Groovy variable/glob named
+    exactly ``value`` that is never bound anywhere in the process scope —
+    Nextflow fails at task time with "Missing value declared as output
+    parameter" (val) or "Missing output file(s) `value`" (bare path,
+    which literally globs for a file named ``value`` with no extension).
+    The override is the escape hatch nextflow.py's
+    ``_port_to_nextflow_decl`` documents for exactly this situation, and
+    an explicit (non-glob) decl still captures the dotfile.
     """
-    nextflow_port_decls = {'value': 'path "value.json"'}
+    nextflow_port_decls = {'value': 'path ".value.json"'}
 
     def inputs(self):
         return {'seed': 'integer'}

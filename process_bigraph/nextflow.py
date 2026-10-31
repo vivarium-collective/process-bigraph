@@ -207,7 +207,7 @@ def _script_body(instance: Any,
         f'--in {port}="${{{port}}}"' for port in inputs_wires
     )
     out_flags = ' '.join(
-        f'--out {port}={port}.json' for port in outputs_wires
+        f'--out {port}=.{port}.json' for port in outputs_wires
     )
     parts = [
         f'{python} -m process_bigraph.run_step',
@@ -336,7 +336,12 @@ def _process_block(step_name: str,
         lines.append('    output:')
         for port in outputs_wires:
             if port not in class_overrides and uses_run_step:
-                decl = f'path "{port}.json"'
+                # run_step writes the value manifest as a DOTFILE (.<port>.json;
+                # see _script_body). Dotfiles keep an override glob on the SAME
+                # port (e.g. `path "sweep_*"`) from also matching the manifest --
+                # which would collide an N->1 gather. An explicit (non-glob) decl
+                # still captures the dotfile, so plain 1->1 wires are unaffected.
+                decl = f'path ".{port}.json"'
             else:
                 decl = _port_to_nextflow_decl(
                     port, step_outputs_schema.get(port, {}), class_overrides)
