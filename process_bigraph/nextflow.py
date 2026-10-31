@@ -546,6 +546,21 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
     workflow_name = options.get('workflow_name', 'main')
     header = options.get('header', 'nextflow.enable.dsl=2\n')
     python = options.get('python', 'python')
+    name_prefix = options.get('_name_prefix', '')
+
+    def _proc_name(path: Path) -> str:
+        """Process name made globally unique by the ancestor sub-workflow prefix.
+
+        Nextflow DSL2 process names are GLOBAL. ``_path_to_step_name`` only makes
+        a FULL path unique, but the recursive sub-composite render sees inner-only
+        paths, so two sibling sub-composites that each contain a like-named step
+        (e.g. ``lineage_s0``) would emit the same ``process`` twice and DSL2 would
+        not compile. ``_name_prefix`` carries the chain of enclosing
+        composite-node names (``runs_v0`` -> ``runs_v0_lineage_s0``). Channel and
+        variable names are workflow-local and are deliberately NOT prefixed.
+        """
+        base = _path_to_step_name(path)
+        return f'{name_prefix}_{base}' if name_prefix else base
 
     step_paths = composite.step_paths
     step_dependencies = getattr(composite, 'step_dependencies', {}) or {}
@@ -611,13 +626,13 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
     for step_path in order:
         if step_path not in step_paths:
             # A composite node: reserve its ordered slot; the loop below fills it.
-            workflow_lines.append(f'@@SUBWF:{_path_to_step_name(step_path)}@@')
+            workflow_lines.append(f'@@SUBWF:{_proc_name(step_path)}@@')
             continue
         step = step_paths[step_path]
         instance = step['instance']
         inputs_wires = step.get('inputs') or {}
         outputs_wires = step.get('outputs') or {}
-        name = _path_to_step_name(step_path)
+        name = _proc_name(step_path)
 
         if _is_plumbing(instance):
             workflow_lines.append(
@@ -690,7 +705,7 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
         instance = node.get('instance')
         if not isinstance(instance, _Composite):
             continue
-        name = _path_to_step_name(node_path)
+        name = _proc_name(node_path)
         inputs_wires = node.get('inputs') or {}
         outputs_wires = node.get('outputs') or {}
         inner_steps = getattr(instance, 'step_paths', {}) or {}
@@ -702,6 +717,12 @@ def render_composite(composite: Any, options: Optional[Dict[str, Any]] = None) -
         if nest and inner_steps:
             sub_opts = dict(options)
             sub_opts['workflow_name'] = name
+            # Thread the (already-prefixed) sub-workflow name down as the prefix
+            # for every process DEFINED inside it, so a sibling sub-composite's
+            # like-named step becomes a distinct global process name. `name`
+            # itself is globally unique (it carries this scope's own prefix), so
+            # the inner scope accumulates the full ancestor chain.
+            sub_opts['_name_prefix'] = name
             sub_opts['_emit_ports'] = list(outputs_wires)
             sub_opts['_take_ports'] = list(inputs_wires)
             sub_text = render_composite(instance, {**sub_opts, 'header': ''})
