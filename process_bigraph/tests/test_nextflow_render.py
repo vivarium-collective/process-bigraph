@@ -187,8 +187,9 @@ def test_nested_composite_renders_as_subworkflow():
     nf = render_composite(_nested(3))
     assert 'workflow runs {' in nf
     assert 'take:' in nf and 'emit:' in nf
-    # the hierarchy is preserved: inner units are their own processes
-    assert 'process unit_0 {' in nf and 'process unit_2 {' in nf
+    # the hierarchy is preserved: inner units are their own processes, named
+    # with the ancestor sub-workflow prefix so they stay globally unique (#207).
+    assert 'process runs_unit_0 {' in nf and 'process runs_unit_2 {' in nf
     # ...and the parent sees ONE channel, not three
     assert 'runs(' in nf
 
@@ -319,6 +320,71 @@ def test_config_is_a_declared_staged_input_not_just_a_flag():
     # file('${projectDir}/x') is a literal dollar sign and staging fails.
     assert 'file("${projectDir}/node_0.config.json")' in nf
     assert "file('${projectDir}" not in nf
+
+
+# --- sibling sub-composites must not collide on global process names --------
+
+import re
+
+
+def _process_def_names(nf_text):
+    """Every ``process <name> {`` definition name in a rendered document."""
+    return re.findall(r'^\s*process\s+(\w+)\s*\{', nf_text, re.MULTILINE)
+
+
+def _sibling_nested():
+    """Two sibling nested Composites that each contain a LIKE-NAMED step.
+
+    The renders inner path (``unit_0``) is identical in both sub-composites.
+    Nextflow DSL2 process names are GLOBAL, so without an ancestor prefix both
+    sub-composites emit ``process unit_0 {`` -- a duplicate definition the DSL2
+    parser rejects (issue #207). The ancestor sub-workflow name must prefix the
+    inner process names (``runs_v0_unit_0`` / ``runs_v1_unit_0``).
+    """
+    core = allocate_core()
+    core.register_link('_Unit', _Unit)
+
+    def _inner():
+        return Composite({'state': {
+            'cache': '', 'sweep_0': '',
+            'unit_0': {'_type': 'step', 'address': 'local:_Unit', 'config': {},
+                       'inputs': {'cache': ['cache']},
+                       'outputs': {'o': ['sweep_0']}}}}, core=core)
+
+    return SimpleNamespace(
+        step_paths={}, step_dependencies={}, node_dependencies={},
+        process_paths={
+            ('runs_v0',): {'instance': _inner(),
+                           'inputs': {'cache': ['cache_store']},
+                           'outputs': {'results': ['results_v0']}},
+            ('runs_v1',): {'instance': _inner(),
+                           'inputs': {'cache': ['cache_store']},
+                           'outputs': {'results': ['results_v1']}}},
+        bridge={})
+
+
+def test_sibling_subcomposites_emit_no_duplicate_process_names():
+    """Regression for #207: like-named steps in sibling sub-composites rendered
+    the same global ``process`` twice, so DSL2 would not compile."""
+    nf = render_composite(_sibling_nested())
+    names = _process_def_names(nf)
+    assert names, 'expected at least one process definition'
+    assert len(names) == len(set(names)), \
+        f'duplicate process definitions would fail DSL2 compilation: {names}'
+
+
+def test_sibling_subcomposites_prefix_inner_process_names_at_def_and_call():
+    """The ancestor sub-workflow name prefixes the inner process name at BOTH
+    its definition and its call site -- prefix one without the other and the
+    wiring breaks."""
+    nf = render_composite(_sibling_nested())
+    for prefix in ('runs_v0', 'runs_v1'):
+        assert f'process {prefix}_unit_0 {{' in nf, nf
+        assert f'{prefix}_unit_0(' in nf, nf
+    # the unprefixed name must not survive anywhere
+    assert 'process unit_0 {' not in nf
+    # channel/variable names stay workflow-local (NOT prefixed)
+    assert 'ch_sweep_0' in nf
 
 
 # --- a nextflow_script() override returns SHELL, not Groovy ----------------
