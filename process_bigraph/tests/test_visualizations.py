@@ -37,6 +37,43 @@ def test_time_series_plot_multi_run():
     assert 'rate=3.0' in html['html']
 
 
+def test_time_series_plot_declares_run_labels_port():
+    """#1474: a non-underscore `run_labels` input port so a cross-run wiring can
+    actually deliver per-run labels (a `_`-prefixed port is a bigraph-schema key
+    and never reaches the Step)."""
+    ports = TimeSeriesPlot.__new__(TimeSeriesPlot).inputs()
+    assert ports.get('run_labels') == 'list[string]'
+
+
+def test_time_series_plot_labels_from_run_labels_port():
+    """Labels delivered on the declared `run_labels` port reach the figure."""
+    inst = object.__new__(TimeSeriesPlot)
+    inst.config = {'title': ''}
+    state = {
+        'observable': [[1.0, 2.0, 4.0], [3.0, 6.0, 12.0]],
+        'time': [[0.0, 1.0, 2.0], [0.0, 1.0, 2.0]],
+        'run_labels': ['rate=1.0', 'rate=3.0'],
+    }
+    html = inst.update(state)['html']
+    assert 'rate=1.0' in html and 'rate=3.0' in html
+
+
+def test_time_series_plot_run_labels_port_wins_over_legacy_key():
+    """When both are present, the declared port takes precedence; `_run_labels`
+    remains the back-compat fallback (covered by test_time_series_plot_multi_run)."""
+    inst = object.__new__(TimeSeriesPlot)
+    inst.config = {'title': ''}
+    state = {
+        'observable': [[1.0, 2.0], [3.0, 6.0]],
+        'time': [[0.0, 1.0], [0.0, 1.0]],
+        'run_labels': ['new=1', 'new=2'],
+        '_run_labels': ['old=1', 'old=2'],
+    }
+    html = inst.update(state)['html']
+    assert 'new=1' in html and 'new=2' in html
+    assert 'old=1' not in html
+
+
 from process_bigraph.visualizations import ParamVsObservable
 
 

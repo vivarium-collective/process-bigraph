@@ -16,10 +16,12 @@ class TimeSeriesPlot(Visualization):
     Inputs (declared types):
       observable: list[float]   — trajectory values, or list-of-lists for multi-run
       time:       list[float]   — same shape as observable
+      run_labels: list[string]  — one legend label per run (cross-run figures)
     """
 
     def inputs(self):
-        return {'observable': 'list[float]', 'time': 'list[float]'}
+        return {'observable': 'list[float]', 'time': 'list[float]',
+                'run_labels': 'list[string]'}
 
     def update(self, state):
         obs = state.get('observable')
@@ -31,7 +33,10 @@ class TimeSeriesPlot(Visualization):
             runs = list(zip(ts, obs))
         else:
             runs = [(ts, obs)]
-        labels = state.get('_run_labels') or [''] * len(runs)
+        # Prefer the declared `run_labels` input port; fall back to the legacy
+        # `_run_labels` state key for back-compat (a leading-underscore key is a
+        # bigraph-schema key and can't be wired as a port — see #1474).
+        labels = state.get('run_labels') or state.get('_run_labels') or [''] * len(runs)
         overlays = state.get('_overlays') or []
 
         traces = []
