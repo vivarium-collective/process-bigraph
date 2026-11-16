@@ -79,7 +79,6 @@ from process_bigraph.holes import UnfilledHoleError  # noqa: F401
 from process_bigraph.templates import (  # noqa: F401
     open_sites, required_open_sites, is_ground_document, fill_template, template_document,
 )
-from bigraph_schema.matching import find_candidates  # noqa: F401
 from process_bigraph.emitter import Emitter, gather_emitter_results, generate_emitter_state  # noqa: F401
 from process_bigraph.types import StepLink, ProcessLink, CompositeLink  # noqa: F401
 from process_bigraph import core_introspection  # noqa: F401
