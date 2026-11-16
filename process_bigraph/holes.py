@@ -4,32 +4,23 @@ A *draft* in this framework is a process-slot left as an open **hole** — a
 ``Site`` whose ``_sort`` is a :class:`~bigraph_schema.contract.ProcessContract`.
 ``Composite`` refuses to build while a required hole is open; instead of the
 opaque ``KeyError: 'data'`` an unfilled address site used to raise, it raises an
-:class:`UnfilledHoleError` that names, per hole, its path, the contract it
-requires (typed face + conditions), and the registered processes that would fill
-it (:func:`~bigraph_schema.matching.find_candidates`).
-
-The report is best-effort on candidates: ``find_candidates`` reads a process's
-contract by instantiating it with empty config and skips any that need real
-config, so the candidate list may be empty — the guaranteed content is the hole
-path and its required contract. A candidate-finder failure never masks the
-primary "not ground" error.
+:class:`UnfilledHoleError` that names, per hole, its path and the contract it
+requires (typed face + conditions).
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any, List, Optional, Sequence, Tuple
 
 from bigraph_schema.assembly import contract_of
-from bigraph_schema.matching import find_candidates
 
 
 @dataclass
 class HoleReport:
-    """One unfilled hole: where it is, what it requires, and what fills it."""
+    """One unfilled hole: where it is and what contract it requires."""
 
     path: Tuple[str, ...]
     contract: Optional[Any] = None          # ProcessContract | None
-    candidates: List[Any] = field(default_factory=list)  # [CandidateMatch]
 
 
 class UnfilledHoleError(ValueError):
@@ -58,7 +49,6 @@ class UnfilledHoleError(ValueError):
             lines.append("")
             lines.append(f"  • {'/'.join(hole.path)}")
             lines.extend(_render_requires(hole.contract, self._core))
-            lines.extend(_render_candidates(hole.candidates))
         return "\n".join(lines)
 
 
@@ -67,16 +57,14 @@ def build_unfilled_hole_error(
 ) -> UnfilledHoleError:
     """Build an :class:`UnfilledHoleError` from ``(path, site)`` pairs.
 
-    For each hole, resolve the contract it requires (``contract_of``) and the
-    admissible candidates (``find_candidates``). Both are wrapped so a failure in
-    either never masks the primary "not ground" report; an unsorted hole simply
-    reports no contract and no candidates.
+    For each hole, resolve the contract it requires (``contract_of``), wrapped so
+    a failure never masks the primary "not ground" report; an unsorted hole simply
+    reports no contract.
     """
     reports = []
     for path, site in unfilled_sites:
         contract = _safe_contract_of(core, site)
-        candidates = _safe_candidates(core, site) if contract is not None else []
-        reports.append(HoleReport(tuple(path), contract, candidates))
+        reports.append(HoleReport(tuple(path), contract))
     return UnfilledHoleError(reports, core=core)
 
 
@@ -85,13 +73,6 @@ def _safe_contract_of(core, site):
         return contract_of(core, site)
     except Exception:  # noqa: BLE001 - a hole we cannot read is reported as unsorted
         return None
-
-
-def _safe_candidates(core, site):
-    try:
-        return list(find_candidates(core, site) or [])
-    except Exception:  # noqa: BLE001 - candidate-finding never masks the primary error
-        return []
 
 
 def _render_requires(contract, core=None) -> List[str]:
@@ -140,29 +121,3 @@ def _fmt_port(schema, core=None) -> str:
         except Exception:  # noqa: BLE001 - fall back to the class name, never a repr
             pass
     return type(schema).__name__.lower()
-
-
-def _render_candidates(candidates) -> List[str]:
-    if not candidates:
-        return ["      candidates: (no admissible registered process found)"]
-    lines = ["      candidates:"]
-    for candidate in candidates:
-        if getattr(candidate, "match", None) == "full":
-            lines.append(f"        ✓ {candidate.address} (full match)")
-        else:
-            why = _fmt_fails(getattr(candidate, "fails", []) or [])
-            lines.append(f"        ~ {candidate.address} (partial: {why})")
-    return lines
-
-
-def _fmt_fails(fails) -> str:
-    """The failing conditions of a near-miss, by name — never a raw dict dump."""
-    if not fails:
-        return "near-miss"
-    parts = []
-    for fail in fails:
-        if isinstance(fail, dict):
-            parts.append(str(fail.get("condition", fail.get("detail", fail))))
-        else:
-            parts.append(str(fail))
-    return "; ".join(parts)

@@ -1,9 +1,8 @@
 """Holes-in-place: UnfilledHoleError + the contract-aware report builder.
 
 A composite that still has an open required hole is rejected with a report that
-names, per hole, its path, the contract it requires (face + conditions), and the
-registered processes that would fill it — replacing the opaque ``KeyError:
-'data'`` an unfilled address site used to raise.
+names, per hole, its path and the contract it requires (face + conditions) —
+replacing the opaque ``KeyError: 'data'`` an unfilled address site used to raise.
 """
 import pytest
 
@@ -14,12 +13,10 @@ from process_bigraph.holes import (
     HoleReport,
     UnfilledHoleError,
     build_unfilled_hole_error,
-    _render_candidates,
     _render_requires,
 )
 from bigraph_schema.assembly import interfaces
 from bigraph_schema.contract import ProcessContract, narrow_condition
-from bigraph_schema.matching import CandidateMatch
 
 
 def _core():
@@ -58,7 +55,7 @@ def test_is_subclass_of_valueerror():
     assert issubclass(UnfilledHoleError, ValueError)
 
 
-def test_report_names_path_contract_and_candidates():
+def test_report_names_path_and_contract():
     core = _core()
     pairs = _pairs(core, {"model": {"_type": "site", "_sort": "PTH"}})
 
@@ -71,13 +68,11 @@ def test_report_names_path_contract_and_candidates():
     assert hole.path == ("model",)
     assert hole.contract is not None
     assert hole.contract.face["inputs"] == {"ca_sense": "float"}
-    assert any(c.address == "PTHReal" and c.match == "full" for c in hole.candidates)
 
     text = str(err)
     assert "not ground" in text
     assert "model" in text
     assert "ca_sense" in text
-    assert "PTHReal" in text
 
 
 def test_unsorted_hole_reports_no_contract_and_does_not_crash():
@@ -88,26 +83,7 @@ def test_unsorted_hole_reports_no_contract_and_does_not_crash():
 
     hole = err.holes[0]
     assert hole.contract is None
-    assert hole.candidates == []
     assert "no contract declared" in str(err)
-
-
-def test_find_candidates_failure_never_masks_primary_error(monkeypatch):
-    core = _core()
-    import process_bigraph.holes as holes_mod
-
-    def boom(*args, **kwargs):
-        raise RuntimeError("candidate finder exploded")
-
-    monkeypatch.setattr(holes_mod, "find_candidates", boom)
-    pairs = _pairs(core, {"model": {"_type": "site", "_sort": "PTH"}})
-
-    err = build_unfilled_hole_error(core, pairs)  # must not raise
-
-    assert err.holes[0].path == ("model",)
-    assert err.holes[0].candidates == []
-    assert "model" in str(err)
-    assert "not ground" in str(err)
 
 
 # ── Task 3: the Composite groundness guards raise the report ──────────
@@ -123,7 +99,6 @@ def test_building_composite_with_unfilled_hole_raises_report():
     text = str(excinfo.value)
     assert "study/model" in text
     assert "ca_sense" in text
-    assert "PTHReal" in text
 
 
 def test_except_valueerror_still_catches():
@@ -174,7 +149,6 @@ def test_public_api_importable():
         "is_ground_document",
         "fill_template",
         "template_document",
-        "find_candidates",
         "draft_to_contract",
         "DraftProcessDeprecationWarning",
     ):
@@ -196,12 +170,7 @@ def test_hole_lifecycle_design_inspect_fill_build():
     assert pbg.required_open_sites(template) == [("study", "model")]
     assert pbg.is_ground_document(template) is False
 
-    # 3. see what fits: an admissible registered process.
-    (_path, site), = interfaces(template)[0]._places
-    candidates = pbg.find_candidates(core, site)
-    assert any(c.address == "PTHReal" and c.match == "full" for c in candidates)
-
-    # 4. fill with the admissible process → ground.
+    # 3. fill with the admissible process → ground.
     filler = core.access(
         {
             "_type": "process",
@@ -238,20 +207,6 @@ def test_face_literal_hole_renders_clean_type():
     text = str(excinfo.value)
     assert "ca_sense: float" in text
     assert "Float(" not in text
-
-
-def test_near_miss_candidate_renders_failing_condition():
-    # A partial candidate must render its failing condition, not a raw dict.
-    candidate = CandidateMatch(
-        address="PartialProc",
-        match="partial",
-        over_provides=[],
-        fails=[{"condition": "bound.ca_sense", "detail": "below _min"}],
-    )
-    joined = "\n".join(_render_candidates([candidate]))
-    assert "PartialProc" in joined
-    assert "bound.ca_sense" in joined
-    assert "{'condition'" not in joined  # no raw dict dump
 
 
 def test_contract_condition_renders_in_report():
