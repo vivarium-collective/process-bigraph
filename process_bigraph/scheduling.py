@@ -905,10 +905,17 @@ def determine_steps(steps, remaining, fulfilled):
         # All remaining steps are in cycles — pick the highest priority one.
         # This avoids expensive cycle detection for densely connected graphs.
         if remaining:
-            priority = max(
-                remaining,
-                key=lambda path: steps[path]['priority'])
-            to_run = [priority]
+            # #284: break an equal-priority tie DETERMINISTICALLY (highest
+            # priority, then the repr-smallest path) rather than letting ``max``
+            # return whichever the set happened to iterate first — that tie fell
+            # to Python's hash seed and let an acyclic network run in a different
+            # order per process. Matches ``find_step_cycle``'s own ``key=repr``
+            # stable ordering.
+            best = max(steps[path]['priority'] for path in remaining)
+            chosen = min(
+                (path for path in remaining if steps[path]['priority'] == best),
+                key=repr)
+            to_run = [chosen]
         else:
             return to_run, remaining, fulfilled
 
@@ -922,5 +929,20 @@ def determine_steps(steps, remaining, fulfilled):
             for explode in exploded_path:
                 if step_path in fulfilled.get(explode, set()):
                     fulfilled[explode].remove(step_path)
+            # #284: a whole-container write (a map / node written whole)
+            # produces the data leaves beneath it, so release this step from
+            # every trigger path AT OR BELOW the output too — not only the
+            # prefixes ``explode_path`` walks. ``build_step_network``'s second
+            # pass added this step as a producer of those descendant leaves
+            # (``nodes[leaf]['before']``); without clearing them a Step that
+            # reads one key stays blocked after the writer has run, and the
+            # stuck readers fall through to the (now deterministic, but still
+            # arbitrary) cycle fallback instead of running in dependency order.
+            out_t = tuple(output)
+            n = len(out_t)
+            for key in list(fulfilled):
+                if (len(key) > n and tuple(key[:n]) == out_t
+                        and step_path in fulfilled[key]):
+                    fulfilled[key].remove(step_path)
 
     return to_run, remaining, fulfilled
