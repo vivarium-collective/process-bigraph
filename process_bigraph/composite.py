@@ -15,6 +15,7 @@ Used as part of the Vivarium 2.0 ecosystem for modular biological modeling.
 import os
 import json
 import math
+import warnings
 import heapq
 import inspect
 import time as _time
@@ -1313,6 +1314,14 @@ class Composite(Process):
         },
         'global_time_precision': 'maybe[float]',
         'run_steps_on_init': 'boolean{false}',
+        # Non-deterministic step-cycle policy (issue #30): 'raise' (default) |
+        # 'warn'. A zero-time step cycle whose members share a priority has no
+        # priority-fixed order, so building rejects it by default (issue #233).
+        # 'warn' opts into a warning and builds anyway, for a document whose
+        # wiring forms such a cycle and whose author accepts the scheduler's
+        # fallback ordering. Unset here, the PROCESS_BIGRAPH_CYCLE_POLICY env
+        # var is consulted; otherwise 'raise'.
+        'cycle_policy': 'maybe[string]',
         # Inner-layer parallelism: when True, run_steps fans out the
         # steps in each layer across a ThreadPoolExecutor. Threads
         # share memory and don't trigger the daemon-process restriction,
@@ -2504,7 +2513,7 @@ class Composite(Process):
                     return '/'.join(str(part) for part in step_key)
                 return str(step_key)
             rendered = ' -> '.join(_name(step_key) for step_key in cycle)
-            raise ValueError(
+            message = (
                 f'non-deterministic step dependency cycle detected: '
                 f'{rendered}. These steps form a zero-time feedback cycle AND '
                 f'share a priority, so their evaluation order would depend on '
@@ -2515,6 +2524,26 @@ class Composite(Process):
                 f'deterministically), removing one of the mutual input/output '
                 f'wirings, or modelling the feedback as a Process with a '
                 f'non-zero time interval.')
+            # Issue #30: an author who accepts such a cycle can opt into a
+            # warning instead of the raise. Resolution: the Composite's own
+            # ``config['cycle_policy']`` wins; otherwise the
+            # ``PROCESS_BIGRAPH_CYCLE_POLICY`` env var; otherwise ``'raise'``.
+            # Anything but an explicit ``'warn'`` fails CLOSED (raises), so a
+            # typo never silently drops the guard. In warn mode the cycle is
+            # ordered by ``determine_steps``' priority/``repr`` fallback, which
+            # is deterministic across processes (#284) but arbitrary — distinct
+            # priorities still give a meaningful order.
+            policy = (self.config.get('cycle_policy')
+                      or os.environ.get('PROCESS_BIGRAPH_CYCLE_POLICY')
+                      or 'raise')
+            if str(policy).strip().lower() == 'warn':
+                warnings.warn(
+                    message + ' Proceeding because cycle_policy="warn": the '
+                    'scheduler orders this cycle deterministically but '
+                    'arbitrarily.',
+                    stacklevel=2)
+            else:
+                raise ValueError(message)
 
         # Initialize trigger fulfillment state and steps remaining
         self.reset_step_state(self.step_paths)
