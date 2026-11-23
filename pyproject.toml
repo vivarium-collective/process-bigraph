@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "process-bigraph"
-version = "1.11.0"
+version = "1.11.1"
 description = "protocol and execution for compositional systems biology"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,14 +27,25 @@ dependencies = [
     # caller needs it, not only REST users. Undeclared, it was found missing
     # in a bare `pip install process-bigraph` image (viva-api, 2026-09-26).
     "requests>=2.31",
-    "matplotlib",
     "pint>=0.24.4",
-    "scipy>=1.8",
-    "pandas",
-    "sympy",
+    # matplotlib / scipy / pandas / sympy were previously hard runtime deps but
+    # are not imported by the package: scipy/pandas/sympy are unused entirely,
+    # and matplotlib is imported lazily only inside process_bigraph.visualization
+    # (render time). matplotlib now lives in the [viz] extra; the other three are
+    # dropped. This trims ~190 MB off a bare `pip install process-bigraph` and
+    # cascades to every downstream (the dashboard stack still gets scipy via
+    # discovery-engine and pandas via xarray; render needs process-bigraph[viz]).
 ]
 
 [project.optional-dependencies]
+# Rendering/plotting for process_bigraph.visualization (Visualization step,
+# render_results). matplotlib is imported lazily, so the package imports fine
+# without it; only rendering needs this extra.
+# Install with: pip install process-bigraph[viz]
+viz = [
+    "matplotlib",
+]
+
 # Distributed Ray actor backend for processes (RayProcess + actor pool).
 # Install with: pip install process-bigraph[ray]
 ray = [
@@ -77,6 +88,7 @@ dev = [
     "pytest-cov",
     "httpx",
     # Test the optional extras without forcing them on everyone.
+    "matplotlib",
     "ray>=2.10",
     "fastapi>=0.116.1",
     "fastapi-utils>=0.8.0",
