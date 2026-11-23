@@ -2008,7 +2008,7 @@ wheels = [
 
 [[package]]
 name = "process-bigraph"
-version = "1.10.1"
+version = "1.11.0"
 source = { editable = "." }
 dependencies = [
     { name = "bigraph-schema" },
@@ -2056,7 +2056,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "bigraph-schema", specifier = ">=1.8.1" },
+    { name = "bigraph-schema", specifier = ">=1.8.1,<1.8.4" },
     { name = "boto3", marker = "extra == 'ec2-ssm'", specifier = ">=1.28" },
     { name = "fastapi", marker = "extra == 'server-rest'", specifier = ">=0.116.1" },
     { name = "fastapi-utils", marker = "extra == 'server-rest'", specifier = ">=0.8.0" },
