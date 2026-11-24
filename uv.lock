@@ -1999,7 +1999,7 @@ wheels = [
 
 [[package]]
 name = "process-bigraph"
-version = "1.11.1"
+version = "1.11.2"
 source = { editable = "." }
 dependencies = [
     { name = "bigraph-schema" },
