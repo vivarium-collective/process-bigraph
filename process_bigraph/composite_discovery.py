@@ -33,8 +33,9 @@ def discover_composites(extra_search_paths: list[Path] | None = None) -> dict[st
     """
     specs: dict[str, dict] = {}
 
-    # 1. Installed packages.
-    for dist in importlib.metadata.distributions():
+    # 1. Installed packages. A snapshot: distributions() reads sys.meta_path live, and importing a package below
+    # may insert a finder there (the pbg -> viva rename shims do), which would make the walk start over.
+    for dist in list(importlib.metadata.distributions()):
         if not _is_bigraph_schema_lib(dist):
             continue
         # Find every importable package this distribution declares.
